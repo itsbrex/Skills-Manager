@@ -52,8 +52,7 @@ export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) 
     setIsSaving(true);
     try {
       const config = await invoke<AppConfig>("get_config");
-      config.skills_dir = skillsDir;
-      await invoke("save_config", { config });
+      await invoke("save_config", { config: { ...config, skills_dir: skillsDir } });
       onNext();
     } catch (error) {
       console.error("Failed to save config:", error);
@@ -75,6 +74,9 @@ export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) 
           <label className="text-sm font-medium">Skills 目录</label>
           <div
             onClick={selectDirectory}
+            onKeyDown={(e) => e.key === "Enter" && selectDirectory()}
+            role="button"
+            tabIndex={0}
             className="flex items-center gap-3 p-4 rounded-lg border-2 border-dashed cursor-pointer hover:border-primary hover:bg-muted/50 transition-colors"
           >
             {skillsDir ? (
@@ -108,7 +110,7 @@ export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) 
         </div>
 
         <div className="flex gap-3">
-          <Button variant="outline" onClick={onBack} className="flex-1">
+          <Button variant="outline" onClick={onBack} className="flex-1" disabled={isSaving}>
             上一步
           </Button>
           <Button
