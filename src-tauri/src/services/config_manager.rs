@@ -54,7 +54,7 @@ impl ConfigManager {
             let tool_config = ToolConfig {
                 enabled: false,
                 detected: tool_dir.exists(),
-                skills_path: tool_dir.join("commands"),
+                skills_path: tool_dir.join("skills"),
                 config_path: tool_dir,
             };
             config.tools.insert(tool_def.id.to_string(), tool_config);
