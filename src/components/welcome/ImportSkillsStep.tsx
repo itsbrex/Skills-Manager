@@ -52,10 +52,9 @@ export function ImportSkillsStep({ onNext, onBack }: ImportSkillsStepProps) {
     setSelectedSkills(newSelected);
   }
 
-  async function handleImport() {
+  async function handleImport(): Promise<boolean> {
     if (selectedSkills.size === 0) {
-      onNext();
-      return;
+      return true;
     }
 
     setIsImporting(true);
@@ -64,8 +63,10 @@ export function ImportSkillsStep({ onNext, onBack }: ImportSkillsStepProps) {
         skillPaths: Array.from(selectedSkills),
       });
       setImportComplete(true);
+      return true;
     } catch (error) {
       console.error("Failed to import skills:", error);
+      return false;
     } finally {
       setIsImporting(false);
     }
@@ -73,7 +74,10 @@ export function ImportSkillsStep({ onNext, onBack }: ImportSkillsStepProps) {
 
   async function handleNext() {
     if (!importComplete && selectedSkills.size > 0) {
-      await handleImport();
+      const success = await handleImport();
+      if (!success) {
+        return; // 导入失败，不继续
+      }
     }
     onNext();
   }
