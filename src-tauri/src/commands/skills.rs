@@ -38,3 +38,18 @@ pub fn disable_skill(skill_id: String, tool_id: String) -> Result<(), String> {
 
     LinkerService::disable_skill(&tool_config.skills_path, &skill_id)
 }
+
+#[tauri::command]
+pub fn scan_existing_skills() -> Result<Vec<crate::models::Skill>, String> {
+    let scanner = crate::services::SkillScanner::new();
+    scanner.scan_all_tools()
+}
+
+#[tauri::command]
+pub fn import_skills_to_hub(skill_paths: Vec<String>) -> Result<(), String> {
+    let linker = crate::services::LinkerService::new();
+    for path in skill_paths {
+        linker.import_to_hub(&path)?;
+    }
+    Ok(())
+}
