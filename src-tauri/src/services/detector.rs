@@ -15,7 +15,7 @@ impl DetectorService {
     pub fn detect_tool(definition: &ToolDefinition) -> Tool {
         let home_dir = dirs::home_dir().unwrap_or_default();
         let config_dir = home_dir.join(definition.config_dir);
-        let skills_path = config_dir.join("commands");
+        let skills_path = config_dir.join("skills");
         let config_path = config_dir.clone();
 
         let dir_exists = config_dir.exists();
