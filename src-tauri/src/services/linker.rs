@@ -161,7 +161,7 @@ impl LinkerService {
         report
     }
 
-    pub fn import_to_hub(&self, skill_path: &str) -> Result<(), String> {
+    pub fn import_to_hub(skill_path: &str) -> Result<(), String> {
         let source = PathBuf::from(skill_path);
         if !source.exists() {
             return Err(format!("Skill path does not exist: {}", skill_path));
@@ -186,10 +186,17 @@ impl LinkerService {
             return Ok(());
         }
 
-        // 如果源是软链接，获取真实路径
+        // 如果源是软链接，获取真实路径（规范化处理相对路径）
         let real_source = if source.is_symlink() {
             std::fs::read_link(&source)
-                .map_err(|e| format!("Failed to read symlink: {}", e))?
+                .and_then(|p| {
+                    if p.is_relative() {
+                        source.parent().unwrap_or(&source).join(&p).canonicalize()
+                    } else {
+                        p.canonicalize()
+                    }
+                })
+                .map_err(|e| format!("Failed to resolve symlink: {}", e))?
         } else {
             source.clone()
         };
@@ -199,7 +206,11 @@ impl LinkerService {
             .or_else(|_| {
                 // 如果跨文件系统，使用复制+删除
                 copy_dir_all(&real_source, &target)?;
-                std::fs::remove_dir_all(&real_source)
+                std::fs::remove_dir_all(&real_source).or_else(|e| {
+                    // 如果删除失败，清理已复制的目标
+                    let _ = std::fs::remove_dir_all(&target);
+                    Err(format!("Failed to remove source after copy: {}", e))
+                })
             })
             .map_err(|e| format!("Failed to move skill: {}", e))?;
 
