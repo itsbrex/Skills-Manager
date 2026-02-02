@@ -4,8 +4,24 @@ import { Skills } from "@/pages/Skills";
 import { Tools } from "@/pages/Tools";
 import { Sync } from "@/pages/Sync";
 import { Settings } from "@/pages/Settings";
+import { Welcome } from "@/pages/Welcome";
+import { useInitialization } from "@/hooks/useInitialization";
 
 function App() {
+  const { isInitialized, isLoading, markInitialized } = useInitialization();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">加载中...</div>
+      </div>
+    );
+  }
+
+  if (!isInitialized) {
+    return <Welcome onComplete={markInitialized} />;
+  }
+
   return (
     <BrowserRouter>
       <Routes>
