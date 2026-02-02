@@ -3,6 +3,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::models::{Skill, SkillSource};
+use crate::services::detector::DetectorService;
 
 pub struct ScannerService;
 
@@ -160,5 +161,26 @@ impl ScannerService {
 
         fs::write(&meta_path, content)
             .map_err(|e| format!("Failed to write meta.json: {}", e))
+    }
+
+    pub fn scan_all_tools() -> Result<Vec<Skill>, String> {
+        let mut all_skills = Vec::new();
+        let tools = DetectorService::detect_all();
+
+        for tool in tools {
+            if tool.detected {
+                let skills_path = &tool.config.skills_path;
+                if skills_path.exists() {
+                    let skills = Self::scan_skills(skills_path)?;
+                    all_skills.extend(skills);
+                }
+            }
+        }
+
+        // 去重（按 skill id）
+        all_skills.sort_by(|a, b| a.id.cmp(&b.id));
+        all_skills.dedup_by(|a, b| a.id == b.id);
+
+        Ok(all_skills)
     }
 }
