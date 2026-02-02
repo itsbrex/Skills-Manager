@@ -1,6 +1,7 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
+use crate::services::config_manager::ConfigManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -159,4 +160,83 @@ impl LinkerService {
 
         report
     }
+
+    pub fn import_to_hub(&self, skill_path: &str) -> Result<(), String> {
+        let source = PathBuf::from(skill_path);
+        if !source.exists() {
+            return Err(format!("Skill path does not exist: {}", skill_path));
+        }
+
+        let skill_name = source
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or("Invalid skill path")?;
+
+        let config = ConfigManager::new().load()?;
+        let hub_skills_dir = PathBuf::from(&config.skills_dir);
+
+        // 确保 hub 目录存在
+        std::fs::create_dir_all(&hub_skills_dir)
+            .map_err(|e| format!("Failed to create hub directory: {}", e))?;
+
+        let target = hub_skills_dir.join(skill_name);
+
+        // 如果目标已存在，跳过
+        if target.exists() {
+            return Ok(());
+        }
+
+        // 如果源是软链接，获取真实路径
+        let real_source = if source.is_symlink() {
+            std::fs::read_link(&source)
+                .map_err(|e| format!("Failed to read symlink: {}", e))?
+        } else {
+            source.clone()
+        };
+
+        // 移动到 hub
+        std::fs::rename(&real_source, &target)
+            .or_else(|_| {
+                // 如果跨文件系统，使用复制+删除
+                copy_dir_all(&real_source, &target)?;
+                std::fs::remove_dir_all(&real_source)
+            })
+            .map_err(|e| format!("Failed to move skill: {}", e))?;
+
+        // 在原位置创建软链接
+        if source != real_source {
+            // 原来就是软链接，删除旧的
+            std::fs::remove_file(&source).ok();
+        }
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&target, &source)
+            .map_err(|e| format!("Failed to create symlink: {}", e))?;
+
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_dir(&target, &source)
+            .map_err(|e| format!("Failed to create symlink: {}", e))?;
+
+        Ok(())
+    }
+}
+
+fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
+    std::fs::create_dir_all(dst)
+        .map_err(|e| format!("Failed to create directory: {}", e))?;
+
+    for entry in std::fs::read_dir(src)
+        .map_err(|e| format!("Failed to read directory: {}", e))?
+    {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let ty = entry.file_type().map_err(|e| format!("Failed to get file type: {}", e))?;
+
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.join(entry.file_name()))
+                .map_err(|e| format!("Failed to copy file: {}", e))?;
+        }
+    }
+    Ok(())
 }
