@@ -1,6 +1,5 @@
-import { TranslationKeys } from "./en";
-
-export const zh: TranslationKeys = {
+// Type structure matches en.ts but allows different string values
+export const zh = {
   common: {
     save: "保存",
     saving: "保存中...",

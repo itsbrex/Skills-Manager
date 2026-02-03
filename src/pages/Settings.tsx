@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { AppConfig, UserPreferences } from "@/types";
+import { AppConfig, UserPreferences, DetectedEditor } from "@/types";
 import { useTranslation, Language } from "@/i18n";
+import { getEditorIcon } from "@/assets/editors";
 
 // Default preferences
 const defaultPreferences: UserPreferences = {
@@ -15,16 +16,6 @@ const defaultPreferences: UserPreferences = {
   show_sync_notifications: true,
 };
 
-// Editor definitions
-const editorDefinitions = [
-  { id: "vscode", nameKey: "editors.vscode" as const },
-  { id: "cursor", nameKey: "editors.cursor" as const },
-  { id: "zed", nameKey: "editors.zed" as const },
-  { id: "sublime", nameKey: "editors.sublime" as const },
-  { id: "vim", nameKey: "editors.vim" as const },
-  { id: "neovim", nameKey: "editors.neovim" as const },
-  { id: "system", nameKey: "editors.system" as const },
-];
 
 export function Settings() {
   const { t, language, setLanguage } = useTranslation();
@@ -35,6 +26,7 @@ export function Settings() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [editorDropdownOpen, setEditorDropdownOpen] = useState(false);
+  const [availableEditors, setAvailableEditors] = useState<DetectedEditor[]>([]);
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
@@ -55,6 +47,18 @@ export function Settings() {
   useEffect(() => {
     fetchConfig();
   }, [fetchConfig]);
+
+  useEffect(() => {
+    async function loadEditors() {
+      try {
+        const editors = await invoke<DetectedEditor[]>("get_available_editors");
+        setAvailableEditors(editors);
+      } catch (err) {
+        console.error("Failed to load editors:", err);
+      }
+    }
+    loadEditors();
+  }, []);
 
   const handleSelectDirectory = async () => {
     try {
@@ -168,7 +172,8 @@ export function Settings() {
   }
 
   const prefs = config.preferences || defaultPreferences;
-  const selectedEditor = editorDefinitions.find(e => e.id === prefs.default_editor) || editorDefinitions[editorDefinitions.length - 1];
+  const selectedEditor = availableEditors.find(e => e.id === prefs.default_editor) || availableEditors[0];
+  const EditorIcon = selectedEditor ? getEditorIcon(selectedEditor.id) : null;
 
   return (
     <div style={{
@@ -320,7 +325,8 @@ export function Settings() {
                     justifyContent: 'space-between',
                   }}
                 >
-                  <span>{t(selectedEditor.nameKey)}</span>
+                  {EditorIcon && <EditorIcon />}
+                  <span>{selectedEditor?.name || t("editors.builtin")}</span>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M6 9l6 6 6-6"/>
                   </svg>
@@ -349,31 +355,35 @@ export function Settings() {
                       padding: '4px',
                       overflow: 'hidden',
                     }}>
-                      {editorDefinitions.map((editor) => (
-                        <button
-                          key={editor.id}
-                          onClick={() => {
-                            updatePreference("default_editor", editor.id as UserPreferences["default_editor"]);
-                            setEditorDropdownOpen(false);
-                          }}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '10px',
-                            width: '100%',
-                            padding: '10px 12px',
-                            fontSize: '13px',
-                            color: 'var(--foreground)',
-                            backgroundColor: prefs.default_editor === editor.id ? 'var(--secondary)' : 'transparent',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            textAlign: 'left',
-                          }}
-                        >
-                          <span>{t(editor.nameKey)}</span>
-                        </button>
-                      ))}
+                      {availableEditors.map((editor) => {
+                        const Icon = getEditorIcon(editor.id);
+                        return (
+                          <button
+                            key={editor.id}
+                            onClick={() => {
+                              updatePreference("default_editor", editor.id);
+                              setEditorDropdownOpen(false);
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              width: '100%',
+                              padding: '10px 12px',
+                              fontSize: '13px',
+                              color: 'var(--foreground)',
+                              backgroundColor: prefs.default_editor === editor.id ? 'var(--secondary)' : 'transparent',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                            }}
+                          >
+                            <Icon />
+                            <span>{editor.name}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </>
                 )}

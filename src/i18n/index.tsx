@@ -4,7 +4,11 @@ import { zh } from "./locales/zh";
 
 export type Language = "en" | "zh";
 
-const translations: Record<Language, TranslationKeys> = { en, zh };
+// Use a more flexible type for translations to allow different string values
+const translations: Record<Language, Record<string, Record<string, string>>> = {
+  en: en as unknown as Record<string, Record<string, string>>,
+  zh: zh as unknown as Record<string, Record<string, string>>
+};
 
 // Get nested value from object using dot notation path
 type PathImpl<T, K extends keyof T> = K extends string
@@ -14,14 +18,6 @@ type PathImpl<T, K extends keyof T> = K extends string
   : never;
 
 type Path<T> = PathImpl<T, keyof T>;
-
-type PathValue<T, P extends string> = P extends `${infer K}.${infer Rest}`
-  ? K extends keyof T
-    ? PathValue<T[K], Rest>
-    : never
-  : P extends keyof T
-  ? T[P]
-  : never;
 
 export type TranslationPath = Path<TranslationKeys>;
 
