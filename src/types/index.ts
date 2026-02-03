@@ -37,7 +37,7 @@ export interface UserPreferences {
   sync_on_save: boolean;
 
   // Editor settings
-  default_editor: "vscode" | "cursor" | "vim" | "system";
+  default_editor: string;
   tab_size: 2 | 4;
 
   // Notifications
@@ -64,4 +64,21 @@ export interface LinkResult {
 export interface LinkReport {
   success: LinkResult[];
   failed: LinkResult[];
+}
+
+// Detected editor from backend
+export interface DetectedEditor {
+  id: string;
+  name: string;
+  command: string;
+  available: boolean;
+  icon: string;
+}
+
+// File tree node
+export interface FileNode {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  children?: FileNode[];
 }
