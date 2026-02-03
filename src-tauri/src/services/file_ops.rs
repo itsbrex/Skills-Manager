@@ -1,0 +1,84 @@
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::Path;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileNode {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub children: Option<Vec<FileNode>>,
+}
+
+pub fn read_directory_tree(root_path: &str) -> Result<FileNode, String> {
+    let path = Path::new(root_path);
+    if !path.exists() {
+        return Err(format!("Path does not exist: {}", root_path));
+    }
+
+    build_tree(path, path)
+}
+
+fn build_tree(path: &Path, root: &Path) -> Result<FileNode, String> {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let relative_path = path
+        .strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .to_string();
+
+    let relative_path = if relative_path.is_empty() {
+        ".".to_string()
+    } else {
+        relative_path
+    };
+
+    if path.is_dir() {
+        let mut children: Vec<FileNode> = fs::read_dir(path)
+            .map_err(|e| e.to_string())?
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                !name_str.starts_with('.')
+            })
+            .filter_map(|entry| build_tree(&entry.path(), root).ok())
+            .collect();
+
+        // Sort: directories first, then files, alphabetically
+        children.sort_by(|a, b| {
+            match (a.is_dir, b.is_dir) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+            }
+        });
+
+        Ok(FileNode {
+            name,
+            path: relative_path,
+            is_dir: true,
+            children: Some(children),
+        })
+    } else {
+        Ok(FileNode {
+            name,
+            path: relative_path,
+            is_dir: false,
+            children: None,
+        })
+    }
+}
+
+pub fn read_file_content(path: &str) -> Result<String, String> {
+    fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))
+}
+
+pub fn write_file_content(path: &str, content: &str) -> Result<(), String> {
+    fs::write(path, content).map_err(|e| format!("Failed to write file: {}", e))
+}
