@@ -26,10 +26,29 @@ export interface Tool {
   config: ToolConfig;
 }
 
+// User preferences for the application
+export interface UserPreferences {
+  // Appearance
+  theme: "light" | "dark" | "system";
+  language: "zh" | "en";
+
+  // Sync behavior
+  auto_sync: boolean;
+  sync_on_save: boolean;
+
+  // Editor settings
+  default_editor: "vscode" | "cursor" | "vim" | "system";
+  tab_size: 2 | 4;
+
+  // Notifications
+  show_sync_notifications: boolean;
+}
+
 export interface AppConfig {
   version: string;
   skills_dir: string;
   tools: Record<string, ToolConfig>;
+  preferences?: UserPreferences;
 }
 
 export interface SyncReport {

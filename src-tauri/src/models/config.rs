@@ -3,10 +3,50 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserPreferences {
+    #[serde(default = "default_theme")]
+    pub theme: String,
+    #[serde(default = "default_language")]
+    pub language: String,
+    #[serde(default = "default_true")]
+    pub auto_sync: bool,
+    #[serde(default = "default_true")]
+    pub sync_on_save: bool,
+    #[serde(default = "default_editor")]
+    pub default_editor: String,
+    #[serde(default = "default_tab_size")]
+    pub tab_size: u8,
+    #[serde(default = "default_true")]
+    pub show_sync_notifications: bool,
+}
+
+fn default_theme() -> String { "system".to_string() }
+fn default_language() -> String { "en".to_string() }
+fn default_editor() -> String { "system".to_string() }
+fn default_tab_size() -> u8 { 2 }
+fn default_true() -> bool { true }
+
+impl Default for UserPreferences {
+    fn default() -> Self {
+        Self {
+            theme: default_theme(),
+            language: default_language(),
+            auto_sync: true,
+            sync_on_save: true,
+            default_editor: default_editor(),
+            tab_size: default_tab_size(),
+            show_sync_notifications: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub version: String,
     pub skills_dir: PathBuf,
     pub tools: HashMap<String, ToolConfig>,
+    #[serde(default)]
+    pub preferences: Option<UserPreferences>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,6 +66,7 @@ impl Default for AppConfig {
                 .join(".skills-hub")
                 .join("skills"),
             tools: HashMap::new(),
+            preferences: Some(UserPreferences::default()),
         }
     }
 }

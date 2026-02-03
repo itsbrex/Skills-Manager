@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Switch } from "@/components/ui/switch";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { Skill, AppConfig } from "@/types";
+import { useTranslation } from "@/i18n";
 
 const toolAbbreviations: Record<string, string> = {
   "claude-code": "CC",
@@ -31,6 +32,7 @@ function getSkillColor(name: string): { bg: string; icon: string } {
 }
 
 export function Skills() {
+  const { t } = useTranslation();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -105,7 +107,7 @@ export function Skills() {
         >
           <path d="M21 12a9 9 0 1 1-6.219-8.56" />
         </svg>
-        Loading...
+        {t("common.loading")}
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </div>
     );
@@ -137,7 +139,7 @@ export function Skills() {
           color: 'var(--foreground)',
           margin: 0,
         }}>
-          Skills
+          {t("skills.title")}
         </h1>
 
         {/* Right: Actions */}
@@ -164,7 +166,7 @@ export function Skills() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5"/>
             </svg>
-            Refresh
+            {t("common.refresh")}
           </button>
 
           <div style={{ position: 'relative' }}>
@@ -189,7 +191,7 @@ export function Skills() {
             </svg>
             <input
               type="text"
-              placeholder="Search skills"
+              placeholder={t("skills.searchPlaceholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -235,7 +237,7 @@ export function Skills() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5v14M5 12h14"/>
             </svg>
-            New skill
+            {t("skills.newSkill")}
           </button>
         </div>
       </header>
@@ -255,7 +257,7 @@ export function Skills() {
               color: 'var(--muted-foreground)',
               margin: '0 0 16px 0',
             }}>
-              Installed
+              {t("skills.installed")}
             </h2>
 
             {filteredSkills.length === 0 ? (
@@ -267,7 +269,7 @@ export function Skills() {
                 borderRadius: '12px',
                 border: '1px solid var(--border)',
               }}>
-                {searchQuery ? "No skills match your search." : "No skills installed yet."}
+                {searchQuery ? t("skills.noMatch") : t("skills.noSkills")}
               </div>
             ) : (
               <div style={{
@@ -341,7 +343,7 @@ export function Skills() {
                             WebkitBoxOrient: 'vertical',
                             overflow: 'hidden',
                           }}>
-                            {skill.description || "No description"}
+                            {skill.description || t("skills.noDescription")}
                           </p>
                         </div>
                       </div>
@@ -363,7 +365,7 @@ export function Skills() {
                           letterSpacing: '0.5px',
                           marginRight: '4px',
                         }}>
-                          Enable for
+                          {t("skills.enableFor")}
                         </span>
                         {toolIds.map((toolId) => {
                           const isEnabled = skill.enabled[toolId] ?? false;

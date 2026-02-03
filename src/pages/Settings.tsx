@@ -1,44 +1,49 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { AppConfig } from "@/types";
+import { AppConfig, UserPreferences } from "@/types";
+import { useTranslation, Language } from "@/i18n";
 
-// Tool name display mapping
-const toolDisplayNames: Record<string, string> = {
-  "claude-code": "Claude Code",
-  "codex": "Codex",
-  "codebuddy": "CodeBuddy",
+// Default preferences
+const defaultPreferences: UserPreferences = {
+  theme: "system",
+  language: "en",
+  auto_sync: true,
+  sync_on_save: true,
+  default_editor: "system",
+  tab_size: 2,
+  show_sync_notifications: true,
 };
 
-function getToolDisplayName(toolId: string): string {
-  return toolDisplayNames[toolId] || toolId;
-}
-
-// Generate consistent colors based on tool name
-function getToolColor(name: string): { bg: string } {
-  const colors = [
-    { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
-    { bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' },
-    { bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' },
-    { bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)' },
-  ];
-  const index = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
-  return colors[index];
-}
+// Editor definitions
+const editorDefinitions = [
+  { id: "vscode", nameKey: "editors.vscode" as const },
+  { id: "cursor", nameKey: "editors.cursor" as const },
+  { id: "zed", nameKey: "editors.zed" as const },
+  { id: "sublime", nameKey: "editors.sublime" as const },
+  { id: "vim", nameKey: "editors.vim" as const },
+  { id: "neovim", nameKey: "editors.neovim" as const },
+  { id: "system", nameKey: "editors.system" as const },
+];
 
 export function Settings() {
+  const { t, language, setLanguage } = useTranslation();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [editorDropdownOpen, setEditorDropdownOpen] = useState(false);
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const configResult = await invoke<AppConfig>("get_config");
+      if (!configResult.preferences) {
+        configResult.preferences = { ...defaultPreferences };
+      }
       setConfig(configResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -56,7 +61,7 @@ export function Settings() {
       const selected = await open({
         directory: true,
         multiple: false,
-        title: "选择公共 Skills 目录",
+        title: t("settings.skillsDirectory"),
       });
       if (selected && config) {
         setConfig({
@@ -66,6 +71,28 @@ export function Settings() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const updatePreference = <K extends keyof UserPreferences>(
+    key: K,
+    value: UserPreferences[K]
+  ) => {
+    if (!config) return;
+
+    const newConfig = {
+      ...config,
+      preferences: {
+        ...defaultPreferences,
+        ...config.preferences,
+        [key]: value,
+      },
+    };
+    setConfig(newConfig);
+
+    // If language changed, update the app language immediately
+    if (key === "language") {
+      setLanguage(value as Language);
     }
   };
 
@@ -109,7 +136,7 @@ export function Settings() {
         >
           <path d="M21 12a9 9 0 1 1-6.219-8.56" />
         </svg>
-        Loading...
+        {t("common.loading")}
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </div>
     );
@@ -135,12 +162,13 @@ export function Settings() {
   if (!config) {
     return (
       <div style={{ padding: '24px 32px', color: 'var(--muted-foreground)' }}>
-        无法加载配置
+        {t("common.loading")}
       </div>
     );
   }
 
-  const toolIds = Object.keys(config.tools);
+  const prefs = config.preferences || defaultPreferences;
+  const selectedEditor = editorDefinitions.find(e => e.id === prefs.default_editor) || editorDefinitions[editorDefinitions.length - 1];
 
   return (
     <div style={{
@@ -151,7 +179,7 @@ export function Settings() {
       overflow: 'hidden',
       backgroundColor: 'var(--background)',
     }}>
-      {/* Top Bar with Title */}
+      {/* Top Bar */}
       <header style={{
         display: 'flex',
         alignItems: 'center',
@@ -167,7 +195,7 @@ export function Settings() {
           color: 'var(--foreground)',
           margin: 0,
         }}>
-          Settings
+          {t("settings.title")}
         </h1>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -182,7 +210,7 @@ export function Settings() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M20 6L9 17l-5-5"/>
               </svg>
-              已保存
+              {t("common.saved")}
             </span>
           )}
           {saveError && (
@@ -216,7 +244,7 @@ export function Settings() {
               <polyline points="17 21 17 13 7 13 7 21"/>
               <polyline points="7 3 7 8 15 8"/>
             </svg>
-            {saving ? "保存中..." : "保存设置"}
+            {saving ? t("common.saving") : t("settings.saveSettings")}
           </button>
         </div>
       </header>
@@ -225,288 +253,425 @@ export function Settings() {
       <main style={{
         flex: 1,
         overflow: 'auto',
-        padding: '24px 32px',
+        padding: '32px',
       }}>
-        <div style={{ maxWidth: '800px' }}>
-          {/* Section: Skills Directory */}
-          <section style={{ marginBottom: '32px' }}>
-            <h2 style={{
-              fontSize: '13px',
-              fontWeight: 500,
-              color: 'var(--muted-foreground)',
-              margin: '0 0 16px 0',
-            }}>
-              Skills Directory
-            </h2>
-            <div style={{
-              padding: '20px 24px',
-              backgroundColor: 'var(--secondary)',
-              borderRadius: '14px',
-              border: '1px solid var(--border)',
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '16px',
-                marginBottom: '16px',
-              }}>
-                <div style={{
-                  width: '44px',
-                  height: '44px',
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        <div style={{ maxWidth: '680px' }}>
+          {/* General Section */}
+          <SectionTitle>{t("settings.general")}</SectionTitle>
+          <SettingsCard>
+            <SettingsRow
+              label={t("settings.skillsDirectory")}
+              description={t("settings.skillsDirectoryDesc")}
+              isLast={false}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <code style={{
+                  fontSize: '12px',
+                  color: 'var(--muted-foreground)',
+                  backgroundColor: 'var(--secondary)',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  maxWidth: '200px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                  </svg>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <h3 style={{
-                    fontSize: '15px',
-                    fontWeight: 600,
-                    color: 'var(--foreground)',
-                    margin: '0 0 4px 0',
-                  }}>
-                    公共 Skills 目录
-                  </h3>
-                  <p style={{
-                    fontSize: '13px',
-                    color: 'var(--muted-foreground)',
-                    margin: 0,
-                    lineHeight: 1.5,
-                  }}>
-                    所有 Skills 的存储位置，各工具将通过符号链接引用此目录中的 Skills
-                  </p>
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <input
-                  type="text"
-                  value={config.skills_dir}
-                  readOnly
-                  style={{
-                    flex: 1,
-                    padding: '10px 14px',
-                    fontSize: '13px',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    backgroundColor: 'var(--background)',
-                    color: 'var(--foreground)',
-                    fontFamily: 'monospace',
-                  }}
-                />
+                  {config.skills_dir}
+                </code>
                 <button
                   onClick={handleSelectDirectory}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '10px 16px',
-                    fontSize: '13px',
+                    padding: '6px 12px',
+                    fontSize: '12px',
                     fontWeight: 500,
                     color: 'var(--foreground)',
                     backgroundColor: 'var(--background)',
                     border: '1px solid var(--border)',
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     cursor: 'pointer',
-                    transition: 'border-color 0.15s',
-                    whiteSpace: 'nowrap',
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--ring)'}
-                  onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="17 8 12 3 7 8"/>
-                    <line x1="12" y1="3" x2="12" y2="15"/>
-                  </svg>
-                  选择目录
+                  {t("common.change")}
                 </button>
               </div>
-            </div>
-          </section>
+            </SettingsRow>
 
-          {/* Section: Tool Configurations */}
-          <section style={{ marginBottom: '32px' }}>
-            <h2 style={{
-              fontSize: '13px',
-              fontWeight: 500,
-              color: 'var(--muted-foreground)',
-              margin: '0 0 16px 0',
-            }}>
-              Tool Configurations
-            </h2>
-            {toolIds.length === 0 ? (
-              <div style={{
-                textAlign: 'center',
-                padding: '48px 24px',
-                color: 'var(--muted-foreground)',
-                backgroundColor: 'var(--secondary)',
-                borderRadius: '12px',
-                border: '1px solid var(--border)',
-              }}>
-                暂无已配置的工具
-              </div>
-            ) : (
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px',
-              }}>
-                {toolIds.map((toolId) => {
-                  const toolConfig = config.tools[toolId];
-                  const color = getToolColor(toolId);
-                  return (
-                    <div
-                      key={toolId}
-                      style={{
-                        padding: '18px 20px',
-                        backgroundColor: 'var(--secondary)',
-                        borderRadius: '14px',
-                        border: '1px solid var(--border)',
-                        transition: 'border-color 0.2s',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--ring)'}
-                      onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border)'}
-                    >
-                      <div style={{ display: 'flex', gap: '14px' }}>
-                        <div style={{
-                          width: '40px',
-                          height: '40px',
-                          borderRadius: '10px',
-                          background: color.bg,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                        }}>
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-                          </svg>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <h4 style={{
-                            fontSize: '15px',
-                            fontWeight: 600,
-                            color: 'var(--foreground)',
-                            margin: '0 0 12px 0',
-                          }}>
-                            {getToolDisplayName(toolId)}
-                          </h4>
-                          <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: '90px 1fr',
-                            gap: '8px 12px',
-                            fontSize: '13px',
-                          }}>
-                            <span style={{ color: 'var(--muted-foreground)' }}>Skills 路径</span>
-                            <code style={{
-                              fontSize: '11px',
-                              color: 'var(--foreground)',
-                              backgroundColor: 'var(--background)',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              wordBreak: 'break-all',
-                            }}>
-                              {toolConfig.skills_path || "-"}
-                            </code>
-                            <span style={{ color: 'var(--muted-foreground)' }}>配置路径</span>
-                            <code style={{
-                              fontSize: '11px',
-                              color: 'var(--foreground)',
-                              backgroundColor: 'var(--background)',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              wordBreak: 'break-all',
-                            }}>
-                              {toolConfig.config_path || "-"}
-                            </code>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          {/* Section: About */}
-          <section>
-            <h2 style={{
-              fontSize: '13px',
-              fontWeight: 500,
-              color: 'var(--muted-foreground)',
-              margin: '0 0 16px 0',
-            }}>
-              About
-            </h2>
-            <div style={{
-              padding: '20px 24px',
-              backgroundColor: 'var(--secondary)',
-              borderRadius: '14px',
-              border: '1px solid var(--border)',
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '16px',
-              }}>
-                <div style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="16" x2="12" y2="12"/>
-                    <line x1="12" y1="8" x2="12.01" y2="8"/>
-                  </svg>
-                </div>
-                <div>
-                  <h3 style={{
-                    fontSize: '16px',
-                    fontWeight: 600,
-                    color: 'var(--foreground)',
-                    margin: '0 0 4px 0',
-                  }}>
-                    Skills Manager
-                  </h3>
-                  <p style={{
+            <SettingsRow
+              label={t("settings.defaultEditor")}
+              description={t("settings.defaultEditorDesc")}
+              isLast={false}
+            >
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setEditorDropdownOpen(!editorDropdownOpen)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 12px',
                     fontSize: '13px',
-                    color: 'var(--muted-foreground)',
-                    margin: '0 0 8px 0',
-                  }}>
-                    统一管理多 AI 工具的 Skills
-                  </p>
-                  <span style={{
-                    fontSize: '12px',
-                    padding: '3px 10px',
-                    borderRadius: '6px',
-                    backgroundColor: 'var(--background)',
-                    color: 'var(--muted-foreground)',
+                    fontWeight: 500,
+                    color: 'var(--foreground)',
+                    backgroundColor: editorDropdownOpen ? 'var(--secondary)' : 'var(--background)',
                     border: '1px solid var(--border)',
-                  }}>
-                    v{config.version}
-                  </span>
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    minWidth: '140px',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <span>{t(selectedEditor.nameKey)}</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
+                </button>
+
+                {editorDropdownOpen && (
+                  <>
+                    <div
+                      style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 10,
+                      }}
+                      onClick={() => setEditorDropdownOpen(false)}
+                    />
+                    <div style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 4px)',
+                      right: 0,
+                      backgroundColor: 'var(--background)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '10px',
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+                      zIndex: 20,
+                      minWidth: '180px',
+                      padding: '4px',
+                      overflow: 'hidden',
+                    }}>
+                      {editorDefinitions.map((editor) => (
+                        <button
+                          key={editor.id}
+                          onClick={() => {
+                            updatePreference("default_editor", editor.id as UserPreferences["default_editor"]);
+                            setEditorDropdownOpen(false);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            width: '100%',
+                            padding: '10px 12px',
+                            fontSize: '13px',
+                            color: 'var(--foreground)',
+                            backgroundColor: prefs.default_editor === editor.id ? 'var(--secondary)' : 'transparent',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                          }}
+                        >
+                          <span>{t(editor.nameKey)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.autoSync")}
+              description={t("settings.autoSyncDesc")}
+              isLast={false}
+            >
+              <Toggle
+                checked={prefs.auto_sync}
+                onChange={(v) => updatePreference("auto_sync", v)}
+              />
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.syncNotifications")}
+              description={t("settings.syncNotificationsDesc")}
+              isLast={true}
+            >
+              <Toggle
+                checked={prefs.show_sync_notifications}
+                onChange={(v) => updatePreference("show_sync_notifications", v)}
+              />
+            </SettingsRow>
+          </SettingsCard>
+
+          {/* Appearance Section */}
+          <SectionTitle>{t("settings.appearance")}</SectionTitle>
+          <SettingsCard>
+            <SettingsRow
+              label={t("settings.theme")}
+              description={t("settings.themeDesc")}
+              isLast={false}
+            >
+              <ThemeSelector
+                value={prefs.theme}
+                onChange={(v) => updatePreference("theme", v)}
+              />
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.language")}
+              description={t("settings.languageDesc")}
+              isLast={true}
+            >
+              <SegmentedControl
+                value={language}
+                onChange={(v) => updatePreference("language", v as "en" | "zh")}
+                options={[
+                  { value: "en", label: "English" },
+                  { value: "zh", label: "中文" },
+                ]}
+              />
+            </SettingsRow>
+          </SettingsCard>
+
+          {/* About Section */}
+          <SectionTitle>{t("settings.about")}</SectionTitle>
+          <SettingsCard>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px 0',
+            }}>
+              <div>
+                <div style={{
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  color: 'var(--foreground)',
+                  marginBottom: '2px',
+                }}>
+                  {t("settings.appName")}
+                </div>
+                <div style={{
+                  fontSize: '13px',
+                  color: 'var(--muted-foreground)',
+                }}>
+                  {t("settings.appDescription")}
                 </div>
               </div>
+              <span style={{
+                fontSize: '13px',
+                color: 'var(--muted-foreground)',
+              }}>
+                v{config.version}
+              </span>
             </div>
-          </section>
+          </SettingsCard>
         </div>
       </main>
+    </div>
+  );
+}
+
+// --- Sub-components ---
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 style={{
+      fontSize: '15px',
+      fontWeight: 600,
+      color: 'var(--foreground)',
+      margin: '0 0 12px 0',
+    }}>
+      {children}
+    </h2>
+  );
+}
+
+function SettingsCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      backgroundColor: 'var(--secondary)',
+      borderRadius: '12px',
+      border: '1px solid var(--border)',
+      padding: '0 20px',
+      marginBottom: '32px',
+    }}>
+      {children}
+    </div>
+  );
+}
+
+interface SettingsRowProps {
+  label: string;
+  description: string;
+  children: React.ReactNode;
+  isLast?: boolean;
+}
+
+function SettingsRow({ label, description, children, isLast = false }: SettingsRowProps) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '16px 0',
+      borderBottom: isLast ? 'none' : '1px solid var(--border)',
+    }}>
+      <div style={{ flex: 1, marginRight: '16px' }}>
+        <div style={{
+          fontSize: '14px',
+          fontWeight: 500,
+          color: 'var(--foreground)',
+          marginBottom: '2px',
+        }}>
+          {label}
+        </div>
+        <div style={{
+          fontSize: '13px',
+          color: 'var(--muted-foreground)',
+        }}>
+          {description}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+interface ToggleProps {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}
+
+function Toggle({ checked, onChange }: ToggleProps) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      style={{
+        width: '44px',
+        height: '24px',
+        borderRadius: '12px',
+        backgroundColor: checked ? '#3b82f6' : 'var(--border)',
+        border: 'none',
+        cursor: 'pointer',
+        position: 'relative',
+        transition: 'background-color 0.2s',
+        flexShrink: 0,
+      }}
+    >
+      <span style={{
+        position: 'absolute',
+        top: '2px',
+        left: checked ? '22px' : '2px',
+        width: '20px',
+        height: '20px',
+        borderRadius: '10px',
+        backgroundColor: '#fff',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        transition: 'left 0.2s',
+      }} />
+    </button>
+  );
+}
+
+interface ThemeSelectorProps {
+  value: "light" | "dark" | "system";
+  onChange: (value: "light" | "dark" | "system") => void;
+}
+
+function ThemeSelector({ value, onChange }: ThemeSelectorProps) {
+  const { t } = useTranslation();
+
+  const options = [
+    { value: "light" as const, labelKey: "settings.themeLight" as const, icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="12" r="5"/>
+        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+      </svg>
+    )},
+    { value: "dark" as const, labelKey: "settings.themeDark" as const, icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+    )},
+    { value: "system" as const, labelKey: "settings.themeSystem" as const, icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+        <line x1="8" y1="21" x2="16" y2="21"/>
+        <line x1="12" y1="17" x2="12" y2="21"/>
+      </svg>
+    )},
+  ];
+
+  return (
+    <div style={{
+      display: 'flex',
+      backgroundColor: 'var(--background)',
+      borderRadius: '8px',
+      padding: '3px',
+      border: '1px solid var(--border)',
+    }}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          onClick={() => onChange(option.value)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 12px',
+            fontSize: '12px',
+            fontWeight: 500,
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            backgroundColor: value === option.value ? 'var(--secondary)' : 'transparent',
+            color: value === option.value ? 'var(--foreground)' : 'var(--muted-foreground)',
+            transition: 'all 0.15s',
+          }}
+        >
+          {option.icon}
+          {t(option.labelKey)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface SegmentedControlProps {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}
+
+function SegmentedControl({ value, onChange, options }: SegmentedControlProps) {
+  return (
+    <div style={{
+      display: 'flex',
+      backgroundColor: 'var(--background)',
+      borderRadius: '8px',
+      padding: '3px',
+      border: '1px solid var(--border)',
+    }}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          onClick={() => onChange(option.value)}
+          style={{
+            padding: '6px 12px',
+            fontSize: '12px',
+            fontWeight: 500,
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            backgroundColor: value === option.value ? 'var(--secondary)' : 'transparent',
+            color: value === option.value ? 'var(--foreground)' : 'var(--muted-foreground)',
+            transition: 'all 0.15s',
+          }}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }

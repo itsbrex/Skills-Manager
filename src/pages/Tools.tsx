@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Tool } from "@/types";
+import { useTranslation } from "@/i18n";
 
 // Generate consistent colors based on tool name
 function getToolColor(name: string): { bg: string; icon: string } {
@@ -16,6 +17,7 @@ function getToolColor(name: string): { bg: string; icon: string } {
 }
 
 export function Tools() {
+  const { t } = useTranslation();
   const [tools, setTools] = useState<Tool[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +77,7 @@ export function Tools() {
         >
           <path d="M21 12a9 9 0 1 1-6.219-8.56" />
         </svg>
-        Loading...
+        {t("common.loading")}
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </div>
     );
@@ -107,7 +109,7 @@ export function Tools() {
           color: 'var(--foreground)',
           margin: 0,
         }}>
-          Tools
+          {t("tools.title")}
         </h1>
 
         {/* Right: Actions */}
@@ -133,7 +135,7 @@ export function Tools() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5"/>
           </svg>
-          Refresh
+          {t("common.refresh")}
         </button>
       </header>
 
@@ -167,7 +169,7 @@ export function Tools() {
               color: 'var(--muted-foreground)',
               margin: '0 0 16px 0',
             }}>
-              Detected
+              {t("tools.detected")}
             </h2>
 
             {tools.length === 0 ? (
@@ -179,9 +181,9 @@ export function Tools() {
                 borderRadius: '12px',
                 border: '1px solid var(--border)',
               }}>
-                <p style={{ margin: '0 0 8px 0' }}>未检测到任何工具</p>
+                <p style={{ margin: '0 0 8px 0' }}>{t("tools.noTools")}</p>
                 <p style={{ margin: 0, fontSize: '13px' }}>
-                  请确保已安装支持的 AI 编程工具（如 Claude Code、Codex 等）
+                  {t("tools.noToolsDesc")}
                 </p>
               </div>
             ) : (
@@ -260,7 +262,7 @@ export function Tools() {
                               color: tool.detected ? '#16a34a' : 'var(--muted-foreground)',
                               border: tool.detected ? '1px solid #bbf7d0' : '1px solid var(--border)',
                             }}>
-                              {tool.detected ? "已检测" : "未检测到"}
+                              {tool.detected ? t("tools.detectedStatus") : t("tools.notDetected")}
                             </span>
                             {tool.cli_available && (
                               <span style={{
@@ -300,9 +302,9 @@ export function Tools() {
                             fontSize: '12px',
                             color: 'var(--muted-foreground)',
                             flexShrink: 0,
-                            width: '70px',
+                            width: '80px',
                           }}>
-                            配置路径
+                            {t("tools.configPath")}
                           </span>
                           <code style={{
                             fontSize: '11px',
@@ -312,7 +314,7 @@ export function Tools() {
                             borderRadius: '4px',
                             wordBreak: 'break-all',
                           }}>
-                            {tool.config.config_path || "未设置"}
+                            {tool.config.config_path || t("tools.notSet")}
                           </code>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
@@ -320,9 +322,9 @@ export function Tools() {
                             fontSize: '12px',
                             color: 'var(--muted-foreground)',
                             flexShrink: 0,
-                            width: '70px',
+                            width: '80px',
                           }}>
-                            Skills 路径
+                            {t("tools.skillsPath")}
                           </span>
                           <code style={{
                             fontSize: '11px',
@@ -332,7 +334,7 @@ export function Tools() {
                             borderRadius: '4px',
                             wordBreak: 'break-all',
                           }}>
-                            {tool.config.skills_path || "未设置"}
+                            {tool.config.skills_path || t("tools.notSet")}
                           </code>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -340,9 +342,9 @@ export function Tools() {
                             fontSize: '12px',
                             color: 'var(--muted-foreground)',
                             flexShrink: 0,
-                            width: '70px',
+                            width: '80px',
                           }}>
-                            启用状态
+                            {t("tools.enableStatus")}
                           </span>
                           <button
                             onClick={(e) => {

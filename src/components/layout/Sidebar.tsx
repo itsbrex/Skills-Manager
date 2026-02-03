@@ -1,9 +1,10 @@
 import { NavLink } from "react-router-dom";
+import { useTranslation } from "@/i18n";
 
 const navItems = [
-  { path: "/", label: "Skills", icon: "sparkles" },
-  { path: "/tools", label: "Tools", icon: "wrench" },
-  { path: "/settings", label: "Settings", icon: "cog" },
+  { path: "/", labelKey: "nav.skills" as const, icon: "sparkles" },
+  { path: "/tools", labelKey: "nav.tools" as const, icon: "wrench" },
+  { path: "/settings", labelKey: "nav.settings" as const, icon: "cog" },
 ];
 
 const icons: Record<string, React.ReactNode> = {
@@ -27,6 +28,8 @@ const icons: Record<string, React.ReactNode> = {
 };
 
 export function Sidebar() {
+  const { t } = useTranslation();
+
   return (
     <aside
       style={{
@@ -73,7 +76,7 @@ export function Sidebar() {
                 <span style={{ display: 'flex', alignItems: 'center', opacity: 0.8 }}>
                   {icons[item.icon]}
                 </span>
-                <span>{item.label}</span>
+                <span>{t(item.labelKey)}</span>
               </NavLink>
             </li>
           ))}
