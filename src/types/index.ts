@@ -32,23 +32,13 @@ export interface AppConfig {
   tools: Record<string, ToolConfig>;
 }
 
-export type LinkStatus = "valid" | "broken" | "wrongtarget" | "notalink" | "missing";
-
-export interface SyncStatus {
-  skill_id: string;
-  tool_id: string;
-  status: LinkStatus;
-}
-
 export interface SyncReport {
-  statuses: SyncStatus[];
   issues_count: number;
 }
 
 export interface LinkResult {
   skill_id: string;
   tool_id: string;
-  status: LinkStatus;
   message: string | null;
 }
 

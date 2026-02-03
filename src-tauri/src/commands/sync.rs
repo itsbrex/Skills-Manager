@@ -2,15 +2,7 @@ use serde::{Deserialize, Serialize};
 use crate::services::{ConfigManager, LinkerService, LinkReport, LinkStatus, ScannerService};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SyncStatus {
-    pub skill_id: String,
-    pub tool_id: String,
-    pub status: LinkStatus,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncReport {
-    pub statuses: Vec<SyncStatus>,
     pub issues_count: usize,
 }
 
@@ -20,10 +12,9 @@ pub fn check_sync_status() -> Result<SyncReport, String> {
     let config = manager.load()?;
 
     let skills = ScannerService::scan_skills(&config.skills_dir)?;
-    let mut statuses = Vec::new();
     let mut issues_count = 0;
 
-    for (tool_id, tool_config) in &config.tools {
+    for (_tool_id, tool_config) in &config.tools {
         for skill in &skills {
             let status = LinkerService::check_link(
                 &skill.path,
@@ -34,19 +25,10 @@ pub fn check_sync_status() -> Result<SyncReport, String> {
             if status != LinkStatus::Valid && status != LinkStatus::Missing {
                 issues_count += 1;
             }
-
-            statuses.push(SyncStatus {
-                skill_id: skill.id.clone(),
-                tool_id: tool_id.clone(),
-                status,
-            });
         }
     }
 
-    Ok(SyncReport {
-        statuses,
-        issues_count,
-    })
+    Ok(SyncReport { issues_count })
 }
 
 #[tauri::command]
