@@ -5,6 +5,7 @@ import { Layout } from "@/components/layout/Layout";
 import { Skills } from "@/pages/Skills";
 import { Tools } from "@/pages/Tools";
 import { Settings } from "@/pages/Settings";
+import { EditorPage } from "@/pages/Editor";
 import { Welcome } from "@/pages/Welcome";
 import { useInitialization } from "@/hooks/useInitialization";
 import { I18nProvider, Language } from "@/i18n";
@@ -61,6 +62,7 @@ function App() {
             <Route path="tools" element={<Tools />} />
             <Route path="settings" element={<Settings />} />
           </Route>
+          <Route path="/editor" element={<EditorPage />} />
         </Routes>
       </BrowserRouter>
     </I18nProvider>

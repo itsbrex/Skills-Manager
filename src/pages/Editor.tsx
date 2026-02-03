@@ -1,0 +1,308 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { invoke } from "@tauri-apps/api/core";
+import MonacoEditor from "@monaco-editor/react";
+import { FileTree } from "@/components/editor/FileTree";
+import { FileNode } from "@/types";
+import { useTranslation } from "@/i18n";
+
+export function EditorPage() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const rootPath = searchParams.get("root") || "";
+  const initialFile = searchParams.get("file") || "";
+
+  const [fileTree, setFileTree] = useState<FileNode | null>(null);
+  const [selectedPath, setSelectedPath] = useState(initialFile);
+  const [content, setContent] = useState("");
+  const [originalContent, setOriginalContent] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const editorRef = useRef<unknown>(null);
+  const hasUnsavedChanges = content !== originalContent;
+
+  // Load file tree
+  useEffect(() => {
+    if (!rootPath) return;
+
+    async function loadTree() {
+      try {
+        const tree = await invoke<FileNode>("read_directory_tree", { path: rootPath });
+        setFileTree(tree);
+
+        // If no file selected, find first .md file
+        if (!selectedPath && tree.children) {
+          const firstMd = findFirstFile(tree, ".md") || findFirstFile(tree);
+          if (firstMd) {
+            setSelectedPath(firstMd);
+          }
+        }
+      } catch (err) {
+        setError(String(err));
+      }
+    }
+    loadTree();
+  }, [rootPath, selectedPath]);
+
+  // Load file content
+  useEffect(() => {
+    if (!rootPath || !selectedPath) {
+      setLoading(false);
+      return;
+    }
+
+    async function loadFile() {
+      setLoading(true);
+      try {
+        const fullPath = selectedPath === "." ? rootPath : `${rootPath}/${selectedPath}`;
+        const fileContent = await invoke<string>("read_file", { path: fullPath });
+        setContent(fileContent);
+        setOriginalContent(fileContent);
+        setError(null);
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadFile();
+  }, [rootPath, selectedPath]);
+
+  // Keyboard shortcut for save
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  });
+
+  const handleSave = async () => {
+    if (!rootPath || !selectedPath || saving) return;
+
+    setSaving(true);
+    try {
+      const fullPath = selectedPath === "." ? rootPath : `${rootPath}/${selectedPath}`;
+      await invoke("write_file", { path: fullPath, content });
+      setOriginalContent(content);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSelectFile = useCallback((path: string) => {
+    if (path === selectedPath) return;
+
+    if (hasUnsavedChanges) {
+      const confirmed = window.confirm(t("editor.unsavedChangesDesc"));
+      if (!confirmed) return;
+    }
+
+    setSelectedPath(path);
+  }, [selectedPath, hasUnsavedChanges, t]);
+
+  const handleBack = () => {
+    if (hasUnsavedChanges) {
+      const confirmed = window.confirm(t("editor.unsavedChangesDesc"));
+      if (!confirmed) return;
+    }
+    navigate(-1);
+  };
+
+  const getLanguage = (path: string): string => {
+    const ext = path.split(".").pop()?.toLowerCase();
+    const langMap: Record<string, string> = {
+      md: "markdown",
+      json: "json",
+      js: "javascript",
+      ts: "typescript",
+      tsx: "typescript",
+      jsx: "javascript",
+      css: "css",
+      html: "html",
+      yaml: "yaml",
+      yml: "yaml",
+      toml: "toml",
+      rs: "rust",
+      py: "python",
+    };
+    return langMap[ext || ""] || "plaintext";
+  };
+
+  const skillName = fileTree?.name || rootPath.split("/").pop() || "";
+
+  return (
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      height: "100vh",
+      backgroundColor: "var(--background)",
+    }}>
+      {/* Toolbar */}
+      <header style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "12px 16px",
+        borderBottom: "1px solid var(--border)",
+        flexShrink: 0,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            onClick={handleBack}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "6px 10px",
+              fontSize: 13,
+              color: "var(--foreground)",
+              backgroundColor: "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              cursor: "pointer",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            {t("editor.back")}
+          </button>
+          <span style={{ fontSize: 15, fontWeight: 500, color: "var(--foreground)" }}>
+            {skillName}
+          </span>
+          {hasUnsavedChanges && (
+            <span style={{
+              fontSize: 11,
+              padding: "2px 6px",
+              backgroundColor: "var(--secondary)",
+              borderRadius: 4,
+              color: "var(--muted-foreground)",
+            }}>
+              Modified
+            </span>
+          )}
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving || !hasUnsavedChanges}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "6px 12px",
+            fontSize: 13,
+            fontWeight: 500,
+            color: "var(--primary-foreground)",
+            backgroundColor: hasUnsavedChanges ? "var(--foreground)" : "var(--secondary)",
+            border: "none",
+            borderRadius: 6,
+            cursor: saving || !hasUnsavedChanges ? "default" : "pointer",
+            opacity: saving ? 0.7 : 1,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+            <polyline points="17 21 17 13 7 13 7 21" />
+            <polyline points="7 3 7 8 15 8" />
+          </svg>
+          {saving ? t("editor.saving") : t("editor.save")}
+        </button>
+      </header>
+
+      {/* Main content */}
+      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        {/* File tree */}
+        {fileTree && (
+          <FileTree
+            root={fileTree}
+            selectedPath={selectedPath}
+            onSelectFile={handleSelectFile}
+          />
+        )}
+
+        {/* Editor */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          {loading ? (
+            <div style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--muted-foreground)",
+            }}>
+              Loading...
+            </div>
+          ) : error ? (
+            <div style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#dc2626",
+            }}>
+              {error}
+            </div>
+          ) : (
+            <MonacoEditor
+              height="100%"
+              language={getLanguage(selectedPath)}
+              value={content}
+              onChange={(value) => setContent(value || "")}
+              onMount={(editor) => { editorRef.current = editor; }}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                lineNumbers: "on",
+                wordWrap: "on",
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                tabSize: 2,
+                quickSuggestions: false,
+                suggestOnTriggerCharacters: false,
+                parameterHints: { enabled: false },
+              }}
+              theme="vs-dark"
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Status bar */}
+      <footer style={{
+        padding: "6px 16px",
+        borderTop: "1px solid var(--border)",
+        fontSize: 12,
+        color: "var(--muted-foreground)",
+        flexShrink: 0,
+      }}>
+        {selectedPath}
+      </footer>
+    </div>
+  );
+}
+
+function findFirstFile(node: FileNode, extension?: string): string | null {
+  if (!node.is_dir) {
+    if (!extension || node.name.endsWith(extension)) {
+      return node.path;
+    }
+    return null;
+  }
+
+  if (node.children) {
+    for (const child of node.children) {
+      const found = findFirstFile(child, extension);
+      if (found) return found;
+    }
+  }
+  return null;
+}
