@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use crate::models::{Skill, SkillSource};
+use crate::models::{Skill, SkillSource, AppConfig};
 use crate::services::detector::DetectorService;
 
 pub struct ScannerService;
@@ -16,6 +16,12 @@ pub struct SkillMeta {
 
 impl ScannerService {
     pub fn scan_skills(skills_dir: &Path) -> Result<Vec<Skill>, String> {
+        // Load config to check enabled status for each tool
+        let config = crate::services::ConfigManager::new().load()?;
+        Self::scan_skills_with_config(skills_dir, &config)
+    }
+
+    pub fn scan_skills_with_config(skills_dir: &Path, config: &AppConfig) -> Result<Vec<Skill>, String> {
         if !skills_dir.exists() {
             return Ok(Vec::new());
         }
@@ -28,7 +34,7 @@ impl ScannerService {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                if let Ok(skill) = Self::load_skill(&path) {
+                if let Ok(skill) = Self::load_skill_with_config(&path, config) {
                     skills.push(skill);
                 }
             }
@@ -38,6 +44,11 @@ impl ScannerService {
     }
 
     pub fn load_skill(skill_path: &Path) -> Result<Skill, String> {
+        let config = crate::services::ConfigManager::new().load()?;
+        Self::load_skill_with_config(skill_path, &config)
+    }
+
+    pub fn load_skill_with_config(skill_path: &Path, config: &AppConfig) -> Result<Skill, String> {
         let id = skill_path
             .file_name()
             .and_then(|n| n.to_str())
@@ -55,15 +66,61 @@ impl ScannerService {
             Self::generate_meta(&id)
         };
 
+        // Check enabled status by looking for symlinks in each tool's skills directory
+        let enabled = Self::check_enabled_status(skill_path, &id, config);
+
         Ok(Skill {
             id: id.clone(),
             name: meta.name,
             description: meta.description,
             version: meta.version,
             source: SkillSource::Local,
-            enabled: HashMap::new(),
+            enabled,
             path: skill_path.to_path_buf(),
         })
+    }
+
+    /// Check if this skill is enabled for each tool by looking for symlinks
+    fn check_enabled_status(skill_path: &Path, skill_id: &str, config: &AppConfig) -> HashMap<String, bool> {
+        let mut enabled = HashMap::new();
+
+        // Canonicalize the skill source path for comparison
+        let canonical_skill_path = skill_path.canonicalize().ok();
+
+        for (tool_id, tool_config) in &config.tools {
+            let link_path = tool_config.skills_path.join(skill_id);
+
+            // Check if a symlink exists at the expected location
+            if let Ok(metadata) = link_path.symlink_metadata() {
+                if metadata.file_type().is_symlink() {
+                    // Read the symlink target and check if it points to our skill
+                    if let Ok(target) = fs::read_link(&link_path) {
+                        // Resolve relative paths
+                        let resolved_target = if target.is_relative() {
+                            link_path.parent()
+                                .map(|p| p.join(&target))
+                                .and_then(|p| p.canonicalize().ok())
+                        } else {
+                            target.canonicalize().ok()
+                        };
+
+                        // Compare with our skill path
+                        let is_enabled = match (&resolved_target, &canonical_skill_path) {
+                            (Some(t), Some(s)) => t == s,
+                            _ => {
+                                // Fallback: compare the raw target with skill_path
+                                target == skill_path ||
+                                target.ends_with(skill_id)
+                            }
+                        };
+
+                        enabled.insert(tool_id.clone(), is_enabled);
+                    }
+                }
+            }
+        }
+
+        enabled
     }
 
     fn load_meta(meta_path: &Path) -> Result<SkillMeta, String> {

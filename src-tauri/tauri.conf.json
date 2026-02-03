@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "tmpskills-manager-temp",
+  "productName": "skills-manager",
   "version": "0.1.0",
-  "identifier": "com.yjw.tmpskills-manager-temp",
+  "identifier": "com.yjw.skills-manager",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "tmpskills-manager-temp",
-        "width": 800,
-        "height": 600
+        "title": "skills-manager",
+        "width": 1200,
+        "height": 800
       }
     ],
     "security": {
