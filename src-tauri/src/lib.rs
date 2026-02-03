@@ -5,7 +5,7 @@ mod services;
 use commands::{
     check_sync_status, detect_tools, disable_skill, enable_skill,
     fix_sync_issues, get_config, get_tool_status, import_skills_to_hub,
-    is_initialized, list_skills, save_config, scan_existing_skills,
+    is_initialized, list_skills, save_config, scan_existing_skills, set_tool_enabled,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -22,6 +22,7 @@ pub fn run() {
             disable_skill,
             detect_tools,
             get_tool_status,
+            set_tool_enabled,
             check_sync_status,
             fix_sync_issues,
             scan_existing_skills,

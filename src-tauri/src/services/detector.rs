@@ -1,18 +1,22 @@
 use std::process::Command;
 
 use crate::models::{Tool, ToolConfig, ToolDefinition, SUPPORTED_TOOLS};
+use crate::services::ConfigManager;
 
 pub struct DetectorService;
 
 impl DetectorService {
     pub fn detect_all() -> Vec<Tool> {
+        let manager = ConfigManager::new();
+        let saved_config = manager.load().ok();
+
         SUPPORTED_TOOLS
             .iter()
-            .map(|def| Self::detect_tool(def))
+            .map(|def| Self::detect_tool(def, &saved_config))
             .collect()
     }
 
-    pub fn detect_tool(definition: &ToolDefinition) -> Tool {
+    pub fn detect_tool(definition: &ToolDefinition, saved_config: &Option<crate::models::AppConfig>) -> Tool {
         let home_dir = dirs::home_dir().unwrap_or_default();
         let config_dir = home_dir.join(definition.config_dir);
         let skills_path = config_dir.join("skills");
@@ -21,8 +25,15 @@ impl DetectorService {
         let dir_exists = config_dir.exists();
         let cli_available = Self::check_cli_available(definition.cli_command);
 
+        // Get saved enabled state from config, default to false
+        let enabled = saved_config
+            .as_ref()
+            .and_then(|c| c.tools.get(definition.id))
+            .map(|tc| tc.enabled)
+            .unwrap_or(false);
+
         let tool_config = ToolConfig {
-            enabled: dir_exists,
+            enabled,
             detected: dir_exists,
             skills_path,
             config_path,
@@ -51,9 +62,12 @@ impl DetectorService {
     }
 
     pub fn get_tool_by_id(tool_id: &str) -> Option<Tool> {
+        let manager = ConfigManager::new();
+        let saved_config = manager.load().ok();
+
         SUPPORTED_TOOLS
             .iter()
             .find(|def| def.id == tool_id)
-            .map(|def| Self::detect_tool(def))
+            .map(|def| Self::detect_tool(def, &saved_config))
     }
 }

@@ -18,6 +18,10 @@ pub fn enable_skill(skill_id: String, tool_id: String) -> Result<(), String> {
         .get(&tool_id)
         .ok_or_else(|| format!("Tool not found: {}", tool_id))?;
 
+    if !tool_config.enabled {
+        return Err(format!("Tool is disabled: {}", tool_id));
+    }
+
     let skill_path = config.skills_dir.join(&skill_id);
     if !skill_path.exists() {
         return Err(format!("Skill not found: {}", skill_id));
@@ -35,6 +39,10 @@ pub fn disable_skill(skill_id: String, tool_id: String) -> Result<(), String> {
         .tools
         .get(&tool_id)
         .ok_or_else(|| format!("Tool not found: {}", tool_id))?;
+
+    if !tool_config.enabled {
+        return Err(format!("Tool is disabled: {}", tool_id));
+    }
 
     LinkerService::disable_skill(&tool_config.skills_path, &skill_id)
 }

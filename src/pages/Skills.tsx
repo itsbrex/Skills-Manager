@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Switch } from "@/components/ui/switch";
+import { ToastContainer, useToast } from "@/components/ui/toast";
 import { Skill, AppConfig } from "@/types";
 
 const toolAbbreviations: Record<string, string> = {
@@ -34,12 +35,11 @@ export function Skills() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
+  const { toasts, addToast, removeToast } = useToast();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
       const [skillsResult, configResult] = await Promise.all([
         invoke<Skill[]>("list_skills"),
@@ -48,11 +48,11 @@ export function Skills() {
       setSkills(skillsResult);
       setConfig(configResult);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      addToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [addToast]);
 
   useEffect(() => {
     fetchData();
@@ -69,7 +69,7 @@ export function Skills() {
       }
       await fetchData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      addToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
       setTogglingSkill(null);
     }
@@ -247,21 +247,6 @@ export function Skills() {
         padding: '24px 32px',
       }}>
         <div style={{ maxWidth: '1200px' }}>
-          {/* Error */}
-          {error && (
-            <div style={{
-              padding: '12px 16px',
-              marginBottom: '24px',
-              backgroundColor: '#fef2f2',
-              border: '1px solid #fecaca',
-              borderRadius: '10px',
-              color: '#dc2626',
-              fontSize: '14px',
-            }}>
-              {error}
-            </div>
-          )}
-
           {/* Section: Installed */}
           <section>
             <h2 style={{
@@ -427,6 +412,7 @@ export function Skills() {
           </section>
         </div>
       </main>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

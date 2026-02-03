@@ -43,6 +43,7 @@ impl ScannerService {
         Ok(skills)
     }
 
+    #[allow(dead_code)]
     pub fn load_skill(skill_path: &Path) -> Result<Skill, String> {
         let config = crate::services::ConfigManager::new().load()?;
         Self::load_skill_with_config(skill_path, &config)

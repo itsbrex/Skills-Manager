@@ -33,6 +33,24 @@ export function Tools() {
     }
   }, []);
 
+  const toggleToolEnabled = useCallback(async (toolId: string, enabled: boolean) => {
+    // Optimistic update
+    setTools(prev => prev.map(t =>
+      t.id === toolId ? { ...t, config: { ...t.config, enabled } } : t
+    ));
+    setError(null);
+
+    try {
+      await invoke("set_tool_enabled", { toolId, enabled });
+    } catch (err) {
+      // Rollback on error
+      setTools(prev => prev.map(t =>
+        t.id === toolId ? { ...t, config: { ...t.config, enabled: !enabled } } : t
+      ));
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
   useEffect(() => {
     detectTools();
   }, [detectTools]);
@@ -326,13 +344,35 @@ export function Tools() {
                           }}>
                             启用状态
                           </span>
-                          <span style={{
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: tool.config.enabled ? '#16a34a' : 'var(--muted-foreground)',
-                          }}>
-                            {tool.config.enabled ? "已启用" : "未启用"}
-                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleToolEnabled(tool.id, !tool.config.enabled);
+                            }}
+                            style={{
+                              position: 'relative',
+                              width: '36px',
+                              height: '20px',
+                              borderRadius: '10px',
+                              border: 'none',
+                              backgroundColor: tool.config.enabled ? '#16a34a' : '#d1d5db',
+                              cursor: 'pointer',
+                              transition: 'background-color 0.2s',
+                              padding: 0,
+                            }}
+                          >
+                            <span style={{
+                              position: 'absolute',
+                              top: '2px',
+                              left: tool.config.enabled ? '18px' : '2px',
+                              width: '16px',
+                              height: '16px',
+                              borderRadius: '50%',
+                              backgroundColor: '#fff',
+                              transition: 'left 0.2s',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                            }} />
+                          </button>
                         </div>
                       </div>
                     </div>
