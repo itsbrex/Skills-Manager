@@ -151,7 +151,7 @@ export function EditorPage() {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "12px 16px",
+        padding: "12px 16px 12px 80px",
         borderBottom: "1px solid var(--border)",
         flexShrink: 0,
       }}>
@@ -230,7 +230,7 @@ export function EditorPage() {
         )}
 
         {/* Editor */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
           {loading ? (
             <div style={{
               flex: 1,
@@ -263,6 +263,7 @@ export function EditorPage() {
                 fontSize: 14,
                 lineNumbers: "on",
                 wordWrap: "on",
+                wrappingStrategy: "advanced",
                 scrollBeyondLastLine: false,
                 automaticLayout: true,
                 tabSize: 2,
