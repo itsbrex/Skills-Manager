@@ -59,3 +59,38 @@ pub fn import_skills_to_hub(skill_paths: Vec<String>) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[tauri::command]
+pub fn refresh_skills() -> Result<Vec<Skill>, String> {
+    let manager = ConfigManager::new();
+    let config = manager.load()?;
+
+    // Scan all tool directories for new skills and import them to hub
+    for (_tool_id, tool_config) in &config.tools {
+        if tool_config.skills_path.exists() {
+            if let Ok(entries) = std::fs::read_dir(&tool_config.skills_path) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    // Skip hidden directories and non-directories
+                    if !path.is_dir() {
+                        continue;
+                    }
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                        if name.starts_with('.') {
+                            continue;
+                        }
+                    }
+                    // Skip if it's already a symlink (managed by us)
+                    if path.symlink_metadata().map(|m| m.file_type().is_symlink()).unwrap_or(false) {
+                        continue;
+                    }
+                    // Import this skill to hub
+                    let _ = LinkerService::import_to_hub(path.to_string_lossy().as_ref());
+                }
+            }
+        }
+    }
+
+    // Return updated skills list
+    ScannerService::scan_skills(&config.skills_dir)
+}

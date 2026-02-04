@@ -240,6 +240,14 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), Stri
         .map_err(|e| format!("Failed to read directory: {}", e))?
     {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let file_name = entry.file_name();
+        let file_name_str = file_name.to_string_lossy();
+
+        // Skip hidden files/directories (starting with .)
+        if file_name_str.starts_with('.') {
+            continue;
+        }
+
         let ty = entry.file_type().map_err(|e| format!("Failed to get file type: {}", e))?;
 
         if ty.is_dir() {

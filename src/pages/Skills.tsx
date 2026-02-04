@@ -63,7 +63,7 @@ export function Skills() {
     setLoading(true);
     try {
       const [skillsResult, configResult] = await Promise.all([
-        invoke<Skill[]>("list_skills"),
+        invoke<Skill[]>("refresh_skills"),
         invoke<AppConfig>("get_config"),
       ]);
       setSkills(skillsResult);

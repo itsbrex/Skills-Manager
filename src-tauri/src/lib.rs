@@ -5,8 +5,8 @@ mod services;
 use commands::{
     check_sync_status, detect_available_editors, detect_tools, disable_skill, enable_skill,
     fix_sync_issues, get_available_editors, get_config, get_tool_status, import_skills_to_hub,
-    is_initialized, list_skills, open_in_editor, read_directory_tree, read_file, save_config,
-    scan_existing_skills, set_tool_enabled, write_file, EditorState,
+    is_initialized, list_skills, open_in_editor, read_directory_tree, read_file, refresh_skills,
+    save_config, scan_existing_skills, set_tool_enabled, write_file, EditorState,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -20,6 +20,7 @@ pub fn run() {
             save_config,
             is_initialized,
             list_skills,
+            refresh_skills,
             enable_skill,
             disable_skill,
             detect_tools,
