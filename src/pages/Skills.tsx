@@ -276,7 +276,7 @@ export function Skills() {
               color: 'var(--muted-foreground)',
               margin: '0 0 16px 0',
             }}>
-              {t("skills.installed")}
+              {t("skills.installed")} ({filteredSkills.length})
             </h2>
 
             {filteredSkills.length === 0 ? (
