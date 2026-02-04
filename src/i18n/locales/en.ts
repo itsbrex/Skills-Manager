@@ -16,6 +16,7 @@ export const en = {
     skills: "Skills",
     tools: "Tools",
     settings: "Settings",
+    privacyPolicy: "Privacy Policy",
   },
   welcome: {
     description: "One Skills, shared across tools.\nUnified management for Claude Code, Codex, CodeBuddy skills.",

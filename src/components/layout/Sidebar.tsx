@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "@/i18n";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 const navItems = [
   { path: "/", labelKey: "nav.skills" as const, icon: "sparkles" },
@@ -52,6 +53,18 @@ export function Sidebar() {
           cursor: 'default',
         }}
       />
+      {/* App name */}
+      <div
+        style={{
+          padding: '0 20px 12px 20px',
+          fontSize: '13px',
+          fontWeight: 500,
+          color: 'var(--muted-foreground)',
+          letterSpacing: '0.01em',
+        }}
+      >
+        Skills Manager
+      </div>
       {/* Navigation */}
       <nav style={{ padding: '8px', flex: 1 }}>
         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
@@ -92,6 +105,26 @@ export function Sidebar() {
           ))}
         </ul>
       </nav>
+
+      {/* Privacy Policy */}
+      <div
+        onClick={() => openUrl('https://example.com/privacy')}
+        style={{
+          padding: '8px 20px',
+          fontSize: '12px',
+          color: 'var(--muted-foreground)',
+          cursor: 'pointer',
+          transition: 'color 0.15s',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = 'var(--foreground)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = 'var(--muted-foreground)';
+        }}
+      >
+        {t("nav.privacyPolicy")}
+      </div>
 
       {/* Bottom section */}
       <div

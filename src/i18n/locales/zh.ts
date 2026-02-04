@@ -15,8 +15,9 @@ export const zh = {
   },
   nav: {
     skills: "Skills",
-    tools: "工具",
-    settings: "设置",
+    tools: "工 具",
+    settings: "设 置",
+    privacyPolicy: "隐私政策",
   },
   welcome: {
     description: "一份 Skills，多工具共享\n统一管理 Claude Code、Codex、CodeBuddy 的技能库",
