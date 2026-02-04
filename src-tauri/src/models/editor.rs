@@ -7,6 +7,8 @@ pub struct DetectedEditor {
     pub command: String,
     pub available: bool,
     pub icon: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon_data: Option<String>,  // Base64 encoded PNG from app bundle
 }
 
 pub struct EditorDefinition {

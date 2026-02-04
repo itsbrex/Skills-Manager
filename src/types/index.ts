@@ -73,6 +73,7 @@ export interface DetectedEditor {
   command: string;
   available: boolean;
   icon: string;
+  icon_data?: string;  // Base64 encoded PNG from app bundle
 }
 
 // File tree node

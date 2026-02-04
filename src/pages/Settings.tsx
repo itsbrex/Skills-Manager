@@ -173,7 +173,7 @@ export function Settings() {
 
   const prefs = config.preferences || defaultPreferences;
   const selectedEditor = availableEditors.find(e => e.id === prefs.default_editor) || availableEditors[0];
-  const EditorIcon = selectedEditor ? getEditorIcon(selectedEditor.id) : null;
+  const FallbackEditorIcon = selectedEditor ? getEditorIcon(selectedEditor.id) : null;
 
   return (
     <div style={{
@@ -325,7 +325,15 @@ export function Settings() {
                     justifyContent: 'space-between',
                   }}
                 >
-                  {EditorIcon && <EditorIcon />}
+                  {selectedEditor?.icon_data ? (
+                    <img
+                      src={selectedEditor.icon_data}
+                      alt={selectedEditor.name}
+                      style={{ width: 24, height: 24, borderRadius: 6 }}
+                    />
+                  ) : (
+                    FallbackEditorIcon && <FallbackEditorIcon />
+                  )}
                   <span>{selectedEditor?.name || t("editors.builtin")}</span>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M6 9l6 6 6-6"/>
@@ -356,7 +364,7 @@ export function Settings() {
                       overflow: 'hidden',
                     }}>
                       {availableEditors.map((editor) => {
-                        const Icon = getEditorIcon(editor.id);
+                        const FallbackIcon = getEditorIcon(editor.id);
                         return (
                           <button
                             key={editor.id}
@@ -379,7 +387,15 @@ export function Settings() {
                               textAlign: 'left',
                             }}
                           >
-                            <Icon />
+                            {editor.icon_data ? (
+                              <img
+                                src={editor.icon_data}
+                                alt={editor.name}
+                                style={{ width: 24, height: 24, borderRadius: 6 }}
+                              />
+                            ) : (
+                              <FallbackIcon />
+                            )}
                             <span>{editor.name}</span>
                           </button>
                         );
