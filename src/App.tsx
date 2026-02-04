@@ -8,32 +8,43 @@ import { Settings } from "@/pages/Settings";
 import { EditorPage } from "@/pages/Editor";
 import { Welcome } from "@/pages/Welcome";
 import { useInitialization } from "@/hooks/useInitialization";
+import { ThemeProvider } from "@/hooks/useTheme";
 import { I18nProvider, Language } from "@/i18n";
 import { AppConfig } from "@/types";
+
+type Theme = "light" | "dark" | "system";
 
 function App() {
   const { isInitialized, isLoading: initLoading, markInitialized } = useInitialization();
   const [language, setLanguage] = useState<Language>("en");
+  const [theme, setTheme] = useState<Theme>("system");
   const [configLoaded, setConfigLoaded] = useState(false);
 
-  // Load language preference from config on mount
+  // Load preferences from config on mount
   useEffect(() => {
-    async function loadLanguage() {
+    async function loadPreferences() {
       try {
         const config = await invoke<AppConfig>("get_config");
         if (config.preferences?.language) {
           setLanguage(config.preferences.language as Language);
         }
+        if (config.preferences?.theme) {
+          setTheme(config.preferences.theme as Theme);
+        }
       } catch {
-        // Use default language on error
+        // Use defaults on error
       }
       setConfigLoaded(true);
     }
-    loadLanguage();
+    loadPreferences();
   }, []);
 
   const handleLanguageChange = useCallback((lang: Language) => {
     setLanguage(lang);
+  }, []);
+
+  const handleThemeChange = useCallback((newTheme: Theme) => {
+    setTheme(newTheme);
   }, []);
 
   // Wait for both initialization check and config to load
@@ -47,25 +58,29 @@ function App() {
 
   if (!isInitialized) {
     return (
-      <I18nProvider language={language} onLanguageChange={handleLanguageChange}>
-        <Welcome onComplete={markInitialized} />
-      </I18nProvider>
+      <ThemeProvider theme={theme} onThemeChange={handleThemeChange}>
+        <I18nProvider language={language} onLanguageChange={handleLanguageChange}>
+          <Welcome onComplete={markInitialized} />
+        </I18nProvider>
+      </ThemeProvider>
     );
   }
 
   return (
-    <I18nProvider language={language} onLanguageChange={handleLanguageChange}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Skills />} />
-            <Route path="tools" element={<Tools />} />
-            <Route path="settings" element={<Settings />} />
-          </Route>
-          <Route path="/editor" element={<EditorPage />} />
-        </Routes>
-      </BrowserRouter>
-    </I18nProvider>
+    <ThemeProvider theme={theme} onThemeChange={handleThemeChange}>
+      <I18nProvider language={language} onLanguageChange={handleLanguageChange}>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Skills />} />
+              <Route path="tools" element={<Tools />} />
+              <Route path="settings" element={<Settings />} />
+            </Route>
+            <Route path="/editor" element={<EditorPage />} />
+          </Routes>
+        </BrowserRouter>
+      </I18nProvider>
+    </ThemeProvider>
   );
 }
 

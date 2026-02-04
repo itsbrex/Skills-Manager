@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { AppConfig, UserPreferences, DetectedEditor } from "@/types";
 import { useTranslation, Language } from "@/i18n";
+import { useTheme } from "@/hooks/useTheme";
 import { getEditorIcon } from "@/assets/editors";
 
 // Default preferences
@@ -19,6 +20,7 @@ const defaultPreferences: UserPreferences = {
 
 export function Settings() {
   const { t, language, setLanguage } = useTranslation();
+  const { setTheme } = useTheme();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +99,11 @@ export function Settings() {
     // If language changed, update the app language immediately
     if (key === "language") {
       setLanguage(value as Language);
+    }
+
+    // If theme changed, update the app theme immediately
+    if (key === "theme") {
+      setTheme(value as "light" | "dark" | "system");
     }
   };
 
