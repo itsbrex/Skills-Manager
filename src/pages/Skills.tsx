@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { Switch } from "@/components/ui/switch";
 import { ToastContainer, useToast } from "@/components/ui/toast";
@@ -33,12 +34,30 @@ function getSkillColor(name: string): { bg: string; icon: string } {
 
 export function Skills() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
   const { toasts, addToast, removeToast } = useToast();
+
+  // Handle opening a skill in editor
+  const handleOpenSkill = useCallback(async (skill: Skill) => {
+    try {
+      const editorId = config?.preferences?.default_editor || "builtin";
+
+      if (editorId === "builtin") {
+        // Open in built-in editor
+        navigate(`/editor?root=${encodeURIComponent(skill.path)}`);
+      } else {
+        // Open in external editor
+        await invoke("open_in_editor", { editorId, path: skill.path });
+      }
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [config, navigate, addToast]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -282,6 +301,7 @@ export function Skills() {
                   return (
                     <div
                       key={skill.id}
+                      onClick={() => handleOpenSkill(skill)}
                       style={{
                         display: 'flex',
                         flexDirection: 'column',
