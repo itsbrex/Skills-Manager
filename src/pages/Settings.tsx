@@ -377,7 +377,7 @@ export function Settings() {
                               alignItems: 'center',
                               gap: '10px',
                               width: '100%',
-                              padding: '10px 12px',
+                              padding: '6px 10px',
                               fontSize: '13px',
                               color: 'var(--foreground)',
                               backgroundColor: prefs.default_editor === editor.id ? 'var(--secondary)' : 'transparent',
