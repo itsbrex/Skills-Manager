@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, XCircle, Loader2, RefreshCw } from "lucide-react";
+import { useTranslation } from "@/i18n";
+import { CheckCircle2, Circle, Loader2, RotateCw } from "lucide-react";
 
 interface Tool {
   id: string;
@@ -18,6 +16,7 @@ interface ToolDetectionStepProps {
 }
 
 export function ToolDetectionStep({ onNext, onBack }: ToolDetectionStepProps) {
+  const { t } = useTranslation();
   const [tools, setTools] = useState<Tool[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -40,69 +39,131 @@ export function ToolDetectionStep({ onNext, onBack }: ToolDetectionStepProps) {
   const detectedCount = tools.filter((t) => t.detected).length;
 
   return (
-    <Card className="border-none shadow-lg">
-      <CardHeader className="text-center pb-2">
-        <CardTitle className="text-xl">检测已安装的工具</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          我们将检测您系统中安装的 AI 编程工具
+    <div>
+      {/* Header - no icon, just text */}
+      <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+        <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--foreground)', margin: '0 0 8px 0' }}>
+          {t("welcome.detectTools")}
+        </h2>
+        <p style={{ fontSize: '14px', color: 'var(--muted-foreground)', margin: 0 }}>
+          {t("welcome.detectToolsDesc")}
         </p>
-      </CardHeader>
-      <CardContent className="space-y-6">
+      </div>
+
+      {/* Content */}
+      <div style={{ marginBottom: '24px' }}>
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-            <span className="ml-2 text-muted-foreground">正在检测...</span>
+          <div style={{ textAlign: 'center', padding: '48px 0' }}>
+            <Loader2 style={{ width: '32px', height: '32px', color: 'var(--primary)', animation: 'spin 1s linear infinite' }} />
+            <p style={{ fontSize: '14px', color: 'var(--muted-foreground)', marginTop: '12px' }}>{t("welcome.detecting")}</p>
+            <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
           </div>
         ) : (
           <>
-            <div className="space-y-3">
+            <div style={{ marginBottom: '16px' }}>
               {tools.map((tool) => (
                 <div
                   key={tool.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '14px 16px',
+                    marginBottom: '8px',
+                    borderRadius: '10px',
+                    backgroundColor: tool.detected ? 'rgba(9, 105, 218, 0.08)' : 'var(--secondary)',
+                    border: tool.detected ? '1px solid rgba(9, 105, 218, 0.2)' : '1px solid transparent',
+                  }}
                 >
-                  <div className="flex items-center gap-3">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     {tool.detected ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                      <CheckCircle2 style={{ width: '20px', height: '20px', color: 'var(--primary)' }} />
                     ) : (
-                      <XCircle className="w-5 h-5 text-muted-foreground" />
+                      <Circle style={{ width: '20px', height: '20px', color: 'var(--muted-foreground)', opacity: 0.4 }} />
                     )}
-                    <span className="font-medium">{tool.name}</span>
+                    <span style={{ fontSize: '14px', fontWeight: tool.detected ? 500 : 400, color: tool.detected ? 'var(--foreground)' : 'var(--muted-foreground)' }}>
+                      {tool.name}
+                    </span>
                   </div>
-                  <Badge variant={tool.detected ? "default" : "secondary"}>
-                    {tool.detected ? "已检测到" : "未检测到"}
-                  </Badge>
+                  <span
+                    style={{
+                      fontSize: '12px',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      backgroundColor: tool.detected ? 'var(--primary)' : 'var(--muted)',
+                      color: tool.detected ? '#fff' : 'var(--muted-foreground)',
+                    }}
+                  >
+                    {tool.detected ? t("welcome.detected") : t("welcome.notInstalled")}
+                  </span>
                 </div>
               ))}
             </div>
 
-            <div className="text-center text-sm text-muted-foreground">
-              {detectedCount > 0
-                ? `已检测到 ${detectedCount} 个工具`
-                : "未检测到任何工具，您可以稍后手动配置"}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <p style={{ fontSize: '12px', color: 'var(--muted-foreground)', margin: 0 }}>
+                {detectedCount > 0
+                  ? t("welcome.detectedCount").replace("{count}", String(detectedCount))
+                  : t("welcome.noToolsDetected")}
+              </p>
+              <button
+                onClick={detectTools}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '12px',
+                  color: 'var(--muted-foreground)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <RotateCw style={{ width: '12px', height: '12px' }} />
+                {t("welcome.redetect")}
+              </button>
             </div>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={detectTools}
-              className="w-full"
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              重新检测
-            </Button>
           </>
         )}
+      </div>
 
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={onBack} className="flex-1">
-            上一步
-          </Button>
-          <Button onClick={onNext} className="flex-1" disabled={isLoading}>
-            下一步
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <button
+          onClick={onBack}
+          style={{
+            flex: 1,
+            height: '44px',
+            fontSize: '14px',
+            fontWeight: 500,
+            color: 'var(--foreground)',
+            backgroundColor: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: '10px',
+            cursor: 'pointer',
+          }}
+        >
+          {t("welcome.previous")}
+        </button>
+        <button
+          onClick={onNext}
+          disabled={isLoading}
+          style={{
+            flex: 1,
+            height: '44px',
+            fontSize: '14px',
+            fontWeight: 500,
+            color: 'var(--primary-foreground)',
+            backgroundColor: 'var(--primary)',
+            border: 'none',
+            borderRadius: '10px',
+            cursor: isLoading ? 'not-allowed' : 'pointer',
+            opacity: isLoading ? 0.5 : 1,
+          }}
+        >
+          {t("welcome.next")}
+        </button>
+      </div>
+    </div>
   );
 }

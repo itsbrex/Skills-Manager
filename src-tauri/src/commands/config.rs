@@ -18,3 +18,11 @@ pub fn is_initialized() -> bool {
     let manager = ConfigManager::new();
     manager.is_initialized()
 }
+
+#[tauri::command]
+pub fn mark_initialized() -> Result<(), String> {
+    let manager = ConfigManager::new();
+    let mut config = manager.load()?;
+    config.initialized = true;
+    manager.save(&config)
+}

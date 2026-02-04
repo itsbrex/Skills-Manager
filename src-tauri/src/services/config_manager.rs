@@ -51,9 +51,10 @@ impl ConfigManager {
 
         for tool_def in SUPPORTED_TOOLS {
             let tool_dir = home_dir.join(tool_def.config_dir);
+            let detected = tool_dir.exists();
             let tool_config = ToolConfig {
-                enabled: false,
-                detected: tool_dir.exists(),
+                enabled: detected, // Enable by default if detected
+                detected,
                 skills_path: tool_dir.join("skills"),
                 config_path: tool_dir,
             };
@@ -65,7 +66,10 @@ impl ConfigManager {
     }
 
     pub fn is_initialized(&self) -> bool {
-        self.config_path.exists()
+        match self.load() {
+            Ok(config) => config.initialized,
+            Err(_) => false,
+        }
     }
 }
 

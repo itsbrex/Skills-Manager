@@ -46,9 +46,9 @@ export function Layout() {
 
   return (
     <div className="flex h-screen relative">
-      {/* Global draggable titlebar region */}
+      {/* Global draggable titlebar region - uses CSS app-region for native drag */}
       <div
-        onMouseDown={() => getCurrentWindow().startDragging()}
+        data-tauri-drag-region
         style={{
           position: 'absolute',
           top: 0,
@@ -56,7 +56,11 @@ export function Layout() {
           right: 0,
           height: '52px',
           zIndex: 50,
-        }}
+          pointerEvents: 'none',
+          cursor: 'grab',
+          // @ts-ignore - WebKit specific property for native window dragging
+          WebkitAppRegion: 'drag',
+        } as React.CSSProperties}
       />
       <Sidebar />
       <main className="flex-1 overflow-auto bg-background relative">

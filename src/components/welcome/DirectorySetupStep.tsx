@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Folder, FolderOpen } from "lucide-react";
+import { useTranslation } from "@/i18n";
+import { Folder } from "lucide-react";
 
 interface AppConfig {
   version: string;
@@ -17,6 +16,7 @@ interface DirectorySetupStepProps {
 }
 
 export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) {
+  const { t } = useTranslation();
   const [skillsDir, setSkillsDir] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -38,7 +38,7 @@ export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) 
       const selected = await open({
         directory: true,
         multiple: false,
-        title: "选择 Skills 公共目录",
+        title: t("welcome.skillsDirectory"),
       });
       if (selected && typeof selected === "string") {
         setSkillsDir(selected);
@@ -62,66 +62,119 @@ export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) 
   }
 
   return (
-    <Card className="border-none shadow-lg">
-      <CardHeader className="text-center pb-2">
-        <CardTitle className="text-xl">设置公共目录</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          所有 Skills 将统一存放在这个目录中
+    <div>
+      {/* Header - no icon, just text */}
+      <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+        <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--foreground)', margin: '0 0 8px 0' }}>
+          {t("welcome.setDirectory")}
+        </h2>
+        <p style={{ fontSize: '14px', color: 'var(--muted-foreground)', margin: 0 }}>
+          {t("welcome.setDirectoryDesc")}
         </p>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Skills 目录</label>
+      </div>
+
+      {/* Directory selector */}
+      <div style={{ marginBottom: '24px' }}>
+        <button
+          onClick={selectDirectory}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '16px',
+            borderRadius: '10px',
+            border: '2px dashed var(--border)',
+            backgroundColor: 'transparent',
+            cursor: 'pointer',
+            textAlign: 'left',
+            transition: 'border-color 0.15s, background-color 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'var(--primary)';
+            e.currentTarget.style.backgroundColor = 'rgba(9, 105, 218, 0.05)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'var(--border)';
+            e.currentTarget.style.backgroundColor = 'transparent';
+          }}
+        >
           <div
-            onClick={selectDirectory}
-            onKeyDown={(e) => e.key === "Enter" && selectDirectory()}
-            role="button"
-            tabIndex={0}
-            className="flex items-center gap-3 p-4 rounded-lg border-2 border-dashed cursor-pointer hover:border-primary hover:bg-muted/50 transition-colors"
+            style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '10px',
+              backgroundColor: 'var(--secondary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
           >
+            <Folder style={{ width: '20px', height: '20px', color: 'var(--muted-foreground)' }} />
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
             {skillsDir ? (
               <>
-                <FolderOpen className="w-5 h-5 text-primary" />
-                <span className="text-sm font-mono flex-1 truncate">
+                <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {skillsDir.split('/').pop()}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {skillsDir}
-                </span>
+                </div>
               </>
             ) : (
               <>
-                <Folder className="w-5 h-5 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">
-                  点击选择目录...
-                </span>
+                <div style={{ fontSize: '14px', color: 'var(--muted-foreground)' }}>{t("welcome.clickToSelect")}</div>
+                <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', opacity: 0.6 }}>{t("welcome.orUseDefault")}</div>
               </>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">
-            默认位置: ~/.skills-hub/skills
-          </p>
-        </div>
+        </button>
+        <p style={{ fontSize: '12px', color: 'var(--muted-foreground)', marginTop: '8px', textAlign: 'center' }}>
+          {t("welcome.defaultPath")}
+        </p>
+      </div>
 
-        <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-2">
-          <p className="font-medium">这个目录将用于：</p>
-          <ul className="list-disc list-inside text-muted-foreground space-y-1">
-            <li>存放所有公共 Skills</li>
-            <li>通过软链接同步到各个工具</li>
-            <li>统一管理和版本控制</li>
-          </ul>
-        </div>
-
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={onBack} className="flex-1" disabled={isSaving}>
-            上一步
-          </Button>
-          <Button
-            onClick={handleNext}
-            className="flex-1"
-            disabled={!skillsDir || isSaving}
-          >
-            {isSaving ? "保存中..." : "下一步"}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <button
+          onClick={onBack}
+          disabled={isSaving}
+          style={{
+            flex: 1,
+            height: '44px',
+            fontSize: '14px',
+            fontWeight: 500,
+            color: 'var(--foreground)',
+            backgroundColor: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: '10px',
+            cursor: isSaving ? 'not-allowed' : 'pointer',
+            opacity: isSaving ? 0.5 : 1,
+          }}
+        >
+          {t("welcome.previous")}
+        </button>
+        <button
+          onClick={handleNext}
+          disabled={!skillsDir || isSaving}
+          style={{
+            flex: 1,
+            height: '44px',
+            fontSize: '14px',
+            fontWeight: 500,
+            color: 'var(--primary-foreground)',
+            backgroundColor: 'var(--primary)',
+            border: 'none',
+            borderRadius: '10px',
+            cursor: !skillsDir || isSaving ? 'not-allowed' : 'pointer',
+            opacity: !skillsDir || isSaving ? 0.5 : 1,
+          }}
+        >
+          {isSaving ? t("common.saving") : t("welcome.next")}
+        </button>
+      </div>
+    </div>
   );
 }

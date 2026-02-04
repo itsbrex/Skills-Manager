@@ -22,7 +22,12 @@ export function useInitialization() {
   }
 
   async function markInitialized() {
-    setIsInitialized(true);
+    try {
+      await invoke("mark_initialized");
+      setIsInitialized(true);
+    } catch (error) {
+      console.error("Failed to mark initialized:", error);
+    }
   }
 
   return { isInitialized, isLoading, markInitialized };

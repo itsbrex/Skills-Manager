@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, Package, CheckCircle2 } from "lucide-react";
+import { useTranslation } from "@/i18n";
+import { Package, CheckCircle2, Loader2, Check } from "lucide-react";
 
 interface Skill {
   id: string;
@@ -18,6 +16,7 @@ interface ImportSkillsStepProps {
 }
 
 export function ImportSkillsStep({ onNext, onBack }: ImportSkillsStepProps) {
+  const { t } = useTranslation();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [isScanning, setIsScanning] = useState(true);
@@ -32,9 +31,10 @@ export function ImportSkillsStep({ onNext, onBack }: ImportSkillsStepProps) {
     setIsScanning(true);
     try {
       const result = await invoke<Skill[]>("scan_existing_skills");
-      setSkills(result);
-      // 默认全选
-      setSelectedSkills(new Set(result.map((s) => s.path)));
+      // Filter out hidden directories (starting with .)
+      const filteredSkills = result.filter((s) => !s.name.startsWith('.'));
+      setSkills(filteredSkills);
+      setSelectedSkills(new Set(filteredSkills.map((s) => s.path)));
     } catch (error) {
       console.error("Failed to scan skills:", error);
     } finally {
@@ -76,90 +76,181 @@ export function ImportSkillsStep({ onNext, onBack }: ImportSkillsStepProps) {
     if (!importComplete && selectedSkills.size > 0) {
       const success = await handleImport();
       if (!success) {
-        return; // 导入失败，不继续
+        return;
       }
     }
     onNext();
   }
 
   return (
-    <Card className="border-none shadow-lg">
-      <CardHeader className="text-center pb-2">
-        <CardTitle className="text-xl">导入现有 Skills</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          将现有工具中的 Skills 统一收纳到公共目录
+    <div>
+      {/* Header - no icon, just text */}
+      <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+        <h2 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--foreground)', margin: '0 0 8px 0' }}>
+          {t("welcome.importSkills")}
+        </h2>
+        <p style={{ fontSize: '14px', color: 'var(--muted-foreground)', margin: 0 }}>
+          {t("welcome.importSkillsDesc")}
         </p>
-      </CardHeader>
-      <CardContent className="space-y-6">
+      </div>
+
+      {/* Content */}
+      <div style={{ marginBottom: '24px' }}>
         {isScanning ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-            <span className="ml-2 text-muted-foreground">正在扫描...</span>
+          <div style={{ textAlign: 'center', padding: '48px 0' }}>
+            <Loader2 style={{ width: '32px', height: '32px', color: 'var(--primary)', animation: 'spin 1s linear infinite' }} />
+            <p style={{ fontSize: '14px', color: 'var(--muted-foreground)', marginTop: '12px' }}>{t("welcome.scanning")}</p>
+            <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
           </div>
         ) : skills.length === 0 ? (
-          <div className="text-center py-8">
-            <Package className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">未发现现有 Skills</p>
-            <p className="text-sm text-muted-foreground">
-              您可以稍后手动添加 Skills
-            </p>
+          <div style={{ textAlign: 'center', padding: '48px 0' }}>
+            <div
+              style={{
+                width: '56px',
+                height: '56px',
+                borderRadius: '14px',
+                backgroundColor: 'var(--secondary)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '16px',
+              }}
+            >
+              <Package style={{ width: '28px', height: '28px', color: 'var(--muted-foreground)', opacity: 0.5 }} />
+            </div>
+            <p style={{ fontSize: '14px', fontWeight: 500, color: 'var(--foreground)', marginBottom: '4px' }}>{t("welcome.noSkillsFound")}</p>
+            <p style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>{t("welcome.canAddLater")}</p>
           </div>
         ) : importComplete ? (
-          <div className="text-center py-8">
-            <CheckCircle2 className="w-12 h-12 mx-auto text-green-500 mb-4" />
-            <p className="font-medium">导入完成！</p>
-            <p className="text-sm text-muted-foreground">
-              已导入 {selectedSkills.size} 个 Skills
+          <div style={{ textAlign: 'center', padding: '48px 0' }}>
+            <div
+              style={{
+                width: '56px',
+                height: '56px',
+                borderRadius: '14px',
+                background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '16px',
+              }}
+            >
+              <CheckCircle2 style={{ width: '28px', height: '28px', color: '#fff' }} />
+            </div>
+            <p style={{ fontSize: '14px', fontWeight: 500, color: 'var(--foreground)', marginBottom: '4px' }}>{t("welcome.importComplete")}</p>
+            <p style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>
+              {t("welcome.importedCount").replace("{count}", String(selectedSkills.size))}
             </p>
           </div>
         ) : (
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {skills.map((skill) => (
-              <div
-                key={skill.path}
-                onClick={() => toggleSkill(skill.path)}
-                className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
-                  selectedSkills.has(skill.path)
-                    ? "bg-primary/10 border border-primary"
-                    : "bg-muted/50 hover:bg-muted"
-                }`}
-              >
-                <div>
-                  <p className="font-medium">{skill.name}</p>
-                  <p className="text-xs text-muted-foreground truncate max-w-xs">
-                    {skill.path}
-                  </p>
-                </div>
-                <Badge variant={selectedSkills.has(skill.path) ? "default" : "secondary"}>
-                  {selectedSkills.has(skill.path) ? "已选择" : "未选择"}
-                </Badge>
-              </div>
-            ))}
-          </div>
+          <>
+            <div style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: '12px' }}>
+              {skills.map((skill) => {
+                const isSelected = selectedSkills.has(skill.path);
+                return (
+                  <button
+                    key={skill.path}
+                    onClick={() => toggleSkill(skill.path)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 14px',
+                      marginBottom: '8px',
+                      borderRadius: '10px',
+                      border: isSelected ? '1px solid rgba(9, 105, 218, 0.3)' : '1px solid transparent',
+                      backgroundColor: isSelected ? 'rgba(9, 105, 218, 0.08)' : 'var(--secondary)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '20px',
+                        height: '20px',
+                        borderRadius: '6px',
+                        border: isSelected ? 'none' : '2px solid var(--border)',
+                        backgroundColor: isSelected ? 'var(--primary)' : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {isSelected && <Check style={{ width: '12px', height: '12px', color: '#fff' }} />}
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: '14px', fontWeight: isSelected ? 500 : 400, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {skill.name}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {skill.path}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <p style={{ fontSize: '12px', color: 'var(--muted-foreground)', textAlign: 'center' }}>
+              {t("welcome.selectedCount").replace("{selected}", String(selectedSkills.size)).replace("{total}", String(skills.length))}
+            </p>
+          </>
         )}
+      </div>
 
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={onBack} className="flex-1" disabled={isImporting}>
-            上一步
-          </Button>
-          <Button
-            onClick={handleNext}
-            className="flex-1"
-            disabled={isScanning || isImporting}
-          >
-            {isImporting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                导入中...
-              </>
-            ) : skills.length === 0 || importComplete ? (
-              "完成设置"
-            ) : (
-              `导入并完成 (${selectedSkills.size})`
-            )}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: '12px' }}>
+        <button
+          onClick={onBack}
+          disabled={isImporting}
+          style={{
+            flex: 1,
+            height: '44px',
+            fontSize: '14px',
+            fontWeight: 500,
+            color: 'var(--foreground)',
+            backgroundColor: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: '10px',
+            cursor: isImporting ? 'not-allowed' : 'pointer',
+            opacity: isImporting ? 0.5 : 1,
+          }}
+        >
+          {t("welcome.previous")}
+        </button>
+        <button
+          onClick={handleNext}
+          disabled={isScanning || isImporting}
+          style={{
+            flex: 1,
+            height: '44px',
+            fontSize: '14px',
+            fontWeight: 500,
+            color: 'var(--primary-foreground)',
+            backgroundColor: 'var(--primary)',
+            border: 'none',
+            borderRadius: '10px',
+            cursor: isScanning || isImporting ? 'not-allowed' : 'pointer',
+            opacity: isScanning || isImporting ? 0.5 : 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+          }}
+        >
+          {isImporting ? (
+            <>
+              <Loader2 style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} />
+              {t("welcome.importing")}
+            </>
+          ) : skills.length === 0 || importComplete ? (
+            t("welcome.completeSetup")
+          ) : (
+            t("welcome.importAndComplete")
+          )}
+        </button>
+      </div>
+    </div>
   );
 }

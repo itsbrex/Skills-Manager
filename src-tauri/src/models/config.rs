@@ -47,6 +47,8 @@ pub struct AppConfig {
     pub tools: HashMap<String, ToolConfig>,
     #[serde(default)]
     pub preferences: Option<UserPreferences>,
+    #[serde(default)]
+    pub initialized: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,6 +69,7 @@ impl Default for AppConfig {
                 .join("skills"),
             tools: HashMap::new(),
             preferences: Some(UserPreferences::default()),
+            initialized: false,
         }
     }
 }

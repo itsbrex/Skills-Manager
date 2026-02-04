@@ -1,36 +1,102 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Puzzle } from "lucide-react";
+import { useTranslation } from "@/i18n";
 
 interface WelcomeStepProps {
   onNext: () => void;
 }
 
 export function WelcomeStep({ onNext }: WelcomeStepProps) {
+  const { t } = useTranslation();
+
   return (
-    <Card className="border-none shadow-lg">
-      <CardHeader className="text-center pb-2">
-        <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-          <Puzzle className="w-8 h-8 text-primary" />
+    <div>
+      {/* Description */}
+      <p
+        style={{
+          fontSize: '14px',
+          color: 'var(--muted-foreground)',
+          margin: '0 0 32px 0',
+          lineHeight: 1.6,
+          textAlign: 'center',
+        }}
+      >
+        {t("welcome.description")}
+      </p>
+
+      {/* Steps */}
+      <div style={{ marginBottom: '32px' }}>
+        <StepItem number={1} title={t("welcome.step1Title")} desc={t("welcome.step1Desc")} />
+        <StepItem number={2} title={t("welcome.step2Title")} desc={t("welcome.step2Desc")} />
+        <StepItem number={3} title={t("welcome.step3Title")} desc={t("welcome.step3Desc")} />
+      </div>
+
+      {/* Button */}
+      <button
+        onClick={onNext}
+        style={{
+          width: '100%',
+          height: '44px',
+          fontSize: '14px',
+          fontWeight: 500,
+          color: 'var(--primary-foreground)',
+          backgroundColor: 'var(--primary)',
+          border: 'none',
+          borderRadius: '10px',
+          cursor: 'pointer',
+          transition: 'opacity 0.15s',
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+      >
+        {t("welcome.startSetup")}
+      </button>
+    </div>
+  );
+}
+
+function StepItem({ number, title, desc }: { number: number; title: string; desc: string }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        padding: '12px 16px',
+        marginBottom: '8px',
+        borderRadius: '10px',
+        backgroundColor: 'var(--secondary)',
+        textAlign: 'left',
+      }}
+    >
+      <div
+        style={{
+          width: '28px',
+          height: '28px',
+          borderRadius: '8px',
+          backgroundColor: 'rgba(9, 105, 218, 0.1)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <span
+          style={{
+            fontSize: '12px',
+            fontWeight: 600,
+            color: 'var(--primary)',
+          }}
+        >
+          {number}
+        </span>
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--foreground)' }}>
+          {title}
         </div>
-        <CardTitle className="text-2xl">欢迎使用 Skills Manager</CardTitle>
-      </CardHeader>
-      <CardContent className="text-center space-y-6">
-        <p className="text-muted-foreground">
-          一份 Skills，多工具共享。统一管理 Claude Code、Codex、CodeBuddy 的技能库。
-        </p>
-        <div className="space-y-2 text-sm text-left bg-muted/50 rounded-lg p-4">
-          <p className="font-medium">接下来我们将：</p>
-          <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-            <li>检测已安装的 AI 编程工具</li>
-            <li>设置公共 Skills 目录</li>
-            <li>导入现有的 Skills（可选）</li>
-          </ul>
+        <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+          {desc}
         </div>
-        <Button onClick={onNext} size="lg" className="w-full">
-          开始设置
-        </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
