@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "@/i18n";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 const navItems = [
   { path: "/", labelKey: "nav.skills" as const, icon: "sparkles" },
@@ -42,6 +43,15 @@ export function Sidebar() {
         borderRight: '1px solid var(--sidebar-border)',
       }}
     >
+      {/* Draggable titlebar region for macOS */}
+      <div
+        onMouseDown={() => getCurrentWindow().startDragging()}
+        style={{
+          height: '52px',
+          minHeight: '52px',
+          cursor: 'default',
+        }}
+      />
       {/* Navigation */}
       <nav style={{ padding: '8px', flex: 1 }}>
         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>

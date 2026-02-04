@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Sidebar } from "./Sidebar";
 import { SyncReport, LinkReport } from "@/types";
 import { useTranslation } from "@/i18n";
@@ -44,7 +45,19 @@ export function Layout() {
   }
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen relative">
+      {/* Global draggable titlebar region */}
+      <div
+        onMouseDown={() => getCurrentWindow().startDragging()}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '52px',
+          zIndex: 50,
+        }}
+      />
       <Sidebar />
       <main className="flex-1 overflow-auto bg-background relative">
         {showBanner && (
