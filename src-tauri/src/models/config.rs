@@ -22,7 +22,7 @@ pub struct UserPreferences {
 
 fn default_theme() -> String { "system".to_string() }
 fn default_language() -> String { "en".to_string() }
-fn default_editor() -> String { "system".to_string() }
+fn default_editor() -> String { "builtin".to_string() }
 fn default_tab_size() -> u8 { 2 }
 fn default_true() -> bool { true }
 
