@@ -3,8 +3,10 @@ import { Outlet } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { Sidebar } from "./Sidebar";
 import { SyncReport, LinkReport } from "@/types";
+import { useTranslation } from "@/i18n";
 
 export function Layout() {
+  const { t } = useTranslation();
   const [syncIssues, setSyncIssues] = useState<number>(0);
   const [showBanner, setShowBanner] = useState(false);
   const [fixing, setFixing] = useState(false);
@@ -69,7 +71,9 @@ export function Layout() {
                     <path d="m9 12 2 2 4-4"/>
                   </svg>
                   <span style={{ fontSize: "14px", color: "#16a34a" }}>
-                    修复完成：成功 {fixResult.success} 个{fixResult.failed > 0 ? `，失败 ${fixResult.failed} 个` : ""}
+                    {fixResult.failed > 0
+                      ? t("sync.fixCompleteFailed").replace("{success}", String(fixResult.success)).replace("{failed}", String(fixResult.failed))
+                      : t("sync.fixComplete").replace("{success}", String(fixResult.success))}
                   </span>
                 </>
               ) : (
@@ -80,7 +84,7 @@ export function Layout() {
                     <line x1="12" y1="17" x2="12.01" y2="17"/>
                   </svg>
                   <span style={{ fontSize: "14px", color: "#a16207" }}>
-                    检测到 {syncIssues} 个链接问题需要修复
+                    {t("sync.issuesDetected").replace("{count}", String(syncIssues))}
                   </span>
                 </>
               )}
@@ -102,7 +106,7 @@ export function Layout() {
                     opacity: fixing ? 0.7 : 1,
                   }}
                 >
-                  {fixing ? "修复中..." : "一键修复"}
+                  {fixing ? t("sync.fixing") : t("sync.fixButton")}
                 </button>
               )}
               <button

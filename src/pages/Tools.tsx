@@ -2,19 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Tool } from "@/types";
 import { useTranslation } from "@/i18n";
-
-// Generate consistent colors based on tool name
-function getToolColor(name: string): { bg: string; icon: string } {
-  const colors = [
-    { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', icon: '#fff' },
-    { bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', icon: '#fff' },
-    { bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', icon: '#fff' },
-    { bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', icon: '#fff' },
-    { bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', icon: '#fff' },
-  ];
-  const index = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
-  return colors[index];
-}
+import { getToolIconUrl, GenericToolIcon } from "@/assets/tools";
 
 export function Tools() {
   const { t } = useTranslation();
@@ -193,7 +181,7 @@ export function Tools() {
                 gap: '16px',
               }}>
                 {tools.map((tool) => {
-                  const color = getToolColor(tool.name);
+                  const iconUrl = getToolIconUrl(tool.id);
                   return (
                     <div
                       key={tool.id}
@@ -221,21 +209,20 @@ export function Tools() {
                       {/* Top: Icon + Title + Status */}
                       <div style={{ display: 'flex', gap: '14px', marginBottom: '16px' }}>
                         {/* Icon */}
-                        <div style={{
-                          width: '44px',
-                          height: '44px',
-                          borderRadius: '12px',
-                          background: color.bg,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                        }}>
-                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color.icon} strokeWidth="2">
-                            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-                          </svg>
-                        </div>
+                        {iconUrl ? (
+                          <img
+                            src={iconUrl}
+                            alt={tool.name}
+                            style={{
+                              width: 44,
+                              height: 44,
+                              borderRadius: 12,
+                              flexShrink: 0,
+                            }}
+                          />
+                        ) : (
+                          <GenericToolIcon />
+                        )}
 
                         {/* Title + Status */}
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -353,23 +340,24 @@ export function Tools() {
                             }}
                             style={{
                               position: 'relative',
-                              width: '36px',
-                              height: '20px',
-                              borderRadius: '10px',
+                              width: '44px',
+                              height: '24px',
+                              borderRadius: '12px',
                               border: 'none',
-                              backgroundColor: tool.config.enabled ? '#16a34a' : '#d1d5db',
+                              backgroundColor: tool.config.enabled ? '#3b82f6' : 'var(--border)',
                               cursor: 'pointer',
                               transition: 'background-color 0.2s',
                               padding: 0,
+                              flexShrink: 0,
                             }}
                           >
                             <span style={{
                               position: 'absolute',
                               top: '2px',
-                              left: tool.config.enabled ? '18px' : '2px',
-                              width: '16px',
-                              height: '16px',
-                              borderRadius: '50%',
+                              left: tool.config.enabled ? '22px' : '2px',
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '10px',
                               backgroundColor: '#fff',
                               transition: 'left 0.2s',
                               boxShadow: '0 1px 3px rgba(0,0,0,0.2)',

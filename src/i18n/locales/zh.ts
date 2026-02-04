@@ -99,4 +99,11 @@ export const zh = {
     dontSave: "不保存",
     back: "返回",
   },
+  sync: {
+    issuesDetected: "检测到 {count} 个链接问题需要修复",
+    fixButton: "一键修复",
+    fixing: "修复中...",
+    fixComplete: "修复完成：成功 {success} 个",
+    fixCompleteFailed: "修复完成：成功 {success} 个，失败 {failed} 个",
+  },
 };

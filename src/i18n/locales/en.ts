@@ -98,6 +98,13 @@ export const en = {
     dontSave: "Don't Save",
     back: "Back",
   },
+  sync: {
+    issuesDetected: "Detected {count} broken link(s) that need fixing",
+    fixButton: "Fix Now",
+    fixing: "Fixing...",
+    fixComplete: "Fixed: {success} succeeded",
+    fixCompleteFailed: "Fixed: {success} succeeded, {failed} failed",
+  },
 } as const;
 
 export type TranslationKeys = typeof en;
