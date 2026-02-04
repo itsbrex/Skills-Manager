@@ -1,4 +1,5 @@
 use crate::models::{DetectedEditor, EDITOR_DEFINITIONS};
+use std::path::Path;
 use std::process::Command;
 
 pub fn detect_editors() -> Vec<DetectedEditor> {
@@ -7,10 +8,12 @@ pub fn detect_editors() -> Vec<DetectedEditor> {
         .filter_map(|def| {
             let available = if def.always_available {
                 true
-            } else if def.detect_cmd.is_empty() {
-                false
             } else {
-                check_command_exists(def.detect_cmd)
+                // Check command line tool first
+                let cmd_exists = !def.detect_cmd.is_empty() && check_command_exists(def.detect_cmd);
+                // If not found, check macOS app
+                let app_exists = !def.app_name.is_empty() && check_app_exists(def.app_name);
+                cmd_exists || app_exists
             };
 
             if available {
@@ -34,6 +37,24 @@ fn check_command_exists(cmd: &str) -> bool {
         .output()
         .map(|output| output.status.success())
         .unwrap_or(false)
+}
+
+fn check_app_exists(app_name: &str) -> bool {
+    // Check /Applications folder
+    let app_path = format!("/Applications/{}.app", app_name);
+    if Path::new(&app_path).exists() {
+        return true;
+    }
+
+    // Check ~/Applications folder
+    if let Some(home) = dirs::home_dir() {
+        let user_app_path = home.join("Applications").join(format!("{}.app", app_name));
+        if user_app_path.exists() {
+            return true;
+        }
+    }
+
+    false
 }
 
 pub fn open_in_external_editor(editor_id: &str, path: &str) -> Result<(), String> {

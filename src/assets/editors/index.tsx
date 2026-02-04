@@ -1,123 +1,136 @@
 import React from "react";
 
 const iconStyle: React.CSSProperties = {
-  width: 20,
-  height: 20,
+  width: 24,
+  height: 24,
   flexShrink: 0,
+  borderRadius: 6,
 };
 
+// VS Code - Official blue
 export const VSCodeIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <path d="M17.5 0L24 5.5V18.5L17.5 24L0 12L5 7.5L17.5 16V8L0 12L17.5 0Z" fill="#007ACC"/>
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#007ACC"/>
+    <path d="M70 20L30 45V55L70 80V68L45 50L70 32V20Z" fill="white"/>
+    <path d="M70 20V32L45 50L70 68V80L80 75V25L70 20Z" fill="white" fillOpacity="0.7"/>
   </svg>
 );
 
+// Cursor - Black with cursor shape
 export const CursorIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="currentColor">
-    <rect width="24" height="24" rx="4" fill="#1a1a1a"/>
-    <path d="M7 6l10 6-10 6V6z" fill="#fff"/>
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#000"/>
+    <path d="M30 25L30 75L45 60L55 75L65 70L55 55L70 55L30 25Z" fill="white"/>
   </svg>
 );
 
+// Windsurf - Codeium teal/green
 export const WindsurfIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#6366f1"/>
-    <path d="M6 18L12 6l6 12H6z" fill="#fff"/>
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#09B6A2"/>
+    <path d="M25 70L50 30L75 70" stroke="white" strokeWidth="8" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M35 55L50 45L65 55" stroke="white" strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
+// Antigravity - Purple/violet
+export const AntigravityIcon = () => (
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#7C3AED"/>
+    <circle cx="50" cy="50" r="20" stroke="white" strokeWidth="6" fill="none"/>
+    <path d="M50 25V20M50 80V75M25 50H20M80 50H75" stroke="white" strokeWidth="4" strokeLinecap="round"/>
+  </svg>
+);
+
+// Zed - Orange/yellow
 export const ZedIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#000"/>
-    <path d="M6 8h12v2H10l8 6H6v-2h8L6 8z" fill="#fff"/>
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#F59E0B"/>
+    <path d="M30 35H70L30 65H70" stroke="white" strokeWidth="8" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 );
 
+// Sublime Text - Orange
 export const SublimeIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#FF9800"/>
-    <path d="M6 8l12 4-12 4V8z" fill="#fff"/>
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#FF9800"/>
+    <path d="M25 40L75 25V45L25 60V40Z" fill="white"/>
+    <path d="M25 55L75 40V60L25 75V55Z" fill="white" fillOpacity="0.6"/>
   </svg>
 );
 
-export const VimIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#019733"/>
-    <path d="M6 6l6 12 6-12H6z" fill="#fff"/>
-  </svg>
-);
-
-export const NeovimIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#57A143"/>
-    <path d="M6 6l6 12 6-12H6z" fill="#fff"/>
-  </svg>
-);
-
+// IntelliJ IDEA - JetBrains style
 export const IdeaIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#000"/>
-    <circle cx="12" cy="12" r="6" fill="#FC801D"/>
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#000"/>
+    <rect x="20" y="20" width="60" height="60" rx="4" fill="#FC801D"/>
+    <rect x="25" y="65" width="30" height="8" fill="#000"/>
   </svg>
 );
 
+// PyCharm - Green JetBrains style
 export const PyCharmIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#21D789"/>
-    <rect x="6" y="6" width="12" height="12" fill="#000"/>
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#000"/>
+    <rect x="20" y="20" width="60" height="60" rx="4" fill="#21D789"/>
+    <rect x="25" y="65" width="30" height="8" fill="#000"/>
   </svg>
 );
 
+// WebStorm - Cyan JetBrains style
 export const WebStormIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#00CDD7"/>
-    <rect x="6" y="6" width="12" height="12" fill="#000"/>
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#000"/>
+    <rect x="20" y="20" width="60" height="60" rx="4" fill="#00CDD7"/>
+    <rect x="25" y="65" width="30" height="8" fill="#000"/>
   </svg>
 );
 
+// Xcode - Blue with X
 export const XcodeIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#147EFB"/>
-    <path d="M6 6l12 12M18 6L6 18" stroke="#fff" strokeWidth="2"/>
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#147EFB"/>
+    <path d="M30 30L70 70M70 30L30 70" stroke="white" strokeWidth="10" strokeLinecap="round"/>
   </svg>
 );
 
+// Android Studio - Green Android
 export const AndroidStudioIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#3DDC84"/>
-    <circle cx="12" cy="10" r="5" fill="#fff"/>
-    <rect x="8" y="15" width="8" height="4" rx="1" fill="#fff"/>
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#3DDC84"/>
+    <ellipse cx="50" cy="42" rx="22" ry="18" fill="white"/>
+    <circle cx="40" cy="38" r="3" fill="#3DDC84"/>
+    <circle cx="60" cy="38" r="3" fill="#3DDC84"/>
+    <rect x="35" y="58" width="30" height="18" rx="4" fill="white"/>
+    <path d="M32 28L28 20M68 28L72 20" stroke="white" strokeWidth="4" strokeLinecap="round"/>
   </svg>
 );
 
-export const TextMateIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#9B4DCA"/>
-    <path d="M7 7h10v2H7V7zm2 4h6v6H9v-6z" fill="#fff"/>
-  </svg>
-);
-
+// Terminal - Black with prompt
 export const TerminalIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#000"/>
-    <path d="M6 8l4 4-4 4M12 16h6" stroke="#fff" strokeWidth="2"/>
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#1a1a1a"/>
+    <path d="M30 35L50 50L30 65" stroke="#00FF00" strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M55 65H70" stroke="#00FF00" strokeWidth="6" strokeLinecap="round"/>
   </svg>
 );
 
+// Finder - Blue face
 export const FinderIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#1C9BEF"/>
-    <circle cx="9" cy="10" r="2" fill="#fff"/>
-    <circle cx="15" cy="10" r="2" fill="#fff"/>
-    <path d="M8 15c2 2 6 2 8 0" stroke="#fff" strokeWidth="2"/>
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#1C9BEF"/>
+    <circle cx="35" cy="42" r="6" fill="white"/>
+    <circle cx="65" cy="42" r="6" fill="white"/>
+    <path d="M32 62Q50 78 68 62" stroke="white" strokeWidth="5" fill="none" strokeLinecap="round"/>
   </svg>
 );
 
+// Built-in Editor - Purple with editor icon
 export const BuiltinIcon = () => (
-  <svg style={iconStyle} viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#6366f1"/>
-    <path d="M7 7h10v10H7V7z" stroke="#fff" strokeWidth="2" fill="none"/>
-    <path d="M9 11h6M9 14h4" stroke="#fff" strokeWidth="1.5"/>
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#6366F1"/>
+    <rect x="25" y="25" width="50" height="50" rx="6" stroke="white" strokeWidth="5" fill="none"/>
+    <path d="M35 45H65M35 55H55" stroke="white" strokeWidth="4" strokeLinecap="round"/>
   </svg>
 );
 
@@ -125,16 +138,14 @@ export const editorIcons: Record<string, React.FC> = {
   vscode: VSCodeIcon,
   cursor: CursorIcon,
   windsurf: WindsurfIcon,
+  antigravity: AntigravityIcon,
   zed: ZedIcon,
   sublime: SublimeIcon,
-  vim: VimIcon,
-  neovim: NeovimIcon,
   idea: IdeaIcon,
   pycharm: PyCharmIcon,
   webstorm: WebStormIcon,
   xcode: XcodeIcon,
   "android-studio": AndroidStudioIcon,
-  textmate: TextMateIcon,
   terminal: TerminalIcon,
   finder: FinderIcon,
   builtin: BuiltinIcon,
