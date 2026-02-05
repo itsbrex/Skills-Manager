@@ -39,7 +39,7 @@ export function Welcome({ onComplete }: WelcomeProps) {
         };
         await invoke("save_config", { config: updatedConfig });
       } catch (error) {
-        console.error("Failed to save preferences:", error);
+        // Error handled silently - preferences will be saved on next attempt
       }
     }
     savePreferences();

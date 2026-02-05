@@ -55,7 +55,7 @@ export function Settings() {
         const editors = await invoke<DetectedEditor[]>("get_available_editors");
         setAvailableEditors(editors);
       } catch (err) {
-        console.error("Failed to load editors:", err);
+        // Error handled silently - editors list will remain empty
       }
     }
     loadEditors();
