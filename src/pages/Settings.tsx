@@ -6,6 +6,7 @@ import { useTranslation, Language } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
 import { getEditorIcon } from "@/assets/editors";
 import { Toggle } from "@/components/ui/toggle";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SunIcon, MoonIcon, MonitorIcon } from "@/components/icons/theme-icons";
 
 // Default preferences
@@ -128,16 +129,9 @@ export function Settings() {
   if (error) {
     return (
       <div style={{ padding: '24px 32px' }}>
-        <div style={{
-          padding: '12px 16px',
-          backgroundColor: '#fef2f2',
-          border: '1px solid #fecaca',
-          borderRadius: '10px',
-          color: '#dc2626',
-          fontSize: '14px',
-        }}>
-          {error}
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       </div>
     );
   }

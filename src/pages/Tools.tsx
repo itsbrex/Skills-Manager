@@ -7,6 +7,7 @@ import { getToolIconUrl, GenericToolIcon } from "@/assets/tools";
 import { FolderOpen } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
 import { RefreshButton } from "@/components/ui/refresh-button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function Tools() {
   const { t } = useTranslation();
@@ -130,16 +131,10 @@ export function Tools() {
         <div style={{ maxWidth: '1200px' }}>
           {/* Error */}
           {error && (
-            <div style={{
-              padding: '12px 16px',
-              marginBottom: '24px',
-              backgroundColor: '#fef2f2',
-              border: '1px solid #fecaca',
-              borderRadius: '10px',
-              color: '#dc2626',
-              fontSize: '14px',
-            }}>
-              {error}
+            <div className="mb-6">
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             </div>
           )}
 
