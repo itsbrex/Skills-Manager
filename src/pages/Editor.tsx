@@ -5,9 +5,11 @@ import MonacoEditor from "@monaco-editor/react";
 import { FileTree } from "@/components/editor/FileTree";
 import { FileNode } from "@/types";
 import { useTranslation } from "@/i18n";
+import { useTheme } from "../contexts/ThemeContext";
 
 export function EditorPage() {
   const { t } = useTranslation();
+  const { theme } = useTheme();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const rootPath = searchParams.get("root") || "";
@@ -271,7 +273,7 @@ export function EditorPage() {
                 suggestOnTriggerCharacters: false,
                 parameterHints: { enabled: false },
               }}
-              theme="vs-dark"
+              theme={theme === "dark" ? "vs-dark" : "light"}
             />
           )}
         </div>
