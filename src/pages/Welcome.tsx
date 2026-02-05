@@ -118,10 +118,12 @@ export function Welcome({ onComplete }: WelcomeProps) {
           alignItems: 'center',
           justifyContent: 'center',
           padding: '0 24px 40px',
+          overflow: 'auto',
+          minHeight: 0,
         }}
       >
         {/* Progress dots */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '40px' }}>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '40px', flexShrink: 0 }}>
           {steps.map((_, index) => (
             <div
               key={index}
@@ -136,8 +138,8 @@ export function Welcome({ onComplete }: WelcomeProps) {
           ))}
         </div>
 
-        {/* Step content container - fixed height to prevent jumping */}
-        <div style={{ width: '100%', maxWidth: '400px', minHeight: '340px' }}>
+        {/* Step content container */}
+        <div style={{ width: '100%', maxWidth: '560px', flexShrink: 0 }}>
           {currentStep === "welcome" && <WelcomeStep onNext={goNext} />}
           {currentStep === "tools" && (
             <ToolDetectionStep onNext={goNext} onBack={goBack} />

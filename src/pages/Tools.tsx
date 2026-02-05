@@ -179,8 +179,8 @@ export function Tools() {
                         e.currentTarget.style.transform = 'translateY(0)';
                       }}
                     >
-                      {/* Top: Icon + Title + Status */}
-                      <div style={{ display: 'flex', gap: '14px', marginBottom: '16px' }}>
+                      {/* Top: Icon + Title + Status + Toggle */}
+                      <div style={{ display: 'flex', gap: '14px', marginBottom: '16px', alignItems: 'flex-start' }}>
                         {/* Icon */}
                         {iconUrl ? (
                           <img
@@ -247,6 +247,39 @@ export function Tools() {
                             ID: {tool.id}
                           </p>
                         </div>
+
+                        {/* Toggle Switch */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleToolEnabled(tool.id, !tool.config.enabled);
+                          }}
+                          style={{
+                            position: 'relative',
+                            width: '44px',
+                            height: '24px',
+                            borderRadius: '12px',
+                            border: 'none',
+                            backgroundColor: tool.config.enabled ? '#3b82f6' : 'var(--border)',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s',
+                            padding: 0,
+                            flexShrink: 0,
+                            marginTop: '2px',
+                          }}
+                        >
+                          <span style={{
+                            position: 'absolute',
+                            top: '2px',
+                            left: tool.config.enabled ? '22px' : '2px',
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '10px',
+                            backgroundColor: '#fff',
+                            transition: 'left 0.2s',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                          }} />
+                        </button>
                       </div>
 
                       {/* Bottom: Config Info */}
@@ -296,46 +329,6 @@ export function Tools() {
                           }}>
                             {tool.config.skills_path || t("tools.notSet")}
                           </code>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{
-                            fontSize: '12px',
-                            color: 'var(--muted-foreground)',
-                            flexShrink: 0,
-                            width: '80px',
-                          }}>
-                            {t("tools.enableStatus")}
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleToolEnabled(tool.id, !tool.config.enabled);
-                            }}
-                            style={{
-                              position: 'relative',
-                              width: '44px',
-                              height: '24px',
-                              borderRadius: '12px',
-                              border: 'none',
-                              backgroundColor: tool.config.enabled ? '#3b82f6' : 'var(--border)',
-                              cursor: 'pointer',
-                              transition: 'background-color 0.2s',
-                              padding: 0,
-                              flexShrink: 0,
-                            }}
-                          >
-                            <span style={{
-                              position: 'absolute',
-                              top: '2px',
-                              left: tool.config.enabled ? '22px' : '2px',
-                              width: '20px',
-                              height: '20px',
-                              borderRadius: '10px',
-                              backgroundColor: '#fff',
-                              transition: 'left 0.2s',
-                              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                            }} />
-                          </button>
                         </div>
                       </div>
                     </div>

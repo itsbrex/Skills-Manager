@@ -11,6 +11,8 @@ export const en = {
     reset: "Reset",
     export: "Export",
     import: "Import",
+    edit: "Edit",
+    done: "Done",
   },
   nav: {
     skills: "Skills",
@@ -69,6 +71,8 @@ export const en = {
     deleteSuccess: "Deleted {name}",
     enableSuccess: "Enabled {skill} for {tool}",
     disableSuccess: "Disabled {skill} for {tool}",
+    noToolsEnabled: "No tools enabled",
+    allEnabled: "All enabled",
   },
   tools: {
     title: "Tools",

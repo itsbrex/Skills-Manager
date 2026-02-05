@@ -50,4 +50,40 @@ pub const SUPPORTED_TOOLS: &[ToolDefinition] = &[
         config_dir: ".codebuddy",
         cli_command: "codebuddy",
     },
+    ToolDefinition {
+        id: "opencode",
+        name: "OpenCode",
+        config_dir: ".config/opencode",
+        cli_command: "opencode",
+    },
+    ToolDefinition {
+        id: "cursor",
+        name: "Cursor",
+        config_dir: ".cursor",
+        cli_command: "cursor",
+    },
+    ToolDefinition {
+        id: "gemini",
+        name: "Gemini CLI",
+        config_dir: ".gemini",
+        cli_command: "gemini",
+    },
+    ToolDefinition {
+        id: "antigravity",
+        name: "Antigravity",
+        config_dir: ".antigravity",
+        cli_command: "antigravity",
+    },
+    ToolDefinition {
+        id: "windsurf",
+        name: "Windsurf",
+        config_dir: ".windsurf",
+        cli_command: "windsurf",
+    },
+    ToolDefinition {
+        id: "trae",
+        name: "Trae",
+        config_dir: ".trae",
+        cli_command: "trae",
+    },
 ];

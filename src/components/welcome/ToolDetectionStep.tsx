@@ -60,7 +60,12 @@ export function ToolDetectionStep({ onNext, onBack }: ToolDetectionStepProps) {
           </div>
         ) : (
           <>
-            <div style={{ marginBottom: '16px' }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '8px',
+              marginBottom: '16px'
+            }}>
               {tools.map((tool) => (
                 <div
                   key={tool.id}
@@ -68,30 +73,37 @@ export function ToolDetectionStep({ onNext, onBack }: ToolDetectionStepProps) {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '14px 16px',
-                    marginBottom: '8px',
+                    padding: '12px 14px',
                     borderRadius: '10px',
                     backgroundColor: tool.detected ? 'rgba(9, 105, 218, 0.08)' : 'var(--secondary)',
                     border: tool.detected ? '1px solid rgba(9, 105, 218, 0.2)' : '1px solid transparent',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     {tool.detected ? (
-                      <CheckCircle2 style={{ width: '20px', height: '20px', color: 'var(--primary)' }} />
+                      <CheckCircle2 style={{ width: '18px', height: '18px', color: 'var(--primary)', flexShrink: 0 }} />
                     ) : (
-                      <Circle style={{ width: '20px', height: '20px', color: 'var(--muted-foreground)', opacity: 0.4 }} />
+                      <Circle style={{ width: '18px', height: '18px', color: 'var(--muted-foreground)', opacity: 0.4, flexShrink: 0 }} />
                     )}
-                    <span style={{ fontSize: '14px', fontWeight: tool.detected ? 500 : 400, color: tool.detected ? 'var(--foreground)' : 'var(--muted-foreground)' }}>
+                    <span style={{
+                      fontSize: '13px',
+                      fontWeight: tool.detected ? 500 : 400,
+                      color: tool.detected ? 'var(--foreground)' : 'var(--muted-foreground)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}>
                       {tool.name}
                     </span>
                   </div>
                   <span
                     style={{
-                      fontSize: '12px',
-                      padding: '4px 10px',
+                      fontSize: '11px',
+                      padding: '3px 8px',
                       borderRadius: '6px',
                       backgroundColor: tool.detected ? 'var(--primary)' : 'var(--muted)',
                       color: tool.detected ? '#fff' : 'var(--muted-foreground)',
+                      flexShrink: 0,
                     }}
                   >
                     {tool.detected ? t("welcome.detected") : t("welcome.notInstalled")}

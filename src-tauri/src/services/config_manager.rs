@@ -28,8 +28,33 @@ impl ConfigManager {
         let content = fs::read_to_string(&self.config_path)
             .map_err(|e| format!("Failed to read config: {}", e))?;
 
-        serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse config: {}", e))
+        let mut config: AppConfig = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse config: {}", e))?;
+
+        // Auto-add newly supported tools that aren't in the config yet
+        let home_dir = dirs::home_dir().unwrap_or_default();
+        let mut updated = false;
+        for tool_def in SUPPORTED_TOOLS {
+            if !config.tools.contains_key(tool_def.id) {
+                let tool_dir = home_dir.join(tool_def.config_dir);
+                let detected = tool_dir.exists();
+                let tool_config = ToolConfig {
+                    enabled: detected,
+                    detected,
+                    skills_path: tool_dir.join("skills"),
+                    config_path: tool_dir,
+                };
+                config.tools.insert(tool_def.id.to_string(), tool_config);
+                updated = true;
+            }
+        }
+
+        // Save updated config if new tools were added
+        if updated {
+            let _ = self.save(&config);
+        }
+
+        Ok(config)
     }
 
     pub fn save(&self, config: &AppConfig) -> Result<(), String> {

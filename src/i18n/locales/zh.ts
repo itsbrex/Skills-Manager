@@ -12,6 +12,8 @@ export const zh = {
     reset: "重置",
     export: "导出",
     import: "导入",
+    edit: "编辑",
+    done: "完成",
   },
   nav: {
     skills: "Skills",
@@ -70,6 +72,8 @@ export const zh = {
     deleteSuccess: "已删除 {name}",
     enableSuccess: "已为 {tool} 启用 {skill}",
     disableSuccess: "已为 {tool} 禁用 {skill}",
+    noToolsEnabled: "未启用任何工具",
+    allEnabled: "全部启用",
   },
   tools: {
     title: "工具",

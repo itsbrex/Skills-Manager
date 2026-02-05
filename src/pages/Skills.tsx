@@ -4,16 +4,16 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { Switch } from "@/components/ui/switch";
 import { ToastContainer, useToast } from "@/components/ui/toast";
-import { Skill, AppConfig } from "@/types";
+import { Skill, Tool, AppConfig } from "@/types";
 import { useTranslation } from "@/i18n";
 
 const toolAbbreviations: Record<string, string> = {
-  "claude-code": "CC",
   "codex": "Codex",
-  "codebuddy": "CB",
 };
 
-function getToolAbbreviation(toolId: string): string {
+function getToolDisplayName(toolId: string, tools: Tool[]): string {
+  const tool = tools.find(t => t.id === toolId);
+  if (tool) return tool.name;
   return toolAbbreviations[toolId] || toolId;
 }
 
@@ -37,11 +37,13 @@ export function Skills() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [tools, setTools] = useState<Tool[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [initialLoading, setInitialLoading] = useState(true);
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
   const [deletingSkill, setDeletingSkill] = useState<string | null>(null);
+  const [editingSkill, setEditingSkill] = useState<string | null>(null);
   const { toasts, addToast, removeToast } = useToast();
 
   // Handle opening a skill in editor
@@ -63,12 +65,14 @@ export function Skills() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [skillsResult, configResult] = await Promise.all([
+      const [skillsResult, configResult, toolsResult] = await Promise.all([
         invoke<Skill[]>("refresh_skills"),
         invoke<AppConfig>("get_config"),
+        invoke<Tool[]>("detect_tools"),
       ]);
       setSkills(skillsResult);
       setConfig(configResult);
+      setTools(toolsResult);
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
@@ -86,10 +90,10 @@ export function Skills() {
     try {
       if (enabled) {
         await invoke("enable_skill", { skillId, toolId });
-        addToast(t("skills.enableSuccess").replace("{skill}", skillName).replace("{tool}", getToolAbbreviation(toolId)), "success");
+        addToast(t("skills.enableSuccess").replace("{skill}", skillName).replace("{tool}", getToolDisplayName(toolId, tools)), "success");
       } else {
         await invoke("disable_skill", { skillId, toolId });
-        addToast(t("skills.disableSuccess").replace("{skill}", skillName).replace("{tool}", getToolAbbreviation(toolId)), "success");
+        addToast(t("skills.disableSuccess").replace("{skill}", skillName).replace("{tool}", getToolDisplayName(toolId, tools)), "success");
       }
       await fetchData();
     } catch (err) {
@@ -402,61 +406,215 @@ export function Skills() {
 
                       {/* Bottom: Tool Toggles */}
                       <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        flexWrap: 'wrap',
                         paddingTop: '14px',
                         borderTop: '1px solid var(--border)',
                       }}>
-                        <span style={{
-                          fontSize: '11px',
-                          fontWeight: 500,
-                          color: 'var(--muted-foreground)',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          marginRight: '4px',
-                        }}>
-                          {t("skills.enableFor")}
-                        </span>
-                        {toolIds.map((toolId) => {
-                          const isEnabled = skill.enabled[toolId] ?? false;
-                          const toggleKey = `${skill.id}:${toolId}`;
-                          const isToggling = togglingSkill === toggleKey;
+                        {editingSkill === skill.id ? (
+                          /* Edit Mode: Show all toggles */
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            flexWrap: 'wrap',
+                          }}>
+                            <span style={{
+                              fontSize: '11px',
+                              fontWeight: 500,
+                              color: 'var(--muted-foreground)',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px',
+                              marginRight: '4px',
+                            }}>
+                              {t("skills.enableFor")}
+                            </span>
+                            {toolIds.map((toolId) => {
+                              const isEnabled = skill.enabled[toolId] ?? false;
+                              const toggleKey = `${skill.id}:${toolId}`;
+                              const isToggling = togglingSkill === toggleKey;
 
-                          return (
-                            <label
-                              key={toolId}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                cursor: isToggling ? 'wait' : 'pointer',
-                                padding: '5px 10px',
-                                borderRadius: '8px',
-                                backgroundColor: isEnabled ? 'rgba(9, 105, 218, 0.12)' : 'var(--background)',
-                                border: isEnabled ? '1px solid rgba(9, 105, 218, 0.35)' : '1px solid var(--border)',
-                                transition: 'all 0.15s',
+                              return (
+                                <label
+                                  key={toolId}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    cursor: isToggling ? 'wait' : 'pointer',
+                                    padding: '5px 10px',
+                                    borderRadius: '8px',
+                                    backgroundColor: isEnabled ? 'rgba(9, 105, 218, 0.12)' : 'var(--background)',
+                                    border: isEnabled ? '1px solid rgba(9, 105, 218, 0.35)' : '1px solid var(--border)',
+                                    transition: 'all 0.15s',
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Switch
+                                    checked={isEnabled}
+                                    disabled={isToggling}
+                                    onCheckedChange={(checked) =>
+                                      handleToggle(skill.id, skill.name, toolId, checked)
+                                    }
+                                  />
+                                  <span style={{
+                                    fontSize: '12px',
+                                    fontWeight: 500,
+                                    color: isEnabled ? 'var(--primary)' : 'var(--muted-foreground)',
+                                  }}>
+                                    {getToolDisplayName(toolId, tools)}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingSkill(null);
                               }}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Switch
-                                checked={isEnabled}
-                                disabled={isToggling}
-                                onCheckedChange={(checked) =>
-                                  handleToggle(skill.id, skill.name, toolId, checked)
-                                }
-                              />
-                              <span style={{
+                              style={{
                                 fontSize: '12px',
                                 fontWeight: 500,
-                                color: isEnabled ? 'var(--primary)' : 'var(--muted-foreground)',
-                              }}>
-                                {getToolAbbreviation(toolId)}
-                              </span>
-                            </label>
-                          );
-                        })}
+                                color: 'var(--primary)',
+                                backgroundColor: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '5px 8px',
+                                marginLeft: 'auto',
+                              }}
+                            >
+                              {t("common.done")}
+                            </button>
+                          </div>
+                        ) : (
+                          /* View Mode: Show compact badges */
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                          }}>
+                            <span style={{
+                              fontSize: '11px',
+                              fontWeight: 500,
+                              color: 'var(--muted-foreground)',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px',
+                              flexShrink: 0,
+                            }}>
+                              {t("skills.enableFor")}
+                            </span>
+                            {(() => {
+                              const enabledTools = toolIds.filter(id => skill.enabled[id]);
+                              const enabledCount = enabledTools.length;
+                              const totalCount = toolIds.length;
+
+                              if (enabledCount === 0) {
+                                return (
+                                  <span style={{
+                                    fontSize: '12px',
+                                    color: 'var(--muted-foreground)',
+                                    fontStyle: 'italic',
+                                    flex: 1,
+                                  }}>
+                                    {t("skills.noToolsEnabled")}
+                                  </span>
+                                );
+                              }
+
+                              if (enabledCount === totalCount) {
+                                return (
+                                  <>
+                                    <span style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      fontSize: '12px',
+                                      fontWeight: 500,
+                                      color: '#16a34a',
+                                      backgroundColor: '#dcfce7',
+                                      padding: '4px 10px',
+                                      borderRadius: '6px',
+                                      border: '1px solid #bbf7d0',
+                                    }}>
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <polyline points="20 6 9 17 4 12"/>
+                                      </svg>
+                                      {t("skills.allEnabled")}
+                                    </span>
+                                    <div style={{ flex: 1 }} />
+                                  </>
+                                );
+                              }
+
+                              const maxShow = 2;
+                              const showTools = enabledTools.slice(0, maxShow);
+                              const remaining = enabledCount - maxShow;
+
+                              return (
+                                <>
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    flex: 1,
+                                    minWidth: 0,
+                                    overflow: 'hidden',
+                                  }}>
+                                    {showTools.map(toolId => (
+                                      <span
+                                        key={toolId}
+                                        style={{
+                                          fontSize: '12px',
+                                          fontWeight: 500,
+                                          color: 'var(--primary)',
+                                          backgroundColor: 'rgba(9, 105, 218, 0.12)',
+                                          padding: '4px 8px',
+                                          borderRadius: '6px',
+                                          border: '1px solid rgba(9, 105, 218, 0.35)',
+                                          whiteSpace: 'nowrap',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                        }}
+                                      >
+                                        {getToolDisplayName(toolId, tools)}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  {remaining > 0 && (
+                                    <span style={{
+                                      fontSize: '12px',
+                                      fontWeight: 500,
+                                      color: 'var(--muted-foreground)',
+                                      whiteSpace: 'nowrap',
+                                      flexShrink: 0,
+                                    }}>
+                                      +{remaining}
+                                    </span>
+                                  )}
+                                </>
+                              );
+                            })()}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingSkill(skill.id);
+                              }}
+                              style={{
+                                fontSize: '12px',
+                                fontWeight: 500,
+                                color: 'var(--muted-foreground)',
+                                backgroundColor: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '5px 8px',
+                                flexShrink: 0,
+                                transition: 'color 0.15s',
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--foreground)'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--muted-foreground)'}
+                            >
+                              {t("common.edit")}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
