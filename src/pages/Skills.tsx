@@ -5,6 +5,7 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { Switch } from "@/components/ui/switch";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { RefreshButton } from "@/components/ui/refresh-button";
+import { PageHeader } from "@/components/ui/page-header";
 import { Skill, Tool, AppConfig } from "@/types";
 import { useTranslation } from "@/i18n";
 
@@ -145,102 +146,85 @@ export function Skills() {
       overflow: 'hidden',
       backgroundColor: 'var(--background)',
     }}>
-      {/* Top Bar with Title */}
-      <header style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '16px 32px',
-        borderBottom: '1px solid var(--border)',
-        backgroundColor: 'var(--background)',
-        flexShrink: 0,
-      }}>
-        {/* Left: Title */}
-        <h1 style={{
-          fontSize: '20px',
-          fontWeight: 600,
-          color: 'var(--foreground)',
-          margin: 0,
-        }}>
-          {t("skills.title")}
-        </h1>
+      <PageHeader
+        title={t("skills.title")}
+        actions={
+          <>
+            <RefreshButton onClick={fetchData} />
 
-        {/* Right: Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <RefreshButton onClick={fetchData} />
+            <div style={{ position: 'relative' }}>
+              <svg
+                style={{
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--muted-foreground)',
+                  pointerEvents: 'none',
+                }}
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="11" cy="11" r="8"/>
+                <path d="m21 21-4.3-4.3"/>
+              </svg>
+              <input
+                type="text"
+                placeholder={t("skills.searchPlaceholder")}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  width: '200px',
+                  padding: '8px 12px 8px 36px',
+                  fontSize: '13px',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--background)',
+                  color: 'var(--foreground)',
+                  outline: 'none',
+                  transition: 'border-color 0.15s, box-shadow 0.15s',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ring)';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9, 105, 218, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              />
+            </div>
 
-          <div style={{ position: 'relative' }}>
-            <svg
+            <button
               style={{
-                position: 'absolute',
-                left: '12px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--muted-foreground)',
-                pointerEvents: 'none',
-              }}
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="11" cy="11" r="8"/>
-              <path d="m21 21-4.3-4.3"/>
-            </svg>
-            <input
-              type="text"
-              placeholder={t("skills.searchPlaceholder")}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '200px',
-                padding: '8px 12px 8px 36px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
                 fontSize: '13px',
-                border: '1px solid var(--border)',
+                fontWeight: 500,
+                color: 'var(--primary-foreground)',
+                backgroundColor: 'var(--foreground)',
+                border: 'none',
                 borderRadius: '8px',
-                backgroundColor: 'var(--background)',
-                color: 'var(--foreground)',
-                outline: 'none',
-                transition: 'border-color 0.15s, box-shadow 0.15s',
+                cursor: 'pointer',
+                transition: 'opacity 0.15s',
               }}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = 'var(--ring)';
-                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9, 105, 218, 0.1)';
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border)';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-            />
-          </div>
-
-          <button
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 16px',
-              fontSize: '13px',
-              fontWeight: 500,
-              color: 'var(--primary-foreground)',
-              backgroundColor: 'var(--foreground)',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              transition: 'opacity 0.15s',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 5v14M5 12h14"/>
-            </svg>
-            {t("skills.newSkill")}
-          </button>
-        </div>
-      </header>
+              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              {t("skills.newSkill")}
+            </button>
+          </>
+        }
+      />
 
       {/* Content */}
       <main style={{

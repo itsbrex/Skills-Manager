@@ -1,4 +1,4 @@
-import { useI18n } from "../../i18n";
+import { useTranslation } from "../../i18n";
 
 interface RefreshButtonProps {
   onClick: () => void;
@@ -6,7 +6,7 @@ interface RefreshButtonProps {
 }
 
 export function RefreshButton({ onClick, loading = false }: RefreshButtonProps) {
-  const { t } = useI18n();
+  const { t } = useTranslation();
 
   return (
     <button

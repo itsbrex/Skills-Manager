@@ -6,7 +6,7 @@ import type { editor } from "monaco-editor";
 import { FileTree } from "@/components/editor/FileTree";
 import { FileNode } from "@/types";
 import { useTranslation } from "@/i18n";
-import { useTheme } from "../contexts/ThemeContext";
+import { useTheme } from "@/hooks/useTheme";
 
 export function EditorPage() {
   const { t } = useTranslation();
