@@ -8,6 +8,7 @@ import { FolderOpen } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PageHeader } from "@/components/ui/page-header";
 
 export function Tools() {
   const { t } = useTranslation();
@@ -98,29 +99,10 @@ export function Tools() {
       overflow: 'hidden',
       backgroundColor: 'var(--background)',
     }}>
-      {/* Top Bar with Title */}
-      <header style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '16px 32px',
-        borderBottom: '1px solid var(--border)',
-        backgroundColor: 'var(--background)',
-        flexShrink: 0,
-      }}>
-        {/* Left: Title */}
-        <h1 style={{
-          fontSize: '20px',
-          fontWeight: 600,
-          color: 'var(--foreground)',
-          margin: 0,
-        }}>
-          {t("tools.title")}
-        </h1>
-
-        {/* Right: Actions */}
-        <RefreshButton onClick={detectTools} />
-      </header>
+      <PageHeader
+        title={t("tools.title")}
+        actions={<RefreshButton onClick={detectTools} />}
+      />
 
       {/* Content */}
       <main style={{

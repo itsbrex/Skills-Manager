@@ -7,6 +7,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { getEditorIcon } from "@/assets/editors";
 import { Toggle } from "@/components/ui/toggle";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PageHeader } from "@/components/ui/page-header";
 import { SunIcon, MoonIcon, MonitorIcon } from "@/components/icons/theme-icons";
 
 // Default preferences
@@ -157,75 +158,60 @@ export function Settings() {
       overflow: 'hidden',
       backgroundColor: 'var(--background)',
     }}>
-      {/* Top Bar */}
-      <header style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '16px 32px',
-        borderBottom: '1px solid var(--border)',
-        backgroundColor: 'var(--background)',
-        flexShrink: 0,
-      }}>
-        <h1 style={{
-          fontSize: '20px',
-          fontWeight: 600,
-          color: 'var(--foreground)',
-          margin: 0,
-        }}>
-          {t("settings.title")}
-        </h1>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {saveSuccess && (
-            <span style={{
-              fontSize: '13px',
-              color: 'var(--color-success)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}>
+      <PageHeader
+        title={t("settings.title")}
+        actions={
+          <>
+            {saveSuccess && (
+              <span style={{
+                fontSize: '13px',
+                color: 'var(--color-success)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 6L9 17l-5-5"/>
+                </svg>
+                {t("common.saved")}
+              </span>
+            )}
+            {saveError && (
+              <span style={{ fontSize: '13px', color: 'var(--color-error)' }}>
+                {saveError}
+              </span>
+            )}
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                fontSize: '13px',
+                fontWeight: 500,
+                color: 'var(--primary-foreground)',
+                backgroundColor: 'var(--foreground)',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: saving ? 'wait' : 'pointer',
+                opacity: saving ? 0.7 : 1,
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={(e) => !saving && (e.currentTarget.style.opacity = '0.9')}
+              onMouseLeave={(e) => !saving && (e.currentTarget.style.opacity = '1')}
+            >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M20 6L9 17l-5-5"/>
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/>
+                <polyline points="7 3 7 8 15 8"/>
               </svg>
-              {t("common.saved")}
-            </span>
-          )}
-          {saveError && (
-            <span style={{ fontSize: '13px', color: 'var(--color-error)' }}>
-              {saveError}
-            </span>
-          )}
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 16px',
-              fontSize: '13px',
-              fontWeight: 500,
-              color: 'var(--primary-foreground)',
-              backgroundColor: 'var(--foreground)',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: saving ? 'wait' : 'pointer',
-              opacity: saving ? 0.7 : 1,
-              transition: 'opacity 0.15s',
-            }}
-            onMouseEnter={(e) => !saving && (e.currentTarget.style.opacity = '0.9')}
-            onMouseLeave={(e) => !saving && (e.currentTarget.style.opacity = '1')}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-              <polyline points="17 21 17 13 7 13 7 21"/>
-              <polyline points="7 3 7 8 15 8"/>
-            </svg>
-            {saving ? t("common.saving") : t("settings.saveSettings")}
-          </button>
-        </div>
-      </header>
+              {saving ? t("common.saving") : t("settings.saveSettings")}
+            </button>
+          </>
+        }
+      />
 
       {/* Content */}
       <main style={{
