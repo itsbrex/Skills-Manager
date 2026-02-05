@@ -57,6 +57,7 @@ export const zh = {
     importAndComplete: "导入并完成",
     previous: "上一步",
     next: "下一步",
+    customizePath: "自定义路径",
   },
   skills: {
     title: "Skills",
@@ -89,6 +90,10 @@ export const zh = {
     skillsPath: "Skills 路径",
     enableStatus: "启用状态",
     notSet: "未设置",
+    editPath: "修改路径",
+    selectConfigPath: "选择配置目录",
+    selectSkillsPath: "选择 Skills 目录",
+    pathUpdated: "路径已更新",
   },
   settings: {
     title: "设置",

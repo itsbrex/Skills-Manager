@@ -10,4 +10,4 @@ pub use editors::{detect_available_editors, get_available_editors, open_in_edito
 pub use files::{read_directory_tree, read_file, write_file};
 pub use skills::{delete_skill, disable_skill, enable_skill, import_skills_to_hub, list_skills, refresh_skills, scan_existing_skills};
 pub use sync::{check_sync_status, fix_sync_issues};
-pub use tools::{detect_tools, get_tool_status, set_tool_enabled};
+pub use tools::{detect_tools, get_tool_status, set_tool_enabled, update_tool_paths};

@@ -56,6 +56,7 @@ export const en = {
     importAndComplete: "Import & Complete",
     previous: "Previous",
     next: "Next",
+    customizePath: "Customize Path",
   },
   skills: {
     title: "Skills",
@@ -88,6 +89,10 @@ export const en = {
     skillsPath: "Skills Path",
     enableStatus: "Status",
     notSet: "Not set",
+    editPath: "Edit Path",
+    selectConfigPath: "Select Config Directory",
+    selectSkillsPath: "Select Skills Directory",
+    pathUpdated: "Path Updated",
   },
   settings: {
     title: "Settings",

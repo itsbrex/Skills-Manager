@@ -18,11 +18,19 @@ impl DetectorService {
 
     pub fn detect_tool(definition: &ToolDefinition, saved_config: &Option<crate::models::AppConfig>) -> Tool {
         let home_dir = dirs::home_dir().unwrap_or_default();
-        let config_dir = home_dir.join(definition.config_dir);
-        let skills_path = config_dir.join("skills");
-        let config_path = config_dir.clone();
 
-        let dir_exists = config_dir.exists();
+        // Prioritize saved custom paths, fallback to defaults
+        let (config_path, skills_path) = if let Some(saved) = saved_config
+            .as_ref()
+            .and_then(|c| c.tools.get(definition.id))
+        {
+            (saved.config_path.clone(), saved.skills_path.clone())
+        } else {
+            let config_dir = home_dir.join(definition.config_dir);
+            (config_dir.clone(), config_dir.join("skills"))
+        };
+
+        let dir_exists = config_path.exists();
         let cli_available = Self::check_cli_available(definition.cli_command);
 
         // Get saved enabled state from config, default to false

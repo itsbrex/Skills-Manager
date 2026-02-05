@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import { Tool } from "@/types";
 import { useTranslation } from "@/i18n";
 import { getToolIconUrl, GenericToolIcon } from "@/assets/tools";
+import { FolderOpen } from "lucide-react";
 
 export function Tools() {
   const { t } = useTranslation();
@@ -39,6 +41,46 @@ export function Tools() {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, []);
+
+  const handleEditConfigPath = useCallback(async (toolId: string) => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: t("tools.selectConfigPath"),
+    });
+
+    if (selected && typeof selected === "string") {
+      try {
+        await invoke("update_tool_paths", {
+          toolId,
+          configPath: selected,
+        });
+        await detectTools();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  }, [detectTools, t]);
+
+  const handleEditSkillsPath = useCallback(async (toolId: string) => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: t("tools.selectSkillsPath"),
+    });
+
+    if (selected && typeof selected === "string") {
+      try {
+        await invoke("update_tool_paths", {
+          toolId,
+          skillsPath: selected,
+        });
+        await detectTools();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  }, [detectTools, t]);
 
   useEffect(() => {
     detectTools();
@@ -290,7 +332,7 @@ export function Tools() {
                         flexDirection: 'column',
                         gap: '8px',
                       }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span style={{
                             fontSize: '12px',
                             color: 'var(--muted-foreground)',
@@ -300,6 +342,7 @@ export function Tools() {
                             {t("tools.configPath")}
                           </span>
                           <code style={{
+                            flex: 1,
                             fontSize: '11px',
                             color: 'var(--foreground)',
                             backgroundColor: 'var(--background)',
@@ -309,8 +352,38 @@ export function Tools() {
                           }}>
                             {tool.config.config_path || t("tools.notSet")}
                           </code>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditConfigPath(tool.id);
+                            }}
+                            title={t("tools.editPath")}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '6px',
+                              border: 'none',
+                              background: 'transparent',
+                              color: 'var(--muted-foreground)',
+                              cursor: 'pointer',
+                              flexShrink: 0,
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = 'var(--muted)';
+                              e.currentTarget.style.color = 'var(--foreground)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                              e.currentTarget.style.color = 'var(--muted-foreground)';
+                            }}
+                          >
+                            <FolderOpen style={{ width: '14px', height: '14px' }} />
+                          </button>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span style={{
                             fontSize: '12px',
                             color: 'var(--muted-foreground)',
@@ -320,6 +393,7 @@ export function Tools() {
                             {t("tools.skillsPath")}
                           </span>
                           <code style={{
+                            flex: 1,
                             fontSize: '11px',
                             color: 'var(--foreground)',
                             backgroundColor: 'var(--background)',
@@ -329,6 +403,36 @@ export function Tools() {
                           }}>
                             {tool.config.skills_path || t("tools.notSet")}
                           </code>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditSkillsPath(tool.id);
+                            }}
+                            title={t("tools.editPath")}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '6px',
+                              border: 'none',
+                              background: 'transparent',
+                              color: 'var(--muted-foreground)',
+                              cursor: 'pointer',
+                              flexShrink: 0,
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = 'var(--muted)';
+                              e.currentTarget.style.color = 'var(--foreground)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                              e.currentTarget.style.color = 'var(--muted-foreground)';
+                            }}
+                          >
+                            <FolderOpen style={{ width: '14px', height: '14px' }} />
+                          </button>
                         </div>
                       </div>
                     </div>

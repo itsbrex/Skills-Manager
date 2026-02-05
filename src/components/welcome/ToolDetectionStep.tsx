@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "@/i18n";
-import { CheckCircle2, Circle, Loader2, RotateCw } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, RotateCw, FolderOpen } from "lucide-react";
 
 interface Tool {
   id: string;
@@ -33,6 +34,27 @@ export function ToolDetectionStep({ onNext, onBack }: ToolDetectionStepProps) {
       console.error("Failed to detect tools:", error);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function handleCustomizePath(toolId: string) {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: t("tools.selectConfigPath"),
+    });
+
+    if (selected && typeof selected === "string") {
+      try {
+        await invoke("update_tool_paths", {
+          toolId,
+          configPath: selected,
+          skillsPath: `${selected}/skills`,
+        });
+        await detectTools();
+      } catch (error) {
+        console.error("Failed to update tool paths:", error);
+      }
     }
   }
 
@@ -96,18 +118,47 @@ export function ToolDetectionStep({ onNext, onBack }: ToolDetectionStepProps) {
                       {tool.name}
                     </span>
                   </div>
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      backgroundColor: tool.detected ? 'var(--primary)' : 'var(--muted)',
-                      color: tool.detected ? '#fff' : 'var(--muted-foreground)',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {tool.detected ? t("welcome.detected") : t("welcome.notInstalled")}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      onClick={() => handleCustomizePath(tool.id)}
+                      title={t("welcome.customizePath")}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '24px',
+                        height: '24px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--muted-foreground)',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.15s, color 0.15s',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--muted)';
+                        e.currentTarget.style.color = 'var(--foreground)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.color = 'var(--muted-foreground)';
+                      }}
+                    >
+                      <FolderOpen style={{ width: '14px', height: '14px' }} />
+                    </button>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        backgroundColor: tool.detected ? 'var(--primary)' : 'var(--muted)',
+                        color: tool.detected ? '#fff' : 'var(--muted-foreground)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {tool.detected ? t("welcome.detected") : t("welcome.notInstalled")}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
