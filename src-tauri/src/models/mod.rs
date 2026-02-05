@@ -4,6 +4,6 @@ pub mod skill;
 pub mod tool;
 
 pub use config::{AppConfig, ToolConfig};
-pub use editor::{DetectedEditor, EditorDefinition, EDITOR_DEFINITIONS};
+pub use editor::{DetectedEditor, EDITOR_DEFINITIONS};
 pub use skill::{Skill, SkillSource};
 pub use tool::{Tool, ToolDefinition, SUPPORTED_TOOLS};
