@@ -234,9 +234,9 @@ export function Tools() {
                               fontWeight: 500,
                               padding: '2px 8px',
                               borderRadius: '6px',
-                              backgroundColor: tool.detected ? '#dcfce7' : 'var(--secondary)',
-                              color: tool.detected ? '#16a34a' : 'var(--muted-foreground)',
-                              border: tool.detected ? '1px solid #bbf7d0' : '1px solid var(--border)',
+                              backgroundColor: tool.detected ? 'var(--color-success-bg)' : 'var(--secondary)',
+                              color: tool.detected ? 'var(--color-success)' : 'var(--muted-foreground)',
+                              border: tool.detected ? '1px solid var(--color-success-border)' : '1px solid var(--border)',
                             }}>
                               {tool.detected ? t("tools.detectedStatus") : t("tools.notDetected")}
                             </span>

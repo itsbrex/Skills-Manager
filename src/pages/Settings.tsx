@@ -180,7 +180,7 @@ export function Settings() {
           {saveSuccess && (
             <span style={{
               fontSize: '13px',
-              color: '#16a34a',
+              color: 'var(--color-success)',
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
@@ -192,7 +192,7 @@ export function Settings() {
             </span>
           )}
           {saveError && (
-            <span style={{ fontSize: '13px', color: '#dc2626' }}>
+            <span style={{ fontSize: '13px', color: 'var(--color-error)' }}>
               {saveError}
             </span>
           )}

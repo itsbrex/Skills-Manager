@@ -369,8 +369,8 @@ export function Skills() {
                             flexShrink: 0,
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.color = '#dc2626';
-                            e.currentTarget.style.backgroundColor = 'rgba(220, 38, 38, 0.1)';
+                            e.currentTarget.style.color = 'var(--color-error)';
+                            e.currentTarget.style.backgroundColor = 'var(--color-error-bg)';
                           }}
                           onMouseLeave={(e) => {
                             e.currentTarget.style.color = 'var(--muted-foreground)';
@@ -508,11 +508,11 @@ export function Skills() {
                                       gap: '4px',
                                       fontSize: '12px',
                                       fontWeight: 500,
-                                      color: '#16a34a',
-                                      backgroundColor: '#dcfce7',
+                                      color: 'var(--color-success)',
+                                      backgroundColor: 'var(--color-success-bg)',
                                       padding: '4px 10px',
                                       borderRadius: '6px',
-                                      border: '1px solid #bbf7d0',
+                                      border: '1px solid var(--color-success-border)',
                                     }}>
                                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                         <polyline points="20 6 9 17 4 12"/>
