@@ -38,7 +38,7 @@ export function Skills() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
   const { toasts, addToast, removeToast } = useToast();
 
@@ -60,7 +60,6 @@ export function Skills() {
   }, [config, navigate, addToast]);
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
     try {
       const [skillsResult, configResult] = await Promise.all([
         invoke<Skill[]>("refresh_skills"),
@@ -71,7 +70,7 @@ export function Skills() {
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
   }, [addToast]);
 
@@ -105,32 +104,6 @@ export function Skills() {
   });
 
   const toolIds = config ? Object.keys(config.tools).sort() : [];
-
-  if (loading) {
-    return (
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'var(--muted-foreground)',
-      }}>
-        <svg
-          style={{ animation: 'spin 1s linear infinite', marginRight: '8px' }}
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-        </svg>
-        {t("common.loading")}
-        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
 
   return (
     <div style={{

@@ -22,7 +22,7 @@ export function Settings() {
   const { t, language, setLanguage } = useTranslation();
   const { setTheme } = useTheme();
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -31,7 +31,6 @@ export function Settings() {
   const [availableEditors, setAvailableEditors] = useState<DetectedEditor[]>([]);
 
   const fetchConfig = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const configResult = await invoke<AppConfig>("get_config");
@@ -42,7 +41,7 @@ export function Settings() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
   }, []);
 
@@ -126,32 +125,6 @@ export function Settings() {
       setSaving(false);
     }
   };
-
-  if (loading) {
-    return (
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'var(--muted-foreground)',
-      }}>
-        <svg
-          style={{ animation: 'spin 1s linear infinite', marginRight: '8px' }}
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-        </svg>
-        {t("common.loading")}
-        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
 
   if (error) {
     return (
