@@ -50,6 +50,15 @@ pub const EDITOR_DEFINITIONS: &[EditorDefinition] = &[
         always_available: false,
     },
     EditorDefinition {
+        id: "trae",
+        name: "Trae",
+        detect_cmd: "trae",
+        app_name: "Trae",
+        open_cmd: "open -a Trae",
+        icon: "trae",
+        always_available: false,
+    },
+    EditorDefinition {
         id: "antigravity",
         name: "Antigravity",
         detect_cmd: "",
