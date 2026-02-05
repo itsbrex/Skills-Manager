@@ -7,14 +7,10 @@ import { ToastContainer, useToast } from "@/components/ui/toast";
 import { Skill, Tool, AppConfig } from "@/types";
 import { useTranslation } from "@/i18n";
 
-const toolAbbreviations: Record<string, string> = {
-  "codex": "Codex",
-};
-
 function getToolDisplayName(toolId: string, tools: Tool[]): string {
   const tool = tools.find(t => t.id === toolId);
   if (tool) return tool.name;
-  return toolAbbreviations[toolId] || toolId;
+  return toolId;
 }
 
 // Generate consistent colors based on skill name
