@@ -146,6 +146,7 @@ export const zh = {
     save: "保存",
     saving: "保存中...",
     saved: "已保存",
+    modified: "已修改",
     unsavedChanges: "未保存的更改",
     unsavedChangesDesc: "您有未保存的更改，是否保存？",
     dontSave: "不保存",

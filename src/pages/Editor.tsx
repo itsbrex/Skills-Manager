@@ -187,7 +187,7 @@ export function EditorPage() {
               borderRadius: 4,
               color: "var(--muted-foreground)",
             }}>
-              Modified
+              {t("editor.modified")}
             </span>
           )}
         </div>

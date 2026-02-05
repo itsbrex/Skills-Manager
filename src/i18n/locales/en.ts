@@ -145,6 +145,7 @@ export const en = {
     save: "Save",
     saving: "Saving...",
     saved: "Saved",
+    modified: "Modified",
     unsavedChanges: "Unsaved Changes",
     unsavedChangesDesc: "You have unsaved changes. Do you want to save them?",
     dontSave: "Don't Save",
