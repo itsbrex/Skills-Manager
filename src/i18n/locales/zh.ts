@@ -65,6 +65,11 @@ export const zh = {
     noDescription: "暂无描述",
     noSkills: "尚未安装任何 Skill",
     noMatch: "没有匹配的 Skill",
+    delete: "删除",
+    deleteConfirm: "确定要删除 \"{name}\" 吗？此操作不可撤销。",
+    deleteSuccess: "已删除 {name}",
+    enableSuccess: "已为 {tool} 启用 {skill}",
+    disableSuccess: "已为 {tool} 禁用 {skill}",
   },
   tools: {
     title: "工具",

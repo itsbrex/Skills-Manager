@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { Switch } from "@/components/ui/switch";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { Skill, AppConfig } from "@/types";
@@ -40,6 +41,7 @@ export function Skills() {
   const [searchQuery, setSearchQuery] = useState("");
   const [initialLoading, setInitialLoading] = useState(true);
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
+  const [deletingSkill, setDeletingSkill] = useState<string | null>(null);
   const { toasts, addToast, removeToast } = useToast();
 
   // Handle opening a skill in editor
@@ -78,20 +80,42 @@ export function Skills() {
     fetchData();
   }, [fetchData]);
 
-  const handleToggle = async (skillId: string, toolId: string, enabled: boolean) => {
+  const handleToggle = async (skillId: string, skillName: string, toolId: string, enabled: boolean) => {
     const toggleKey = `${skillId}:${toolId}`;
     setTogglingSkill(toggleKey);
     try {
       if (enabled) {
         await invoke("enable_skill", { skillId, toolId });
+        addToast(t("skills.enableSuccess").replace("{skill}", skillName).replace("{tool}", getToolAbbreviation(toolId)), "success");
       } else {
         await invoke("disable_skill", { skillId, toolId });
+        addToast(t("skills.disableSuccess").replace("{skill}", skillName).replace("{tool}", getToolAbbreviation(toolId)), "success");
       }
       await fetchData();
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
       setTogglingSkill(null);
+    }
+  };
+
+  const handleDelete = async (skill: Skill, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const confirmed = await confirm(t("skills.deleteConfirm").replace("{name}", skill.name), {
+      title: t("skills.delete"),
+      kind: "warning",
+    });
+    if (!confirmed) return;
+
+    setDeletingSkill(skill.id);
+    try {
+      await invoke("delete_skill", { skillId: skill.id });
+      addToast(t("skills.deleteSuccess").replace("{name}", skill.name), "success");
+      await fetchData();
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setDeletingSkill(null);
     }
   };
 
@@ -296,7 +320,7 @@ export function Skills() {
                         e.currentTarget.style.transform = 'translateY(0)';
                       }}
                     >
-                      {/* Top: Icon + Title + Description */}
+                      {/* Top: Icon + Title + Description + Delete */}
                       <div style={{ display: 'flex', gap: '14px', marginBottom: '16px' }}>
                         {/* Icon */}
                         <div style={{
@@ -339,6 +363,41 @@ export function Skills() {
                             {skill.description || t("skills.noDescription")}
                           </p>
                         </div>
+
+                        {/* Delete Button */}
+                        <button
+                          onClick={(e) => handleDelete(skill, e)}
+                          disabled={deletingSkill === skill.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '32px',
+                            height: '32px',
+                            padding: 0,
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: deletingSkill === skill.id ? 'wait' : 'pointer',
+                            color: 'var(--muted-foreground)',
+                            opacity: deletingSkill === skill.id ? 0.5 : 1,
+                            transition: 'color 0.15s, background-color 0.15s',
+                            flexShrink: 0,
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = '#dc2626';
+                            e.currentTarget.style.backgroundColor = 'rgba(220, 38, 38, 0.1)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = 'var(--muted-foreground)';
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                          }}
+                          title={t("skills.delete")}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                          </svg>
+                        </button>
                       </div>
 
                       {/* Bottom: Tool Toggles */}
@@ -385,7 +444,7 @@ export function Skills() {
                                 checked={isEnabled}
                                 disabled={isToggling}
                                 onCheckedChange={(checked) =>
-                                  handleToggle(skill.id, toolId, checked)
+                                  handleToggle(skill.id, skill.name, toolId, checked)
                                 }
                               />
                               <span style={{

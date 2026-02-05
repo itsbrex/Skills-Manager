@@ -64,6 +64,11 @@ export const en = {
     noDescription: "No description",
     noSkills: "No skills installed yet.",
     noMatch: "No skills match your search.",
+    delete: "Delete",
+    deleteConfirm: "Are you sure you want to delete \"{name}\"? This action cannot be undone.",
+    deleteSuccess: "Deleted {name}",
+    enableSuccess: "Enabled {skill} for {tool}",
+    disableSuccess: "Disabled {skill} for {tool}",
   },
   tools: {
     title: "Tools",

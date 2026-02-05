@@ -71,19 +71,7 @@ export function EditorPage() {
     loadFile();
   }, [rootPath, selectedPath]);
 
-  // Keyboard shortcut for save
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-        e.preventDefault();
-        handleSave();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  });
-
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!rootPath || !selectedPath || saving) return;
 
     setSaving(true);
@@ -96,7 +84,19 @@ export function EditorPage() {
     } finally {
       setSaving(false);
     }
-  };
+  }, [rootPath, selectedPath, saving, content]);
+
+  // Keyboard shortcut for save
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleSave]);
 
   const handleSelectFile = useCallback((path: string) => {
     if (path === selectedPath) return;

@@ -61,6 +61,28 @@ pub fn import_skills_to_hub(skill_paths: Vec<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn delete_skill(skill_id: String) -> Result<(), String> {
+    let manager = ConfigManager::new();
+    let config = manager.load()?;
+
+    let skill_path = config.skills_dir.join(&skill_id);
+    if !skill_path.exists() {
+        return Err(format!("Skill not found: {}", skill_id));
+    }
+
+    // First, remove all symlinks from tool directories
+    for (_tool_id, tool_config) in &config.tools {
+        let _ = LinkerService::disable_skill(&tool_config.skills_path, &skill_id);
+    }
+
+    // Then delete the skill folder
+    std::fs::remove_dir_all(&skill_path)
+        .map_err(|e| format!("Failed to delete skill folder: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub fn refresh_skills() -> Result<Vec<Skill>, String> {
     let manager = ConfigManager::new();
     let config = manager.load()?;
