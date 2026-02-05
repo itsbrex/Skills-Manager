@@ -40,7 +40,6 @@ export function Skills() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [initialLoading, setInitialLoading] = useState(true);
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
   const [deletingSkill, setDeletingSkill] = useState<string | null>(null);
   const [editingSkill, setEditingSkill] = useState<string | null>(null);
@@ -75,8 +74,6 @@ export function Skills() {
       setTools(toolsResult);
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
-    } finally {
-      setInitialLoading(false);
     }
   }, [addToast]);
 
@@ -132,6 +129,15 @@ export function Skills() {
   });
 
   const toolIds = config ? Object.keys(config.tools).sort() : [];
+
+  // Show loading state while initial data is being fetched
+  if (!config) {
+    return (
+      <div style={{ padding: '24px 32px', color: 'var(--muted-foreground)' }}>
+        {t("common.loading")}
+      </div>
+    );
+  }
 
   return (
     <div style={{

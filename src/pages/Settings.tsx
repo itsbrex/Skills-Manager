@@ -22,7 +22,6 @@ export function Settings() {
   const { t, language, setLanguage } = useTranslation();
   const { setTheme } = useTheme();
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -40,8 +39,6 @@ export function Settings() {
       setConfig(configResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setInitialLoading(false);
     }
   }, []);
 
