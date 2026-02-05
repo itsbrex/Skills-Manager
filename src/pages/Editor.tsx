@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import MonacoEditor from "@monaco-editor/react";
+import type { editor } from "monaco-editor";
 import { FileTree } from "@/components/editor/FileTree";
 import { FileNode } from "@/types";
 import { useTranslation } from "@/i18n";
@@ -23,7 +24,7 @@ export function EditorPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const editorRef = useRef<unknown>(null);
+  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const hasUnsavedChanges = content !== originalContent;
 
   // Load file tree
