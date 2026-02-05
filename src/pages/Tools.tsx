@@ -5,6 +5,7 @@ import { Tool } from "@/types";
 import { useTranslation } from "@/i18n";
 import { getToolIconUrl, GenericToolIcon } from "@/assets/tools";
 import { FolderOpen } from "lucide-react";
+import { Toggle } from "@/components/ui/toggle";
 
 export function Tools() {
   const { t } = useTranslation();
@@ -291,37 +292,15 @@ export function Tools() {
                         </div>
 
                         {/* Toggle Switch */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleToolEnabled(tool.id, !tool.config.enabled);
-                          }}
-                          style={{
-                            position: 'relative',
-                            width: '44px',
-                            height: '24px',
-                            borderRadius: '12px',
-                            border: 'none',
-                            backgroundColor: tool.config.enabled ? '#3b82f6' : 'var(--border)',
-                            cursor: 'pointer',
-                            transition: 'background-color 0.2s',
-                            padding: 0,
-                            flexShrink: 0,
-                            marginTop: '2px',
-                          }}
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ marginTop: '2px' }}
                         >
-                          <span style={{
-                            position: 'absolute',
-                            top: '2px',
-                            left: tool.config.enabled ? '22px' : '2px',
-                            width: '20px',
-                            height: '20px',
-                            borderRadius: '10px',
-                            backgroundColor: '#fff',
-                            transition: 'left 0.2s',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                          }} />
-                        </button>
+                          <Toggle
+                            checked={tool.config.enabled}
+                            onChange={(enabled) => toggleToolEnabled(tool.id, enabled)}
+                          />
+                        </div>
                       </div>
 
                       {/* Bottom: Config Info */}

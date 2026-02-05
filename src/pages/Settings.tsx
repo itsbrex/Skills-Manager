@@ -5,6 +5,7 @@ import { AppConfig, UserPreferences, DetectedEditor } from "@/types";
 import { useTranslation, Language } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
 import { getEditorIcon } from "@/assets/editors";
+import { Toggle } from "@/components/ui/toggle";
 
 // Default preferences
 const defaultPreferences: UserPreferences = {
@@ -538,42 +539,6 @@ function SettingsRow({ label, description, children, isLast = false }: SettingsR
       </div>
       {children}
     </div>
-  );
-}
-
-interface ToggleProps {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}
-
-function Toggle({ checked, onChange }: ToggleProps) {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      style={{
-        width: '44px',
-        height: '24px',
-        borderRadius: '12px',
-        backgroundColor: checked ? '#3b82f6' : 'var(--border)',
-        border: 'none',
-        cursor: 'pointer',
-        position: 'relative',
-        transition: 'background-color 0.2s',
-        flexShrink: 0,
-      }}
-    >
-      <span style={{
-        position: 'absolute',
-        top: '2px',
-        left: checked ? '22px' : '2px',
-        width: '20px',
-        height: '20px',
-        borderRadius: '10px',
-        backgroundColor: '#fff',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-        transition: 'left 0.2s',
-      }} />
-    </button>
   );
 }
 
