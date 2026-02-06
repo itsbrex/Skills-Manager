@@ -22,6 +22,14 @@ It uses a powerful **symlink synchronization mechanism**, allowing you to write 
 - **🔌 Multi-Tool Support**: Out-of-the-box support for **Claude Code、Codex、Opencode** and extensible to others.
 - **🎨 Modern UI**: Beautiful interface built with React 19, Tailwind CSS v4, and Radix UI.
 
+## 📸 Screenshots
+
+<p align="center">
+  <img src="https://image.freeourdays.com/1.png" alt="Screenshot 1" ">
+  <img src="https://image.freeourdays.com/2.png" alt="Screenshot 2" ">
+  <img src="https://image.freeourdays.com/3.png" alt="Screenshot 3" ">
+</p>
+
 ## 📥 Download
 
 Download the latest installer for your operating system from the **[Releases Page](../../releases)**.

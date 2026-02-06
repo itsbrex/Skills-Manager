@@ -22,6 +22,14 @@
 - **🔌 多工具支持**：开箱即用支持 **Claude Code、Codex、Opencode**等常用工具，并具备良好的扩展性。
 - **🎨 现代 UI**：基于 React 19、Tailwind CSS v4 和 Radix UI 打造的精美界面。
 
+## 📸 应用截图
+
+<p align="center">
+  <img src="https://image.freeourdays.com/1.png" alt="应用截图 1" ">
+  <img src="https://image.freeourdays.com/2.png" alt="应用截图 2" ">
+  <img src="https://image.freeourdays.com/3.png" alt="应用截图 3" ">
+</p>
+
 ## 📥 下载安装
 
 请前往 **[Releases 页面](../../releases)** 下载适用于您系统的最新安装包。
