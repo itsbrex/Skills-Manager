@@ -13,10 +13,13 @@ jobs:
         include:
           - platform: "macos-latest"
             args: "--target aarch64-apple-darwin"
+            bundle_path: "src-tauri/target/aarch64-apple-darwin/release/bundle/"
           - platform: "ubuntu-22.04"
             args: ""
+            bundle_path: "src-tauri/target/release/bundle/"
           - platform: "windows-latest"
             args: ""
+            bundle_path: "src-tauri/target/release/bundle/"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -57,5 +60,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: skills-manager-${{ matrix.platform }}
-          path: src-tauri/target/release/bundle/
+          path: ${{ matrix.bundle_path }}
           retention-days: 7
