@@ -156,7 +156,16 @@ export function Welcome({ onComplete }: WelcomeProps) {
       {/* Footer */}
       <div style={{ paddingBottom: '20px', textAlign: 'center' }}>
         <p style={{ fontSize: '12px', color: 'var(--muted-foreground)', margin: 0, opacity: 0.6 }}>
-          Skills Manager
+          <a
+            href="https://github.com/jiweiyeah/Skills-Manager"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'inherit', textDecoration: 'none', cursor: 'pointer' }}
+            onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+            onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+          >
+            Skills Manager
+          </a>
         </p>
       </div>
     </div>

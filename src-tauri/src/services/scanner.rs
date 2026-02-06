@@ -150,7 +150,7 @@ impl ScannerService {
         Ok(SkillMeta {
             name,
             description: meta.description,
-            version: meta.version.unwrap_or_else(|| "1.0.0".to_string()),
+            version: meta.version.unwrap_or_else(|| "1.0".to_string()),
         })
     }
 
@@ -185,7 +185,7 @@ impl ScannerService {
         Ok(SkillMeta {
             name: name.unwrap_or(default_name),
             description,
-            version: "1.0.0".to_string(),
+            version: "1.0".to_string(),
         })
     }
 
@@ -193,7 +193,7 @@ impl ScannerService {
         SkillMeta {
             name: id.replace('-', " ").replace('_', " "),
             description: None,
-            version: "1.0.0".to_string(),
+            version: "1.0".to_string(),
         }
     }
 

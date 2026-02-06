@@ -434,7 +434,16 @@ export function Settings() {
                   color: 'var(--foreground)',
                   marginBottom: '2px',
                 }}>
-                  {t("settings.appName")}
+                  <a
+                    href="https://github.com/jiweiyeah/Skills-Manager"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: 'inherit', textDecoration: 'none', cursor: 'pointer' }}
+                    onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                    onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                  >
+                    {t("settings.appName")}
+                  </a>
                 </div>
                 <div style={{
                   fontSize: '13px',

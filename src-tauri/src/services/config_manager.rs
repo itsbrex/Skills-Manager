@@ -31,9 +31,19 @@ impl ConfigManager {
         let mut config: AppConfig = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse config: {}", e))?;
 
+        // Version Check & Migration
+        let current_version = AppConfig::default().version;
+        let mut updated = false;
+
+        if config.version != current_version {
+            // 在这里添加结构迁移逻辑 (如果有)
+            // 目前只需要更新版本号
+            config.version = current_version;
+            updated = true;
+        }
+
         // Auto-add newly supported tools that aren't in the config yet
         let home_dir = dirs::home_dir().unwrap_or_default();
-        let mut updated = false;
         for tool_def in SUPPORTED_TOOLS {
             if !config.tools.contains_key(tool_def.id) {
                 let tool_dir = home_dir.join(tool_def.config_dir);
@@ -49,7 +59,7 @@ impl ConfigManager {
             }
         }
 
-        // Save updated config if new tools were added
+        // Save updated config if new tools were added or version changed
         if updated {
             let _ = self.save(&config);
         }

@@ -81,7 +81,7 @@ Skills Manager 是一个 Tauri 桌面应用，用于统一管理多个 AI 编程
 
 ```json
 {
-  "version": "1.0.0",
+  "version": "1.0",
   "skillsDir": "~/.skills-hub/skills",
   "tools": {
     "claude-code": {

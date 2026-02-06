@@ -27,7 +27,7 @@ impl Skill {
             id,
             name,
             description: None,
-            version: "1.0.0".to_string(),
+            version: "1.0".to_string(),
             source: SkillSource::Local,
             enabled: HashMap::new(),
             path,

@@ -820,7 +820,7 @@ export function Settings() {
             <div className="text-sm space-y-1">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">版本:</span>
-                <span>{config?.version || "1.0.0"}</span>
+                <span>{config?.version || "1.0"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">说明:</span>
