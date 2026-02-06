@@ -13,7 +13,6 @@ import { PageHeader } from "@/components/ui/page-header";
 export function Tools() {
   const { t } = useTranslation();
   const [tools, setTools] = useState<Tool[]>([]);
-  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const detectTools = useCallback(async () => {
@@ -23,8 +22,6 @@ export function Tools() {
       setTools(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setInitialLoading(false);
     }
   }, []);
 

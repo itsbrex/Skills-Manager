@@ -6,19 +6,18 @@ import { ToolDetectionStep } from "@/components/welcome/ToolDetectionStep";
 import { DirectorySetupStep } from "@/components/welcome/DirectorySetupStep";
 import { ImportSkillsStep } from "@/components/welcome/ImportSkillsStep";
 import { SunIcon, MoonIcon, MonitorIcon } from "@/components/icons/theme-icons";
-import { useTranslation, Language } from "@/i18n";
+import { useTranslation } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
 import { AppConfig } from "@/types";
 
 type WizardStep = "welcome" | "tools" | "directory" | "import";
-type Theme = "light" | "dark" | "system";
 
 interface WelcomeProps {
   onComplete: () => void;
 }
 
 export function Welcome({ onComplete }: WelcomeProps) {
-  const { t, language, setLanguage } = useTranslation();
+  const { language, setLanguage } = useTranslation();
   const { theme, setTheme } = useTheme();
   const [currentStep, setCurrentStep] = useState<WizardStep>("welcome");
 
