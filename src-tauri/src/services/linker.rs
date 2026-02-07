@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use serde::{Deserialize, Serialize};
 use crate::services::config_manager::ConfigManager;
 
@@ -56,11 +57,35 @@ impl LinkerService {
 
         #[cfg(windows)]
         {
-            std::os::windows::fs::symlink_dir(skill_source, &link_path)
-                .map_err(|e| format!("Failed to create symlink: {}", e))?;
+            Self::create_windows_symlink(skill_source, &link_path)?;
         }
 
         Ok(())
+    }
+
+    #[cfg(windows)]
+    fn create_windows_symlink(original: &Path, link: &Path) -> Result<(), String> {
+        // 尝试创建标准 Symlink (需要管理员权限或开发者模式)
+        if std::os::windows::fs::symlink_dir(original, link).is_ok() {
+            return Ok(());
+        }
+
+        // 如果失败，尝试创建 Junction (不需要特殊权限)
+        // mklink /J <Link> <Target>
+        let status = Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(link)
+            .arg(original)
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .output()
+            .map_err(|e| format!("Failed to execute mklink: {}", e))?
+            .status;
+
+        if status.success() {
+            Ok(())
+        } else {
+            Err("Failed to create symlink or junction. Please enable Developer Mode or run as Administrator.".to_string())
+        }
     }
 
     pub fn disable_skill(tool_skills_dir: &Path, skill_id: &str) -> Result<(), String> {
@@ -225,8 +250,7 @@ impl LinkerService {
             .map_err(|e| format!("Failed to create symlink: {}", e))?;
 
         #[cfg(windows)]
-        std::os::windows::fs::symlink_dir(&target, &source)
-            .map_err(|e| format!("Failed to create symlink: {}", e))?;
+        Self::create_windows_symlink(&target, &source)?;
 
         Ok(())
     }
