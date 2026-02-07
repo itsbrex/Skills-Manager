@@ -3,7 +3,7 @@
 > **一款用于管理 AI 编程助手技能（Skills）的统一桌面应用。**
 > 无缝组织、同步和共享 **Claude Code、Codex、Opencode** 及其他 AI 工具的技能。
 
-![Version](https://img.shields.io/badge/version-1.0-blue) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
+![Version](https://img.shields.io/badge/version-1.0.1-blue) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
 
 [English README](./README.md)
 
@@ -38,7 +38,7 @@
 |----|----------------|
 | **macOS** | `.dmg` (通用架构) |
 | **Windows** | `.msi` / `.exe` |
-| **Linux** | `.deb` / `.AppImage` |
+| **Linux** | `.deb` / `.AppImage` / `.rpm` |
 
 ## 🚀 快速开始
 
@@ -56,9 +56,26 @@
 - **UI 组件**: [Radix UI](https://www.radix-ui.com/)
 - **内置编辑器**: [Monaco Editor](https://microsoft.github.io/monaco-editor/)
 
+## 📅 路线图 (Roadmap)
+
+我们正在持续改进 Skills Manager，以下是我们未来的规划：
+
+- [x] 核心功能（软链接同步、多工具支持等）。
+- [ ] 社区中心（Community Hub）– 分享和下载社区贡献的 Skills 等。
+- [ ] 云端同步，更换设备后也可一键迁移原有的 Skills 等。
+- [ ] 插件系统，支持更多 AI 工具扩展。
+- [ ] 集成 AI 对话界面，直接在应用内测试 Skills。
+
 ## 🤝 反馈与支持
 
-这是一个公共发布仓库。如果您在使用过程中遇到问题或有功能建议，请访问 [Issues](../../issues) 页面反馈。
+我们欢迎任何形式的贡献和反馈！
+
+- **发现 Bug？** 请在我们的 [Issues](../../issues) 页面提交。
+- **有新功能建议？** 欢迎提交 Issue 告诉我们您的想法，我们非常乐意听取社区的声音。
+
+## 📈 Star 趋势图
+
+[![Star History Chart](https://api.star-history.com/svg?repos=jiweiyeah/skills-manager&type=Date)](https://star-history.com/#jiweiyeah/skills-manager&Date)
 
 ---
 

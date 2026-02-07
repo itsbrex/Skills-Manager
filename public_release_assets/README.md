@@ -3,7 +3,7 @@
 > **A unified desktop application for managing AI coding assistant skills.**
 > Seamlessly organize, sync, and share skills for **Claude Code、Codex、Opencode** and other AI tools.
 
-![Version](https://img.shields.io/badge/version-1.0-blue) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
+![Version](https://img.shields.io/badge/version-1.0.1-blue) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
 
 [中文说明](./README_CN.md)
 
@@ -38,7 +38,7 @@ Download the latest installer for your operating system from the **[Releases Pag
 |----|----------------|
 | **macOS** | `.dmg` (Universal) |
 | **Windows** | `.msi` / `.exe` |
-| **Linux** | `.deb` / `.AppImage` |
+| **Linux** | `.deb` / `.AppImage` / `.rpm`|
 
 ## 🚀 Getting Started
 
@@ -56,9 +56,26 @@ Designed for developers who care about performance and stability:
 - **UI Components**: [Radix UI](https://www.radix-ui.com/)
 - **Editor**: [Monaco Editor](https://microsoft.github.io/monaco-editor/)
 
+## 📅 Roadmap
+
+We are actively working on making Skills Manager better. Here is what we are planning:
+
+- [x] Core features (e.g., soft link synchronization, multi-tool support).
+- [ ] Community Hub – Share and download community-contributed Skills, etc.
+- [ ] Cloud synchronization, allowing one-click migration of existing Skills and more when changing devices.
+- [ ] Plugin system to support more AI tool extensions.
+- [ ] Integrated AI chat interface for testing Skills directly within the application.
+
 ## 🤝 Contributing & Feedback
 
-This is a public release repository. If you encounter issues or have feature requests, please check the [Issues](../../issues) page.
+We welcome all forms of contribution!
+
+- **Found a bug?** Please submit an issue on our [Issues](../../issues) page.
+- **Have a feature request?** We'd love to hear your ideas! Feel free to open an issue to discuss new features.
+
+## 📈 Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=jiweiyeah/skills-manager&type=Date)](https://star-history.com/#jiweiyeah/skills-manager&Date)
 
 ---
 
