@@ -65,6 +65,8 @@ impl LinkerService {
 
     #[cfg(windows)]
     fn create_windows_symlink(original: &Path, link: &Path) -> Result<(), String> {
+        use std::os::windows::process::CommandExt;
+
         // 尝试创建标准 Symlink (需要管理员权限或开发者模式)
         if std::os::windows::fs::symlink_dir(original, link).is_ok() {
             return Ok(());
