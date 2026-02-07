@@ -11,14 +11,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest"
+          - platform: "macos-latest" # Apple Silicon
             args: "--target aarch64-apple-darwin"
+            rust_target: "aarch64-apple-darwin"
             bundle_path: "src-tauri/target/aarch64-apple-darwin/release/bundle/"
+          - platform: "macos-13" # Intel Mac
+            args: "--target x86_64-apple-darwin"
+            rust_target: "x86_64-apple-darwin"
+            bundle_path: "src-tauri/target/x86_64-apple-darwin/release/bundle/"
           - platform: "ubuntu-22.04"
             args: ""
+            rust_target: ""
             bundle_path: "src-tauri/target/release/bundle/"
           - platform: "windows-latest"
             args: ""
+            rust_target: ""
             bundle_path: "src-tauri/target/release/bundle/"
 
     runs-on: ${{ matrix.platform }}
@@ -33,7 +40,7 @@ jobs:
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
+          targets: ${{ matrix.rust_target }}
 
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
