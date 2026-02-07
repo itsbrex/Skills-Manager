@@ -74,19 +74,23 @@ impl LinkerService {
 
         // 如果失败，尝试创建 Junction (不需要特殊权限)
         // mklink /J <Link> <Target>
-        let status = Command::new("cmd")
+        let output = Command::new("cmd")
             .args(["/C", "mklink", "/J"])
             .arg(link)
             .arg(original)
             .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .output()
-            .map_err(|e| format!("Failed to execute mklink: {}", e))?
-            .status;
+            .map_err(|e| format!("Failed to execute mklink: {}", e))?;
 
-        if status.success() {
+        if output.status.success() {
             Ok(())
         } else {
-            Err("Failed to create symlink or junction. Please enable Developer Mode or run as Administrator.".to_string())
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            Err(format!(
+                "Failed to create junction.\nCommand: mklink /J {:?} {:?}\nError: {}\nOutput: {}",
+                link, original, stderr.trim(), stdout.trim()
+            ))
         }
     }
 
