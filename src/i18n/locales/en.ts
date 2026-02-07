@@ -123,6 +123,7 @@ export const en = {
     appDescription: "Unified skill management for AI tools",
     version: "Version",
     checkUpdate: "Check for Updates",
+    updateNow: "Update Now",
     updateAvailable: "New version available",
     latestVersion: "You are on the latest version",
     privacyPolicy: "Privacy Policy",

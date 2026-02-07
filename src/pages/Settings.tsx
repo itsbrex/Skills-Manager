@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { AppConfig, UserPreferences, DetectedEditor } from "@/types";
+import { AppConfig, UserPreferences, DetectedEditor, UpdateInfo } from "@/types";
 import { checkUpdate } from "@/services/updater";
 import { useTranslation, Language } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
@@ -35,6 +35,7 @@ export function Settings() {
   const [editorDropdownOpen, setEditorDropdownOpen] = useState(false);
   const [availableEditors, setAvailableEditors] = useState<DetectedEditor[]>([]);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const { toasts, addToast, removeToast } = useToast();
 
   const fetchConfig = useCallback(async () => {
@@ -64,6 +65,21 @@ export function Settings() {
       }
     }
     loadEditors();
+  }, []);
+
+  // Auto-check for updates on mount
+  useEffect(() => {
+    async function autoCheckUpdate() {
+      try {
+        const info = await checkUpdate();
+        if (info.has_update) {
+          setUpdateInfo(info);
+        }
+      } catch (err) {
+        console.error("Failed to auto-check update:", err);
+      }
+    }
+    autoCheckUpdate();
   }, []);
 
   const handleSelectDirectory = async () => {
@@ -132,13 +148,17 @@ export function Settings() {
   };
 
   const handleCheckUpdate = async () => {
+    if (updateInfo) {
+      window.open(updateInfo.download_url, '_blank');
+      return;
+    }
+
     setCheckingUpdate(true);
     try {
       const info = await checkUpdate();
       if (info.has_update) {
+        setUpdateInfo(info);
         addToast(`${t("settings.updateAvailable")}: ${info.latest_version}`, "success");
-        // Open download page
-        window.open(info.download_url, '_blank');
       } else {
         addToast(t("settings.latestVersion"), "success");
       }
@@ -509,15 +529,20 @@ export function Settings() {
                     padding: '4px 8px',
                     fontSize: '11px',
                     fontWeight: 500,
-                    color: 'var(--primary)',
-                    backgroundColor: 'rgba(9, 105, 218, 0.1)',
-                    border: '1px solid rgba(9, 105, 218, 0.2)',
+                    color: updateInfo ? 'var(--primary-foreground)' : 'var(--primary)',
+                    backgroundColor: updateInfo ? 'var(--primary)' : 'rgba(9, 105, 218, 0.1)',
+                    border: updateInfo ? 'none' : '1px solid rgba(9, 105, 218, 0.2)',
                     borderRadius: '4px',
                     cursor: checkingUpdate ? 'wait' : 'pointer',
                     opacity: checkingUpdate ? 0.7 : 1,
                   }}
                 >
-                  {checkingUpdate ? t("common.checking") : t("settings.checkUpdate")}
+                  {checkingUpdate
+                    ? t("common.checking")
+                    : updateInfo
+                      ? t("settings.updateNow")
+                      : t("settings.checkUpdate")
+                  }
                 </button>
               </span>
             </div>

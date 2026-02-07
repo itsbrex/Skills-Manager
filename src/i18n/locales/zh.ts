@@ -124,6 +124,7 @@ export const zh = {
     appDescription: "统一管理多 AI 工具的 Skills",
     version: "版本",
     checkUpdate: "检查更新",
+    updateNow: "立即更新",
     updateAvailable: "发现新版本",
     latestVersion: "当前已是最新版本",
     privacyPolicy: "隐私政策",
