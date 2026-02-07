@@ -3,7 +3,7 @@ mod models;
 mod services;
 
 use commands::{
-    check_sync_status, delete_skill, detect_available_editors, detect_tools, disable_skill,
+    check_sync_status, check_update, delete_skill, detect_available_editors, detect_tools, disable_skill,
     enable_skill, fix_sync_issues, get_available_editors, get_config, get_tool_status,
     import_skills_to_hub, is_initialized, list_skills, mark_initialized, open_in_editor,
     read_directory_tree, read_file, refresh_skills, save_config, scan_existing_skills,
@@ -40,6 +40,7 @@ pub fn run() {
             read_directory_tree,
             read_file,
             write_file,
+            check_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { AppConfig, UserPreferences, DetectedEditor } from "@/types";
+import { checkUpdate } from "@/services/updater";
 import { useTranslation, Language } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
 import { getEditorIcon } from "@/assets/editors";
 import { Toggle } from "@/components/ui/toggle";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
+import { ToastContainer, useToast } from "@/components/ui/toast";
 import { SunIcon, MoonIcon, MonitorIcon } from "@/components/icons/theme-icons";
 
 // Default preferences
@@ -32,6 +34,8 @@ export function Settings() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [editorDropdownOpen, setEditorDropdownOpen] = useState(false);
   const [availableEditors, setAvailableEditors] = useState<DetectedEditor[]>([]);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const { toasts, addToast, removeToast } = useToast();
 
   const fetchConfig = useCallback(async () => {
     setError(null);
@@ -124,6 +128,24 @@ export function Settings() {
       setSaveError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    try {
+      const info = await checkUpdate();
+      if (info.has_update) {
+        addToast(`${t("settings.updateAvailable")}: ${info.latest_version}`, "success");
+        // Open download page
+        window.open(info.download_url, '_blank');
+      } else {
+        addToast(t("settings.latestVersion"), "success");
+      }
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setCheckingUpdate(false);
     }
   };
 
@@ -455,13 +477,34 @@ export function Settings() {
               <span style={{
                 fontSize: '13px',
                 color: 'var(--muted-foreground)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
               }}>
-                v{config.version}
+                <span>v{config.version}</span>
+                <button
+                  onClick={handleCheckUpdate}
+                  disabled={checkingUpdate}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    color: 'var(--primary)',
+                    backgroundColor: 'rgba(9, 105, 218, 0.1)',
+                    border: '1px solid rgba(9, 105, 218, 0.2)',
+                    borderRadius: '4px',
+                    cursor: checkingUpdate ? 'wait' : 'pointer',
+                    opacity: checkingUpdate ? 0.7 : 1,
+                  }}
+                >
+                  {checkingUpdate ? t("common.checking") : t("settings.checkUpdate")}
+                </button>
               </span>
             </div>
           </SettingsCard>
         </div>
       </main>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

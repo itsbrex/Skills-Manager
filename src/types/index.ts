@@ -83,3 +83,10 @@ export interface FileNode {
   is_dir: boolean;
   children?: FileNode[];
 }
+
+export interface UpdateInfo {
+  has_update: boolean;
+  latest_version: string;
+  download_url: string;
+  release_notes?: string;
+}

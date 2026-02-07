@@ -4,6 +4,7 @@ pub mod editor_detector;
 pub mod file_ops;
 pub mod linker;
 pub mod scanner;
+pub mod updater;
 
 pub use config_manager::ConfigManager;
 pub use detector::DetectorService;

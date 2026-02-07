@@ -11,6 +11,8 @@ import { useInitialization } from "@/hooks/useInitialization";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { I18nProvider, Language } from "@/i18n";
 import { AppConfig } from "@/types";
+import { checkUpdate } from "@/services/updater";
+import { ToastContainer, useToast } from "@/components/ui/toast";
 
 type Theme = "light" | "dark" | "system";
 
@@ -19,6 +21,28 @@ function App() {
   const [language, setLanguage] = useState<Language>("en");
   const [theme, setTheme] = useState<Theme>("system");
   const [configLoaded, setConfigLoaded] = useState(false);
+  const { toasts, addToast, removeToast } = useToast();
+
+  // Check for updates on mount
+  useEffect(() => {
+    async function checkForUpdates() {
+      try {
+        const info = await checkUpdate();
+        if (info.has_update) {
+          addToast(`Update available: ${info.latest_version}`, "info");
+          // Optionally auto-open or just notify.
+          // Since toast in this app is simple, we might just notify.
+          // Or we can modify toast to support actions, but for now simple notification is fine.
+        }
+      } catch (e) {
+        console.warn("Auto-update check failed:", e);
+      }
+    }
+    // Only run if initialized to avoid cluttering welcome screen
+    if (isInitialized) {
+      checkForUpdates();
+    }
+  }, [isInitialized, addToast]);
 
   // Load preferences from config on mount
   useEffect(() => {
@@ -78,6 +102,7 @@ function App() {
             </Route>
             <Route path="/editor" element={<EditorPage />} />
           </Routes>
+          <ToastContainer toasts={toasts} onRemove={removeToast} />
         </BrowserRouter>
       </I18nProvider>
     </ThemeProvider>

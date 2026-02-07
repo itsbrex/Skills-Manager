@@ -14,6 +14,7 @@ export const zh = {
     import: "导入",
     edit: "编辑",
     done: "完成",
+    checking: "检查中...",
   },
   nav: {
     skills: "Skills",
@@ -122,6 +123,9 @@ export const zh = {
     appName: "Skills Manager",
     appDescription: "统一管理多 AI 工具的 Skills",
     version: "版本",
+    checkUpdate: "检查更新",
+    updateAvailable: "发现新版本",
+    latestVersion: "当前已是最新版本",
   },
   editors: {
     vscode: "VS Code",

@@ -13,6 +13,7 @@ export const en = {
     import: "Import",
     edit: "Edit",
     done: "Done",
+    checking: "Checking...",
   },
   nav: {
     skills: "Skills",
@@ -121,6 +122,9 @@ export const en = {
     appName: "Skills Manager",
     appDescription: "Unified skill management for AI tools",
     version: "Version",
+    checkUpdate: "Check for Updates",
+    updateAvailable: "New version available",
+    latestVersion: "You are on the latest version",
   },
   editors: {
     vscode: "VS Code",
