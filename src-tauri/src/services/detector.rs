@@ -26,7 +26,19 @@ impl DetectorService {
         {
             (saved.config_path.clone(), saved.skills_path.clone())
         } else {
-            let config_dir = home_dir.join(definition.config_dir);
+            let mut config_dir = home_dir.join(definition.config_dir);
+
+            // Prioritize default config_dir, but check alternatives if it doesn't exist
+            if !config_dir.exists() {
+                for alt in definition.alt_config_dirs {
+                    let alt_dir = home_dir.join(alt);
+                    if alt_dir.exists() {
+                        config_dir = alt_dir;
+                        break;
+                    }
+                }
+            }
+
             (config_dir.clone(), config_dir.join("skills"))
         };
 
