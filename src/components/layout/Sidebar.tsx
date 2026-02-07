@@ -72,6 +72,7 @@ export function Sidebar() {
             <li key={item.path} style={{ marginBottom: '2px' }}>
               <NavLink
                 to={item.path}
+                className={({ isActive }) => (isActive ? 'active' : '')}
                 style={({ isActive }) => ({
                   display: 'flex',
                   alignItems: 'center',
@@ -97,7 +98,7 @@ export function Sidebar() {
                 }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', opacity: 0.8 }}>
-                  {icons[item.icon]}
+                  {icons[item.icon as keyof typeof icons]}
                 </span>
                 <span>{t(item.labelKey)}</span>
               </NavLink>
@@ -105,26 +106,6 @@ export function Sidebar() {
           ))}
         </ul>
       </nav>
-
-      {/* Privacy Policy */}
-      <div
-        onClick={() => openUrl('https://example.com/privacy')}
-        style={{
-          padding: '8px 20px',
-          fontSize: '12px',
-          color: 'var(--muted-foreground)',
-          cursor: 'pointer',
-          transition: 'color 0.15s',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.color = 'var(--foreground)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.color = 'var(--muted-foreground)';
-        }}
-      >
-        {t("nav.privacyPolicy")}
-      </div>
 
       {/* Bottom section */}
       <div

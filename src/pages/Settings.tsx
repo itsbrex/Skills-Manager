@@ -473,6 +473,26 @@ export function Settings() {
                 }}>
                   {t("settings.appDescription")}
                 </div>
+                <div style={{ marginTop: '8px' }}>
+                  <a
+                    href={language === 'zh'
+                      ? "https://github.com/jiweiyeah/Skills-Manager/blob/main/PRIVACY_CN.md"
+                      : "https://github.com/jiweiyeah/Skills-Manager/blob/main/PRIVACY.md"
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      fontSize: '12px',
+                      color: 'var(--primary)',
+                      textDecoration: 'none',
+                      cursor: 'pointer',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                    onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                  >
+                    {t("settings.privacyPolicy")}
+                  </a>
+                </div>
               </div>
               <span style={{
                 fontSize: '13px',

@@ -126,6 +126,7 @@ export const zh = {
     checkUpdate: "检查更新",
     updateAvailable: "发现新版本",
     latestVersion: "当前已是最新版本",
+    privacyPolicy: "隐私政策",
   },
   editors: {
     vscode: "VS Code",

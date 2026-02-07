@@ -125,6 +125,7 @@ export const en = {
     checkUpdate: "Check for Updates",
     updateAvailable: "New version available",
     latestVersion: "You are on the latest version",
+    privacyPolicy: "Privacy Policy",
   },
   editors: {
     vscode: "VS Code",
