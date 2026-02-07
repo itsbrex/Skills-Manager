@@ -2,6 +2,9 @@ use crate::models::{DetectedEditor, EDITOR_DEFINITIONS};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 pub fn detect_editors() -> Vec<DetectedEditor> {
@@ -57,11 +60,23 @@ pub fn detect_editors() -> Vec<DetectedEditor> {
 }
 
 fn check_command_exists(cmd: &str) -> bool {
-    Command::new("which")
-        .arg(cmd)
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("where")
+            .arg(cmd)
+            .creation_flags(0x08000000)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new("which")
+            .arg(cmd)
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false)
+    }
 }
 
 fn find_app_path(app_name: &str) -> Option<String> {
@@ -97,6 +112,14 @@ fn extract_app_icon(app_path: &str) -> Option<String> {
     let plist_path = format!("{}/Contents/Info.plist", app_path);
 
     // Use defaults command to read CFBundleIconFile
+    #[cfg(target_os = "windows")]
+    let output = Command::new("defaults")
+        .args(["read", &plist_path, "CFBundleIconFile"])
+        .creation_flags(0x08000000)
+        .output()
+        .ok()?;
+
+    #[cfg(not(target_os = "windows"))]
     let output = Command::new("defaults")
         .args(["read", &plist_path, "CFBundleIconFile"])
         .output()
@@ -123,6 +146,18 @@ fn extract_app_icon(app_path: &str) -> Option<String> {
     let temp_png = format!("/tmp/editor_icon_{}.png", std::process::id());
 
     // Use sips to convert icns to PNG (32x32 for efficiency)
+    #[cfg(target_os = "windows")]
+    let sips_result = Command::new("sips")
+        .args([
+            "-s", "format", "png",
+            "-z", "64", "64",  // 64x64 for retina displays
+            &icns_path,
+            "--out", &temp_png,
+        ])
+        .creation_flags(0x08000000)
+        .output();
+
+    #[cfg(not(target_os = "windows"))]
     let sips_result = Command::new("sips")
         .args([
             "-s", "format", "png",
@@ -160,6 +195,9 @@ pub fn open_in_external_editor(editor_id: &str, path: &str) -> Result<(), String
     }
 
     let mut cmd = Command::new(parts[0]);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
+
     for part in parts.iter().skip(1) {
         cmd.arg(part);
     }

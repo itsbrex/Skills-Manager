@@ -58,14 +58,25 @@ impl DetectorService {
 
     pub fn check_cli_available(cli_command: &str) -> bool {
         #[cfg(target_os = "windows")]
-        let result = Command::new("where").arg(cli_command).output();
+        {
+            use std::os::windows::process::CommandExt;
+            let result = Command::new("where")
+                .arg(cli_command)
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .output();
+            match result {
+                Ok(output) => output.status.success(),
+                Err(_) => false,
+            }
+        }
 
         #[cfg(not(target_os = "windows"))]
-        let result = Command::new("which").arg(cli_command).output();
-
-        match result {
-            Ok(output) => output.status.success(),
-            Err(_) => false,
+        {
+            let result = Command::new("which").arg(cli_command).output();
+            match result {
+                Ok(output) => output.status.success(),
+                Err(_) => false,
+            }
         }
     }
 

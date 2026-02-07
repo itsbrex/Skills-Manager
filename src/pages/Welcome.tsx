@@ -13,7 +13,7 @@ import { AppConfig } from "@/types";
 type WizardStep = "welcome" | "tools" | "directory" | "import";
 
 interface WelcomeProps {
-  onComplete: () => void;
+  onComplete: () => Promise<void>;
 }
 
 export function Welcome({ onComplete }: WelcomeProps) {
@@ -45,11 +45,18 @@ export function Welcome({ onComplete }: WelcomeProps) {
     savePreferences();
   }, [language, theme]);
 
-  function goNext() {
+  async function goNext() {
     if (currentIndex < steps.length - 1) {
       setCurrentStep(steps[currentIndex + 1]);
     } else {
-      onComplete();
+      try {
+        await onComplete();
+      } catch (error) {
+        console.error("Failed to complete setup:", error);
+        // Alert user since we don't have toast here easily accessible without prop drilling
+        // or we could use window.alert as a fallback for critical failure
+        alert("Failed to complete setup: " + String(error));
+      }
     }
   }
 
@@ -71,7 +78,11 @@ export function Welcome({ onComplete }: WelcomeProps) {
     >
       {/* Draggable title bar */}
       <div
-        onMouseDown={() => getCurrentWindow().startDragging()}
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) {
+            getCurrentWindow().startDragging();
+          }
+        }}
         style={{
           height: '52px',
           flexShrink: 0,

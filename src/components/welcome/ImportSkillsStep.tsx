@@ -66,6 +66,7 @@ export function ImportSkillsStep({ onNext, onBack }: ImportSkillsStepProps) {
       return true;
     } catch (error) {
       console.error("Failed to import skills:", error);
+      alert("Failed to import skills: " + String(error));
       return false;
     } finally {
       setIsImporting(false);

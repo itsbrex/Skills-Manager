@@ -27,6 +27,7 @@ export function useInitialization() {
       setIsInitialized(true);
     } catch (error) {
       console.error("Failed to mark initialized:", error);
+      throw error;
     }
   }
 
