@@ -15,7 +15,7 @@ jobs:
             args: "--target aarch64-apple-darwin"
             rust_target: "aarch64-apple-darwin"
             bundle_path: "src-tauri/target/aarch64-apple-darwin/release/bundle/"
-          - platform: "macos-13" # Intel Mac
+          - platform: "macos-latest" # Intel Mac (Cross-compile from M1)
             args: "--target x86_64-apple-darwin"
             rust_target: "x86_64-apple-darwin"
             bundle_path: "src-tauri/target/x86_64-apple-darwin/release/bundle/"
@@ -41,6 +41,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust_target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri"
 
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
