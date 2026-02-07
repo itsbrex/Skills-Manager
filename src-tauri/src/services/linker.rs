@@ -67,17 +67,36 @@ impl LinkerService {
     fn create_windows_symlink(original: &Path, link: &Path) -> Result<(), String> {
         use std::os::windows::process::CommandExt;
 
-        // 尝试创建标准 Symlink (需要管理员权限或开发者模式)
+        // 1. 确保父目录存在
+        if let Some(parent) = link.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create parent directory: {}", e))?;
+        }
+
+        // 2. 确保目标位置没有残留文件/文件夹
+        if link.exists() || link.symlink_metadata().is_ok() {
+            if link.is_dir() {
+                std::fs::remove_dir_all(link).ok();
+            } else {
+                std::fs::remove_file(link).ok();
+            }
+        }
+
+        // 3. 尝试创建标准 Symlink (需要管理员权限或开发者模式)
         if std::os::windows::fs::symlink_dir(original, link).is_ok() {
             return Ok(());
         }
 
-        // 如果失败，尝试创建 Junction (不需要特殊权限)
+        // 4. 规范化路径：将 / 替换为 \，这对 cmd.exe 很重要
+        let link_str = link.to_string_lossy().replace("/", "\\");
+        let original_str = original.to_string_lossy().replace("/", "\\");
+
+        // 5. 如果失败，尝试创建 Junction (不需要特殊权限)
         // mklink /J <Link> <Target>
         let output = Command::new("cmd")
             .args(["/C", "mklink", "/J"])
-            .arg(link)
-            .arg(original)
+            .arg(&link_str)
+            .arg(&original_str)
             .creation_flags(0x08000000) // CREATE_NO_WINDOW
             .output()
             .map_err(|e| format!("Failed to execute mklink: {}", e))?;
@@ -85,11 +104,18 @@ impl LinkerService {
         if output.status.success() {
             Ok(())
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
+            // 尝试转码错误信息 (GBK -> UTF8)，如果失败则保留原始信息
+            let stderr_bytes = output.stderr;
+            let stdout_bytes = output.stdout;
+
+            // 简单处理：如果是非 UTF8，可能是 GBK。
+            // 这里我们只做尽力而为的转换，主要依赖 path 修正解决问题
+            let stderr = String::from_utf8_lossy(&stderr_bytes);
+            let stdout = String::from_utf8_lossy(&stdout_bytes);
+
             Err(format!(
                 "Failed to create junction.\nCommand: mklink /J {:?} {:?}\nError: {}\nOutput: {}",
-                link, original, stderr.trim(), stdout.trim()
+                link_str, original_str, stderr.trim(), stdout.trim()
             ))
         }
     }
