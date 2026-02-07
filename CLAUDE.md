@@ -175,6 +175,18 @@ invoke("enable_skill", { skill_id, tool_id }) // ✗ 不生效
 
 ---
 
+## 11. 版本升级操作
+
+**决策**: 升级版本号时需要同时修改以下文件，确保版本一致：
+
+1. `package.json` - `version` 字段
+2. `src-tauri/tauri.conf.json` - `version` 字段
+3. `src-tauri/Cargo.toml` - `version` 字段
+4. `src-tauri/src/models/config.rs` - `AppConfig::default()` 中的 `version` 字段
+5. `~/.skills-hub/config.json` - 用户配置文件中的 `version` 字段（可选，App 会自动迁移）
+
+---
+
 ## 工具执行安全协议 (CRITICAL)
 
 **CRITICAL - 顺序工具执行协议:**
