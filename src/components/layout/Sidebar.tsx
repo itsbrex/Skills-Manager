@@ -1,6 +1,10 @@
+import { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "@/i18n";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { checkUpdate } from "@/services/updater";
+import { UpdateInfo } from "@/types";
 
 const navItems = [
   { path: "/", labelKey: "nav.skills" as const, icon: "sparkles" },
@@ -30,6 +34,23 @@ const icons: Record<string, React.ReactNode> = {
 
 export function Sidebar() {
   const { t } = useTranslation();
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+
+  useEffect(() => {
+    checkUpdate().then((info) => {
+      if (info.has_update) {
+        setUpdateInfo(info);
+      }
+    }).catch((err) => {
+      console.warn("Failed to check for updates:", err);
+    });
+  }, []);
+
+  const handleUpdateClick = async () => {
+    if (updateInfo?.download_url) {
+      await openUrl(updateInfo.download_url);
+    }
+  };
 
   return (
     <aside
@@ -60,9 +81,37 @@ export function Sidebar() {
           fontWeight: 500,
           color: 'var(--muted-foreground)',
           letterSpacing: '0.01em',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
         }}
       >
-        Skills Manager
+        <span>Skills Manager</span>
+        {updateInfo?.has_update && (
+          <button
+            onClick={handleUpdateClick}
+            style={{
+              fontSize: '10px',
+              padding: '2px 8px',
+              backgroundColor: 'var(--primary)',
+              color: 'var(--primary-foreground)',
+              borderRadius: '999px',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              lineHeight: 1,
+              transition: 'opacity 0.2s',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+            title={`New version available: ${updateInfo.latest_version}`}
+          >
+            Update
+          </button>
+        )}
       </div>
       {/* Navigation */}
       <nav style={{ padding: '8px', flex: 1 }}>
