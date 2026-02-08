@@ -101,10 +101,18 @@ fn get_command_path(cmd: &str) -> Option<String> {
             .ok()
             .and_then(|output| {
                 if output.status.success() {
-                    String::from_utf8_lossy(&output.stdout)
+                    let output_str = String::from_utf8_lossy(&output.stdout);
+                    // On Windows, 'where' might return the shell script 'code' (no extension)
+                    // We should prioritize executables (.exe, .cmd, .bat)
+                    output_str
                         .lines()
-                        .next()
-                        .map(|s| s.trim().to_string())
+                        .map(|s| s.trim())
+                        .find(|s| {
+                            let lower = s.to_lowercase();
+                            lower.ends_with(".exe") || lower.ends_with(".cmd") || lower.ends_with(".bat")
+                        })
+                        .or_else(|| output_str.lines().map(|s| s.trim()).next())
+                        .map(|s| s.to_string())
                 } else {
                     None
                 }
