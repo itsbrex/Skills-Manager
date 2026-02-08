@@ -13,6 +13,7 @@ import { useTheme } from "@/hooks/useTheme";
 export function EditorPage() {
   const { t } = useTranslation();
   const { theme } = useTheme();
+  const isLinux = navigator.userAgent.includes("Linux");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const rootPath = searchParams.get("root") || "";
@@ -276,44 +277,46 @@ export function EditorPage() {
               {error}
             </div>
           ) : (
-            /*
-            <MonacoEditor
-              height="100%"
-              language={getLanguage(selectedPath)}
-              value={content}
-              onChange={(value) => setContent(value || "")}
-              onMount={(editor) => { editorRef.current = editor; }}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 14,
-                lineNumbers: "on",
-                wordWrap: "on",
-                wrappingStrategy: "advanced",
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-                tabSize: 2,
-                quickSuggestions: false,
-                suggestOnTriggerCharacters: false,
-                parameterHints: { enabled: false },
-              }}
-              theme={theme === "dark" ? "vs-dark" : "light"}
-            />
-            */
-            <textarea
-              style={{
-                width: "100%",
-                height: "100%",
-                padding: "10px",
-                fontFamily: "monospace",
-                resize: "none",
-                border: "none",
-                outline: "none",
-                backgroundColor: "var(--background)",
-                color: "var(--foreground)",
-              }}
-              value={content}
-              readOnly
-            />
+            isLinux ? (
+              // Temporary fallback for Linux debugging
+              <textarea
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  padding: "10px",
+                  fontFamily: "monospace",
+                  resize: "none",
+                  border: "none",
+                  outline: "none",
+                  backgroundColor: "var(--background)",
+                  color: "var(--foreground)",
+                }}
+                value={content}
+                readOnly
+              />
+            ) : (
+              <MonacoEditor
+                height="100%"
+                language={getLanguage(selectedPath)}
+                value={content}
+                onChange={(value) => setContent(value || "")}
+                onMount={(editor) => { editorRef.current = editor; }}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  lineNumbers: "on",
+                  wordWrap: "on",
+                  wrappingStrategy: "advanced",
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 2,
+                  quickSuggestions: false,
+                  suggestOnTriggerCharacters: false,
+                  parameterHints: { enabled: false },
+                }}
+                theme={theme === "dark" ? "vs-dark" : "light"}
+              />
+            )
           )}
         </div>
       </div>
