@@ -201,13 +201,23 @@ fn find_app_path(app_name: &str) -> Option<String> {
 fn extract_app_icon(app_path: &str) -> Option<String> {
     #[cfg(target_os = "windows")]
     {
+        // Special handling for VS Code: ensure we try to get the icon from the executable, not the batch script
+        let mut path_str = app_path.to_string();
+        if path_str.to_lowercase().ends_with("\\bin\\code.cmd") {
+             // Try to find Code.exe in the parent directory of bin
+             let candidate = path_str.replace("\\bin\\code.cmd", "\\Code.exe");
+             if Path::new(&candidate).exists() {
+                 path_str = candidate;
+             }
+        }
+
         let script = format!(
             r#"
             try {{
                 Add-Type -AssemblyName System.Drawing
                 $path = '{}'
                 if (-not (Test-Path -Path $path)) {{ exit 1 }}
-                
+
                 $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($path)
                 if ($icon) {{
                     $bitmap = $icon.ToBitmap()
@@ -349,6 +359,14 @@ pub fn open_in_external_editor(editor_id: &str, path: &str) -> Result<(), String
         cmd.arg(part);
     }
     cmd.arg(path);
+
+    // Clean up environment variables that might cause issues in AppImage environments
+    #[cfg(target_os = "linux")]
+    {
+        cmd.env_remove("PYTHONHOME");
+        cmd.env_remove("PYTHONPATH");
+        cmd.env_remove("LD_LIBRARY_PATH");
+    }
 
     cmd.spawn().map_err(|e| e.to_string())?;
     Ok(())
