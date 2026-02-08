@@ -8,6 +8,8 @@ import { FileNode } from "@/types";
 import { useTranslation } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
 
+// Helper for timeout removed as per user request
+
 export function EditorPage() {
   const { t } = useTranslation();
   const { theme } = useTheme();
@@ -29,49 +31,64 @@ export function EditorPage() {
 
   // Load file tree
   useEffect(() => {
+    console.log("[Editor] useEffect check - rootPath:", rootPath);
     if (!rootPath) {
+      console.log("[Editor] No rootPath, setting loading false");
       setLoading(false);
       setError("No root path specified");
       return;
     }
 
     async function loadTree() {
+      console.log("[Editor] Starting loadTree...", rootPath);
       try {
         const tree = await invoke<FileNode>("read_directory_tree", { path: rootPath });
+        console.log("[Editor] Tree loaded successfully", tree);
         setFileTree(tree);
 
         // If no file selected, find first .md file
         if (!selectedPath && tree.children) {
           const firstMd = findFirstFile(tree, ".md") || findFirstFile(tree);
+          console.log("[Editor] Auto-selecting file:", firstMd);
           if (firstMd) {
             setSelectedPath(firstMd);
           }
         }
       } catch (err) {
+        console.error("[Editor] Tree load error:", err);
         setError(String(err));
       }
     }
     loadTree();
-  }, [rootPath]); // Removed selectedPath dependency to prevent double-fetch
+  }, [rootPath]);
 
   // Load file content
   useEffect(() => {
+    console.log("[Editor] useEffect check - selectedPath:", selectedPath);
     if (!rootPath || !selectedPath) {
+      console.log("[Editor] Missing path, setting loading false");
       setLoading(false);
       return;
     }
 
     async function loadFile() {
+      console.log("[Editor] Starting loadFile...", selectedPath);
       setLoading(true);
       try {
         const fullPath = selectedPath === "." ? rootPath : `${rootPath}/${selectedPath}`;
+        console.log("[Editor] Invoking read_file with:", fullPath);
+
         const fileContent = await invoke<string>("read_file", { path: fullPath });
+
+        console.log("[Editor] File content loaded, length:", fileContent.length);
         setContent(fileContent);
         setOriginalContent(fileContent);
         setError(null);
       } catch (err) {
+        console.error("[Editor] File load error:", err);
         setError(String(err));
       } finally {
+        console.log("[Editor] loadFile finally - setting loading false");
         setLoading(false);
       }
     }

@@ -90,7 +90,17 @@ fn build_tree(path: &Path, root: &Path) -> Result<FileNode, String> {
 }
 
 pub fn read_file_content(path: &str) -> Result<String, String> {
-    fs::read_to_string(path).map_err(|e| format!("Failed to read file: {}", e))
+    println!("[Rust] Reading file content: {}", path);
+    match fs::read_to_string(path) {
+        Ok(content) => {
+            println!("[Rust] Read success, {} bytes", content.len());
+            Ok(content)
+        }
+        Err(e) => {
+            println!("[Rust] Read failed: {}", e);
+            Err(format!("Failed to read file: {}", e))
+        }
+    }
 }
 
 pub fn write_file_content(path: &str, content: &str) -> Result<(), String> {
