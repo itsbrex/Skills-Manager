@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { AppConfig, UserPreferences, DetectedEditor, UpdateInfo } from "@/types";
 import { checkUpdate } from "@/services/updater";
 import { useTranslation, Language } from "@/i18n";
@@ -149,7 +150,9 @@ export function Settings() {
 
   const handleCheckUpdate = async () => {
     if (updateInfo) {
-      window.open(updateInfo.download_url, '_blank');
+      if (updateInfo.download_url) {
+        await openUrl(updateInfo.download_url);
+      }
       return;
     }
 

@@ -91,14 +91,14 @@ export function Sidebar() {
           <button
             onClick={handleUpdateClick}
             style={{
-              fontSize: '10px',
-              padding: '2px 8px',
+              fontSize: '11px',
+              padding: '4px 10px',
               backgroundColor: 'var(--primary)',
               color: 'var(--primary-foreground)',
               borderRadius: '999px',
               border: 'none',
               cursor: 'pointer',
-              fontWeight: 600,
+              fontWeight: 500,
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
