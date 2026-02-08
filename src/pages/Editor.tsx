@@ -276,6 +276,7 @@ export function EditorPage() {
               {error}
             </div>
           ) : (
+            /*
             <MonacoEditor
               height="100%"
               language={getLanguage(selectedPath)}
@@ -296,6 +297,22 @@ export function EditorPage() {
                 parameterHints: { enabled: false },
               }}
               theme={theme === "dark" ? "vs-dark" : "light"}
+            />
+            */
+            <textarea
+              style={{
+                width: "100%",
+                height: "100%",
+                padding: "10px",
+                fontFamily: "monospace",
+                resize: "none",
+                border: "none",
+                outline: "none",
+                backgroundColor: "var(--background)",
+                color: "var(--foreground)",
+              }}
+              value={content}
+              readOnly
             />
           )}
         </div>
