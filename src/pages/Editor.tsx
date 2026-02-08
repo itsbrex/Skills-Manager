@@ -278,21 +278,25 @@ export function EditorPage() {
             </div>
           ) : (
             isLinux ? (
-              // Temporary fallback for Linux debugging
+              // Simple textarea fallback for Linux to avoid Monaco worker issues
               <textarea
                 style={{
                   width: "100%",
                   height: "100%",
-                  padding: "10px",
-                  fontFamily: "monospace",
+                  padding: "20px",
+                  fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+                  fontSize: "14px",
+                  lineHeight: "1.5",
                   resize: "none",
                   border: "none",
                   outline: "none",
                   backgroundColor: "var(--background)",
                   color: "var(--foreground)",
+                  tabSize: 2,
                 }}
                 value={content}
-                readOnly
+                onChange={(e) => setContent(e.target.value)}
+                spellCheck={false}
               />
             ) : (
               <MonacoEditor
