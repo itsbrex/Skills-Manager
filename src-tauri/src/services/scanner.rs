@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -26,19 +27,23 @@ impl ScannerService {
             return Ok(Vec::new());
         }
 
-        let entries = fs::read_dir(skills_dir)
-            .map_err(|e| format!("Failed to read skills directory: {}", e))?;
+        let entries: Vec<_> = fs::read_dir(skills_dir)
+            .map_err(|e| format!("Failed to read skills directory: {}", e))?
+            .flatten()
+            .collect();
 
-        let mut skills = Vec::new();
-
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if let Ok(skill) = Self::load_skill_with_config(&path, config) {
-                    skills.push(skill);
+        // Use rayon for parallel processing of skills
+        // This significantly speeds up scanning on Windows where file I/O (especially canonicalize) is slow
+        let skills: Vec<Skill> = entries.par_iter()
+            .filter_map(|entry| {
+                let path = entry.path();
+                if path.is_dir() {
+                    Self::load_skill_with_config(&path, config).ok()
+                } else {
+                    None
                 }
-            }
-        }
+            })
+            .collect();
 
         Ok(skills)
     }
@@ -235,7 +240,7 @@ impl ScannerService {
             }
         }
 
-        // 去重（按 skill id）
+        // De-duplicate (by skill id)
         all_skills.sort_by(|a, b| a.id.cmp(&b.id));
         all_skills.dedup_by(|a, b| a.id == b.id);
 

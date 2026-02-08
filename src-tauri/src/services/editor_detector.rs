@@ -2,6 +2,9 @@ use crate::models::{DetectedEditor, EDITOR_DEFINITIONS};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::env;
+use rayon::prelude::*; // Parallel iterator
+
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
@@ -9,8 +12,10 @@ use std::os::windows::process::CommandExt;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 pub fn detect_editors() -> Vec<DetectedEditor> {
+    // Use parallel iterator to speed up detection, especially important on Windows
+    // where icon extraction (PowerShell) and process spawning are slow
     EDITOR_DEFINITIONS
-        .iter()
+        .par_iter()
         .filter_map(|def| {
             // Check command line tool
             let cmd_path = if !def.detect_cmd.is_empty() {
@@ -18,7 +23,7 @@ pub fn detect_editors() -> Vec<DetectedEditor> {
             } else {
                 None
             };
-            
+
             let cmd_exists = cmd_path.is_some();
 
             // Check macOS app and get path
@@ -31,7 +36,7 @@ pub fn detect_editors() -> Vec<DetectedEditor> {
 
             #[cfg(not(target_os = "macos"))]
             let app_path: Option<String> = None;
-            
+
             // Determine final path for icon extraction
             let effective_path = if cfg!(target_os = "windows") {
                 cmd_path.clone().or(app_path.clone())
@@ -91,38 +96,47 @@ pub fn detect_editors() -> Vec<DetectedEditor> {
 }
 
 fn get_command_path(cmd: &str) -> Option<String> {
+    // Optimized: Check PATH environment variable first
+    if let Ok(path_var) = env::var("PATH") {
+        for path_str in env::split_paths(&path_var) {
+
+            #[cfg(target_os = "windows")]
+            {
+                // Check with extensions on Windows
+                let extensions = [".exe", ".cmd", ".bat"];
+
+                // Also check without extension if it might be a full name
+                let direct = path_str.join(cmd);
+                if direct.is_file() {
+                     return Some(direct.to_string_lossy().to_string());
+                }
+
+                for ext in extensions {
+                    let path_with_ext = path_str.join(format!("{}{}", cmd, ext));
+                    if path_with_ext.is_file() {
+                        return Some(path_with_ext.to_string_lossy().to_string());
+                    }
+                }
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                let full_path = path_str.join(cmd);
+                if full_path.is_file() {
+                     use std::os::unix::fs::PermissionsExt;
+                     if let Ok(metadata) = full_path.metadata() {
+                        if metadata.permissions().mode() & 0o111 != 0 {
+                            return Some(full_path.to_string_lossy().to_string());
+                        }
+                     }
+                }
+            }
+        }
+    }
+
     #[cfg(target_os = "windows")]
     {
-        // First try standard 'where' command
-        let where_result = Command::new("where")
-            .arg(cmd)
-            .creation_flags(0x08000000)
-            .output()
-            .ok()
-            .and_then(|output| {
-                if output.status.success() {
-                    let output_str = String::from_utf8_lossy(&output.stdout);
-                    // On Windows, 'where' might return the shell script 'code' (no extension)
-                    // We should prioritize executables (.exe, .cmd, .bat)
-                    output_str
-                        .lines()
-                        .map(|s| s.trim())
-                        .find(|s| {
-                            let lower = s.to_lowercase();
-                            lower.ends_with(".exe") || lower.ends_with(".cmd") || lower.ends_with(".bat")
-                        })
-                        .or_else(|| output_str.lines().map(|s| s.trim()).next())
-                        .map(|s| s.to_string())
-                } else {
-                    None
-                }
-            });
-
-        if where_result.is_some() {
-            return where_result;
-        }
-
-        // Fallback: Check common installation locations
+        // Fallback: Check common installation locations (for VS Code, etc.)
         if cmd == "code" {
             // Check User Install: %LOCALAPPDATA%\Programs\Microsoft VS Code\bin\code.cmd
             if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
@@ -146,6 +160,33 @@ fn get_command_path(cmd: &str) -> Option<String> {
                     return Some(path.to_string_lossy().to_string());
                 }
             }
+        }
+
+        // Use 'where' as last resort
+        let where_result = Command::new("where")
+            .arg(cmd)
+            .creation_flags(0x08000000)
+            .output()
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    let output_str = String::from_utf8_lossy(&output.stdout);
+                    output_str
+                        .lines()
+                        .map(|s| s.trim())
+                        .find(|s| {
+                            let lower = s.to_lowercase();
+                            lower.ends_with(".exe") || lower.ends_with(".cmd") || lower.ends_with(".bat")
+                        })
+                        .or_else(|| output_str.lines().map(|s| s.trim()).next())
+                        .map(|s| s.to_string())
+                } else {
+                    None
+                }
+            });
+
+        if where_result.is_some() {
+            return where_result;
         }
 
         None
@@ -288,7 +329,7 @@ fn extract_app_icon(app_path: &str) -> Option<String> {
         let sips_result = Command::new("sips")
             .args([
                 "-s", "format", "png",
-                "-z", "64", "64", 
+                "-z", "64", "64",
                 &icns_path,
                 "--out", &temp_png,
             ])

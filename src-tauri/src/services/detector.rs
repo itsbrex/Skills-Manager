@@ -1,4 +1,5 @@
 use std::process::Command;
+use std::env;
 
 use crate::models::{Tool, ToolConfig, ToolDefinition, SUPPORTED_TOOLS};
 use crate::services::ConfigManager;
@@ -69,6 +70,49 @@ impl DetectorService {
     }
 
     pub fn check_cli_available(cli_command: &str) -> bool {
+        // Optimized: Check PATH environment variable directly instead of spawning a process
+        if let Ok(path_var) = env::var("PATH") {
+            for path_str in env::split_paths(&path_var) {
+                let full_path = path_str.join(cli_command);
+
+                #[cfg(target_os = "windows")]
+                {
+                    // On Windows, checking extensionless file isn't enough, we need to check extensions
+                    // Only check extensions if the command doesn't already have one
+                    if full_path.extension().is_some() && full_path.is_file() {
+                        return true;
+                    }
+
+                    let extensions = [".exe", ".cmd", ".bat"];
+                    for ext in extensions {
+                        let path_with_ext = path_str.join(format!("{}{}", cli_command, ext));
+                        if path_with_ext.is_file() {
+                            return true;
+                        }
+                    }
+                }
+
+                #[cfg(not(target_os = "windows"))]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    if full_path.is_file() {
+                        // On Unix, check if executable bit is set
+                        if let Ok(metadata) = full_path.metadata() {
+                            if metadata.permissions().mode() & 0o111 != 0 {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback to process spawning if PATH check fails (unlikely but safe)
+        // This is kept for edge cases where the tool might be available via aliases or other shell mechanisms
+        Self::check_cli_available_fallback(cli_command)
+    }
+
+    fn check_cli_available_fallback(cli_command: &str) -> bool {
         #[cfg(target_os = "windows")]
         {
             use std::os::windows::process::CommandExt;
