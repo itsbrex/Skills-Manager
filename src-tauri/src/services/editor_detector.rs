@@ -15,14 +15,29 @@ pub fn detect_editors() -> Vec<DetectedEditor> {
                 (true, None)
             } else {
                 // Check command line tool first
-                let cmd_exists = !def.detect_cmd.is_empty() && check_command_exists(def.detect_cmd);
+                let cmd_path = if !def.detect_cmd.is_empty() {
+                    get_command_path(def.detect_cmd)
+                } else {
+                    None
+                };
+                
+                let cmd_exists = cmd_path.is_some();
+
                 // Check macOS app and get path
                 let app_path = if !def.app_name.is_empty() {
                     find_app_path(def.app_name)
                 } else {
                     None
                 };
-                (cmd_exists || app_path.is_some(), app_path)
+                
+                // Determine final path for icon extraction
+                let effective_path = if cfg!(target_os = "windows") {
+                    cmd_path.clone().or(app_path.clone())
+                } else {
+                    app_path.clone()
+                };
+
+                (cmd_exists || app_path.is_some(), effective_path)
             };
 
             if available {
@@ -59,23 +74,41 @@ pub fn detect_editors() -> Vec<DetectedEditor> {
         .collect()
 }
 
-fn check_command_exists(cmd: &str) -> bool {
+fn get_command_path(cmd: &str) -> Option<String> {
     #[cfg(target_os = "windows")]
     {
         Command::new("where")
             .arg(cmd)
             .creation_flags(0x08000000)
             .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    String::from_utf8_lossy(&output.stdout)
+                        .lines()
+                        .next()
+                        .map(|s| s.trim().to_string())
+                } else {
+                    None
+                }
+            })
     }
     #[cfg(not(target_os = "windows"))]
     {
         Command::new("which")
             .arg(cmd)
             .output()
-            .map(|output| output.status.success())
-            .unwrap_or(false)
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    String::from_utf8_lossy(&output.stdout)
+                        .lines()
+                        .next()
+                        .map(|s| s.trim().to_string())
+                } else {
+                    None
+                }
+            })
     }
 }
 
@@ -108,75 +141,93 @@ fn find_app_path(app_name: &str) -> Option<String> {
 }
 
 fn extract_app_icon(app_path: &str) -> Option<String> {
-    // Read Info.plist to get icon file name
-    let plist_path = format!("{}/Contents/Info.plist", app_path);
-
-    // Use defaults command to read CFBundleIconFile
     #[cfg(target_os = "windows")]
-    let output = Command::new("defaults")
-        .args(["read", &plist_path, "CFBundleIconFile"])
-        .creation_flags(0x08000000)
-        .output()
-        .ok()?;
+    {
+        let script = format!(
+            r#"
+            Add-Type -AssemblyName System.Drawing
+            $icon = [System.Drawing.Icon]::ExtractAssociatedIcon('{}')
+            if ($icon) {{
+                $bitmap = $icon.ToBitmap()
+                $stream = New-Object System.IO.MemoryStream
+                $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
+                $base64 = [Convert]::ToBase64String($stream.ToArray())
+                Write-Output $base64
+            }}
+            "#,
+            app_path.replace("'", "''")
+        );
+
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &script])
+            .creation_flags(0x08000000)
+            .output()
+            .ok()?;
+
+        if !output.status.success() {
+            return None;
+        }
+
+        let base64_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if base64_str.is_empty() {
+            None
+        } else {
+            Some(format!("data:image/png;base64,{}", base64_str))
+        }
+    }
 
     #[cfg(not(target_os = "windows"))]
-    let output = Command::new("defaults")
-        .args(["read", &plist_path, "CFBundleIconFile"])
-        .output()
-        .ok()?;
+    {
+        // Read Info.plist to get icon file name
+        let plist_path = format!("{}/Contents/Info.plist", app_path);
 
-    if !output.status.success() {
-        return None;
+        // Use defaults command to read CFBundleIconFile
+        let output = Command::new("defaults")
+            .args(["read", &plist_path, "CFBundleIconFile"])
+            .output()
+            .ok()?;
+
+        if !output.status.success() {
+            return None;
+        }
+
+        let icon_name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let icon_name = if icon_name.ends_with(".icns") {
+            icon_name
+        } else {
+            format!("{}.icns", icon_name)
+        };
+
+        let icns_path = format!("{}/Contents/Resources/{}", app_path, icon_name);
+
+        if !Path::new(&icns_path).exists() {
+            return None;
+        }
+
+        // Create temp file for PNG output
+        let temp_png = format!("/tmp/editor_icon_{}.png", std::process::id());
+
+        // Use sips to convert icns to PNG (64x64 for retina displays)
+        let sips_result = Command::new("sips")
+            .args([
+                "-s", "format", "png",
+                "-z", "64", "64", 
+                &icns_path,
+                "--out", &temp_png,
+            ])
+            .output();
+
+        if sips_result.is_err() || !sips_result.as_ref().unwrap().status.success() {
+            return None;
+        }
+
+        // Read PNG and convert to base64
+        let png_data = fs::read(&temp_png).ok()?;
+        let _ = fs::remove_file(&temp_png);
+
+        let base64_data = BASE64.encode(&png_data);
+        Some(format!("data:image/png;base64,{}", base64_data))
     }
-
-    let icon_name = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let icon_name = if icon_name.ends_with(".icns") {
-        icon_name
-    } else {
-        format!("{}.icns", icon_name)
-    };
-
-    let icns_path = format!("{}/Contents/Resources/{}", app_path, icon_name);
-
-    if !Path::new(&icns_path).exists() {
-        return None;
-    }
-
-    // Create temp file for PNG output
-    let temp_png = format!("/tmp/editor_icon_{}.png", std::process::id());
-
-    // Use sips to convert icns to PNG (32x32 for efficiency)
-    #[cfg(target_os = "windows")]
-    let sips_result = Command::new("sips")
-        .args([
-            "-s", "format", "png",
-            "-z", "64", "64",  // 64x64 for retina displays
-            &icns_path,
-            "--out", &temp_png,
-        ])
-        .creation_flags(0x08000000)
-        .output();
-
-    #[cfg(not(target_os = "windows"))]
-    let sips_result = Command::new("sips")
-        .args([
-            "-s", "format", "png",
-            "-z", "64", "64",  // 64x64 for retina displays
-            &icns_path,
-            "--out", &temp_png,
-        ])
-        .output();
-
-    if sips_result.is_err() || !sips_result.as_ref().unwrap().status.success() {
-        return None;
-    }
-
-    // Read PNG and convert to base64
-    let png_data = fs::read(&temp_png).ok()?;
-    let _ = fs::remove_file(&temp_png);
-
-    let base64_data = BASE64.encode(&png_data);
-    Some(format!("data:image/png;base64,{}", base64_data))
 }
 
 pub fn open_in_external_editor(editor_id: &str, path: &str) -> Result<(), String> {
