@@ -74,6 +74,12 @@ fn build_tree(path: &Path, root: &Path) -> Result<FileNode, String> {
             children: Some(children),
         })
     } else {
+        // Ensure it is a regular file (not a pipe, socket, block device, etc.)
+        // This is critical on Linux where reading a named pipe can block indefinitely
+        if !path.is_file() {
+            return Err("Not a regular file".to_string());
+        }
+
         Ok(FileNode {
             name,
             path: relative_path,

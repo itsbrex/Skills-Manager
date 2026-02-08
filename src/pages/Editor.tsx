@@ -52,7 +52,7 @@ export function EditorPage() {
       }
     }
     loadTree();
-  }, [rootPath, selectedPath]);
+  }, [rootPath]); // Removed selectedPath dependency to prevent double-fetch
 
   // Load file content
   useEffect(() => {
