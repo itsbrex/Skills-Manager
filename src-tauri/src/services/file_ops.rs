@@ -45,7 +45,15 @@ fn build_tree(path: &Path, root: &Path) -> Result<FileNode, String> {
             .filter(|entry| {
                 let name = entry.file_name();
                 let name_str = name.to_string_lossy();
-                !name_str.starts_with('.')
+                // Skip symlinks to avoid recursion loops and issues with external paths
+                let is_symlink = entry.file_type().map(|ft| ft.is_symlink()).unwrap_or(false);
+
+                !is_symlink &&
+                !name_str.starts_with('.') &&
+                name_str != "node_modules" &&
+                name_str != "target" &&
+                name_str != "dist" &&
+                name_str != "build"
             })
             .filter_map(|entry| build_tree(&entry.path(), root).ok())
             .collect();

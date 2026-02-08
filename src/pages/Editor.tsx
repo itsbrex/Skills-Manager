@@ -29,7 +29,11 @@ export function EditorPage() {
 
   // Load file tree
   useEffect(() => {
-    if (!rootPath) return;
+    if (!rootPath) {
+      setLoading(false);
+      setError("No root path specified");
+      return;
+    }
 
     async function loadTree() {
       try {
