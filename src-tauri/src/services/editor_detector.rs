@@ -93,7 +93,8 @@ pub fn detect_editors() -> Vec<DetectedEditor> {
 fn get_command_path(cmd: &str) -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        Command::new("where")
+        // First try standard 'where' command
+        let where_result = Command::new("where")
             .arg(cmd)
             .creation_flags(0x08000000)
             .output()
@@ -107,7 +108,39 @@ fn get_command_path(cmd: &str) -> Option<String> {
                 } else {
                     None
                 }
-            })
+            });
+
+        if where_result.is_some() {
+            return where_result;
+        }
+
+        // Fallback: Check common installation locations
+        if cmd == "code" {
+            // Check User Install: %LOCALAPPDATA%\Programs\Microsoft VS Code\bin\code.cmd
+            if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+                let path = Path::new(&local_app_data)
+                    .join("Programs")
+                    .join("Microsoft VS Code")
+                    .join("bin")
+                    .join("code.cmd");
+                if path.exists() {
+                    return Some(path.to_string_lossy().to_string());
+                }
+            }
+
+            // Check System Install: %ProgramFiles%\Microsoft VS Code\bin\code.cmd
+            if let Ok(program_files) = std::env::var("ProgramFiles") {
+                let path = Path::new(&program_files)
+                    .join("Microsoft VS Code")
+                    .join("bin")
+                    .join("code.cmd");
+                if path.exists() {
+                    return Some(path.to_string_lossy().to_string());
+                }
+            }
+        }
+
+        None
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -277,9 +310,17 @@ pub fn open_in_external_editor(editor_id: &str, path: &str) -> Result<(), String
         return Err("Invalid open command".to_string());
     }
 
-    let mut cmd = Command::new(parts[0]);
+    // Try to resolve absolute path for the command
+    let cmd_program = parts[0];
+    let resolved_program = get_command_path(cmd_program).unwrap_or_else(|| cmd_program.to_string());
+
+    let mut cmd = Command::new(resolved_program);
     #[cfg(target_os = "windows")]
-    cmd.creation_flags(0x08000000);
+    {
+        if editor_id != "terminal" {
+            cmd.creation_flags(0x08000000);
+        }
+    }
 
     for part in parts.iter().skip(1) {
         cmd.arg(part);

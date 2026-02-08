@@ -40,6 +40,10 @@ Download the latest installer for your operating system from the **[Releases Pag
 | **Windows** | `.msi` / `.exe` |
 | **Linux** | `.deb` / `.AppImage` / `.rpm`|
 
+## ⚠️ Windows Important Note
+
+If you encounter permission issues when syncing skills (symbolic link creation errors) or detection issues, please try running the application as **Administrator**. This is often required on Windows to create symbolic links unless Developer Mode is enabled.
+
 ## 🚀 Getting Started
 
 1. **Install**: Run the installer for your platform.
