@@ -314,7 +314,22 @@ pub fn open_in_external_editor(editor_id: &str, path: &str) -> Result<(), String
     let cmd_program = parts[0];
     let resolved_program = get_command_path(cmd_program).unwrap_or_else(|| cmd_program.to_string());
 
-    let mut cmd = Command::new(resolved_program);
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let lower = resolved_program.to_lowercase();
+        if lower.ends_with(".cmd") || lower.ends_with(".bat") {
+            let mut c = Command::new("cmd");
+            c.arg("/C");
+            c.arg(&resolved_program);
+            c
+        } else {
+            Command::new(&resolved_program)
+        }
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let mut cmd = Command::new(&resolved_program);
+
     #[cfg(target_os = "windows")]
     {
         if editor_id != "terminal" {
