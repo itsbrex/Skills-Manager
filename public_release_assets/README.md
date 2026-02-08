@@ -46,6 +46,16 @@ Download the latest installer for your operating system from the **[Releases Pag
 2. **Setup**: On first launch, the app will guide you to select your skills storage directory.
 3. **Sync**: The app automatically detects installed AI tools (like Claude Code) and links your skills.
 
+## ❗ Linux Troubleshooting
+
+If you encounter a **blank white screen** when launching the `.AppImage` on Linux (especially in virtual machines like VMware/VirtualBox), it is likely a WebKitGTK hardware acceleration issue.
+
+Please run the application from the terminal with the following command:
+
+```bash
+WEBKIT_DISABLE_COMPOSITING_MODE=1 ./Skills-Manager_1.0.1_amd64.AppImage
+```
+
 ## 🛠️ Technology Stack
 
 Designed for developers who care about performance and stability:

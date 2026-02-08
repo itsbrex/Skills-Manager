@@ -46,6 +46,16 @@
 2. **设置**：首次启动时，应用会引导您选择或创建技能存储目录。
 3. **同步**：应用会自动检测已安装的 AI 工具（如 Claude Code）并建立skills链接。
 
+## ❗ Linux 常见问题 (Troubleshooting)
+
+如果您在 Linux（特别是虚拟机环境，如 VMware/VirtualBox）运行 `.AppImage` 时遇到**白屏**问题，通常是 WebKitGTK 硬件加速导致的。
+
+请尝试在终端中使用以下命令启动：
+
+```bash
+WEBKIT_DISABLE_COMPOSITING_MODE=1 ./Skills-Manager_1.0.1_amd64.AppImage
+```
+
 ## 🛠️ 技术栈
 
 专为追求性能和稳定性的开发者打造：

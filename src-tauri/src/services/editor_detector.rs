@@ -5,55 +5,71 @@ use std::process::Command;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
+#[cfg(target_os = "macos")]
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 pub fn detect_editors() -> Vec<DetectedEditor> {
     EDITOR_DEFINITIONS
         .iter()
         .filter_map(|def| {
-            let (available, app_path) = if def.always_available {
-                (true, None)
+            // Check command line tool
+            let cmd_path = if !def.detect_cmd.is_empty() {
+                get_command_path(def.detect_cmd)
             } else {
-                // Check command line tool first
-                let cmd_path = if !def.detect_cmd.is_empty() {
-                    get_command_path(def.detect_cmd)
-                } else {
-                    None
-                };
-                
-                let cmd_exists = cmd_path.is_some();
+                None
+            };
+            
+            let cmd_exists = cmd_path.is_some();
 
-                // Check macOS app and get path
-                let app_path = if !def.app_name.is_empty() {
-                    find_app_path(def.app_name)
-                } else {
-                    None
-                };
-                
-                // Determine final path for icon extraction
-                let effective_path = if cfg!(target_os = "windows") {
-                    cmd_path.clone().or(app_path.clone())
-                } else {
-                    app_path.clone()
-                };
-
-                (cmd_exists || app_path.is_some(), effective_path)
+            // Check macOS app and get path
+            #[cfg(target_os = "macos")]
+            let app_path = if !def.app_name.is_empty() {
+                find_app_path(def.app_name)
+            } else {
+                None
             };
 
+            #[cfg(not(target_os = "macos"))]
+            let app_path: Option<String> = None;
+            
+            // Determine final path for icon extraction
+            let effective_path = if cfg!(target_os = "windows") {
+                cmd_path.clone().or(app_path.clone())
+            } else {
+                app_path.clone()
+            };
+
+            let available = def.always_available || cmd_exists || app_path.is_some();
+
             if available {
-                // Try to extract icon from app bundle
-                let icon_data = app_path
+                // Try to extract icon from app bundle or executable
+                let icon_data = effective_path
                     .as_ref()
                     .and_then(|p| extract_app_icon(p))
                     .or_else(|| {
-                        // For always_available system apps, try to get from /System/Applications
+                        // For always_available system apps, try to get from system locations if not found above
                         if def.always_available && !def.id.is_empty() && def.id != "builtin" {
-                            let system_app = match def.id {
-                                "terminal" => Some("/System/Applications/Utilities/Terminal.app"),
-                                "finder" => Some("/System/Library/CoreServices/Finder.app"),
-                                _ => None,
-                            };
-                            system_app.and_then(|p| extract_app_icon(p))
+                            #[cfg(target_os = "macos")]
+                            {
+                                let system_app = match def.id {
+                                    "terminal" => Some("/System/Applications/Utilities/Terminal.app"),
+                                    "finder" => Some("/System/Library/CoreServices/Finder.app"),
+                                    _ => None,
+                                };
+                                system_app.and_then(|p| extract_app_icon(p))
+                            }
+                            #[cfg(target_os = "windows")]
+                            {
+                                // On Windows, try to find standard paths if detection failed
+                                let system_app = match def.id {
+                                    "terminal" => Some("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
+                                    "finder" => Some("C:\\Windows\\explorer.exe"),
+                                    _ => None,
+                                };
+                                system_app.and_then(|p| extract_app_icon(p))
+                            }
+                            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+                            { None }
                         } else {
                             None
                         }
@@ -112,6 +128,7 @@ fn get_command_path(cmd: &str) -> Option<String> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn find_app_path(app_name: &str) -> Option<String> {
     // Check /Applications folder
     let app_path = format!("/Applications/{}.app", app_name);
@@ -145,14 +162,23 @@ fn extract_app_icon(app_path: &str) -> Option<String> {
     {
         let script = format!(
             r#"
-            Add-Type -AssemblyName System.Drawing
-            $icon = [System.Drawing.Icon]::ExtractAssociatedIcon('{}')
-            if ($icon) {{
-                $bitmap = $icon.ToBitmap()
-                $stream = New-Object System.IO.MemoryStream
-                $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
-                $base64 = [Convert]::ToBase64String($stream.ToArray())
-                Write-Output $base64
+            try {{
+                Add-Type -AssemblyName System.Drawing
+                $path = '{}'
+                if (-not (Test-Path -Path $path)) {{ exit 1 }}
+                
+                $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($path)
+                if ($icon) {{
+                    $bitmap = $icon.ToBitmap()
+                    $stream = New-Object System.IO.MemoryStream
+                    $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
+                    $base64 = [Convert]::ToBase64String($stream.ToArray())
+                    Write-Output $base64
+                }} else {{
+                    exit 1
+                }}
+            }} catch {{
+                exit 1
             }}
             "#,
             app_path.replace("'", "''")
@@ -176,7 +202,7 @@ fn extract_app_icon(app_path: &str) -> Option<String> {
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     {
         // Read Info.plist to get icon file name
         let plist_path = format!("{}/Contents/Info.plist", app_path);
@@ -227,6 +253,12 @@ fn extract_app_icon(app_path: &str) -> Option<String> {
 
         let base64_data = BASE64.encode(&png_data);
         Some(format!("data:image/png;base64,{}", base64_data))
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let _ = app_path;
+        None
     }
 }
 
