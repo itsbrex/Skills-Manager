@@ -90,8 +90,8 @@ impl ScannerService {
     fn check_enabled_status(skill_path: &Path, skill_id: &str, config: &AppConfig) -> HashMap<String, bool> {
         let mut enabled = HashMap::new();
 
-        // Canonicalize the skill source path for comparison
-        let canonical_skill_path = skill_path.canonicalize().ok();
+        // Optimization: Don't canonicalize skill_path upfront. It's expensive on Windows.
+        // let canonical_skill_path = skill_path.canonicalize().ok();
 
         for (tool_id, tool_config) in &config.tools {
             let link_path = tool_config.skills_path.join(skill_id);
@@ -101,22 +101,33 @@ impl ScannerService {
                 if metadata.file_type().is_symlink() {
                     // Read the symlink target and check if it points to our skill
                     if let Ok(target) = fs::read_link(&link_path) {
-                        // Resolve relative paths
-                        let resolved_target = if target.is_relative() {
-                            link_path.parent()
-                                .map(|p| p.join(&target))
-                                .and_then(|p| p.canonicalize().ok())
-                        } else {
-                            target.canonicalize().ok()
-                        };
 
-                        // Compare with our skill path
-                        let is_enabled = match (&resolved_target, &canonical_skill_path) {
-                            (Some(t), Some(s)) => t == s,
-                            _ => {
-                                // Fallback: compare the raw target with skill_path
-                                target == skill_path ||
-                                target.ends_with(skill_id)
+                        // FAST PATH: String comparison
+                        // On Windows, canonicalize() causes excessive I/O.
+                        // Most of the time, checking if the target path ends with the skill ID is sufficient.
+                        let target_str = target.to_string_lossy();
+                        // Check for direct match or path ending (handling separators)
+                        let is_fast_match = target_str.ends_with(skill_id) ||
+                                           target == skill_path;
+
+                        let is_enabled = if is_fast_match {
+                            true
+                        } else {
+                            // SLOW PATH: Fallback to canonicalization only if simple check fails
+                            let canonical_skill_path = skill_path.canonicalize().ok();
+
+                            // Resolve relative paths
+                            let resolved_target = if target.is_relative() {
+                                link_path.parent()
+                                    .map(|p| p.join(&target))
+                                    .and_then(|p| p.canonicalize().ok())
+                            } else {
+                                target.canonicalize().ok()
+                            };
+
+                            match (&resolved_target, &canonical_skill_path) {
+                                (Some(t), Some(s)) => t == s,
+                                _ => false
                             }
                         };
 

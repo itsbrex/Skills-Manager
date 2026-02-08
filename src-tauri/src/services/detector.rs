@@ -1,5 +1,6 @@
 use std::process::Command;
 use std::env;
+use rayon::prelude::*; // Enable parallel processing
 
 use crate::models::{Tool, ToolConfig, ToolDefinition, SUPPORTED_TOOLS};
 use crate::services::ConfigManager;
@@ -11,8 +12,10 @@ impl DetectorService {
         let manager = ConfigManager::new();
         let saved_config = manager.load().ok();
 
+        // Use parallel iterator to detect all tools simultaneously
+        // This prevents one slow detection (e.g. checking a network path) from blocking the UI
         SUPPORTED_TOOLS
-            .iter()
+            .par_iter()
             .map(|def| Self::detect_tool(def, &saved_config))
             .collect()
     }

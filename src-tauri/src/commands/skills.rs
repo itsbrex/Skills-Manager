@@ -88,30 +88,36 @@ pub fn refresh_skills() -> Result<Vec<Skill>, String> {
     let config = manager.load()?;
 
     // Scan all tool directories for new skills and import them to hub
-    for (_tool_id, tool_config) in &config.tools {
+    // Use rayon for parallel processing to speed up IO on Windows
+    use rayon::prelude::*;
+
+    let tools: Vec<_> = config.tools.values().collect();
+
+    tools.par_iter().for_each(|tool_config| {
         if tool_config.skills_path.exists() {
             if let Ok(entries) = std::fs::read_dir(&tool_config.skills_path) {
-                for entry in entries.flatten() {
+                // Use par_bridge to iterate over directory entries in parallel
+                entries.flatten().par_bridge().for_each(|entry| {
                     let path = entry.path();
                     // Skip hidden directories and non-directories
                     if !path.is_dir() {
-                        continue;
+                        return;
                     }
                     if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                         if name.starts_with('.') {
-                            continue;
+                            return;
                         }
                     }
                     // Skip if it's already a symlink (managed by us)
                     if path.symlink_metadata().map(|m| m.file_type().is_symlink()).unwrap_or(false) {
-                        continue;
+                        return;
                     }
                     // Import this skill to hub
                     let _ = LinkerService::import_to_hub(path.to_string_lossy().as_ref());
-                }
+                });
             }
         }
-    }
+    });
 
     // Return updated skills list
     ScannerService::scan_skills(&config.skills_dir)
