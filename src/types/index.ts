@@ -24,6 +24,8 @@ export interface Tool {
   detected: boolean;
   cli_available: boolean;
   config: ToolConfig;
+  source: "builtin" | "custom";
+  icon_path?: string | null;
 }
 
 // User preferences for the application
@@ -48,7 +50,16 @@ export interface AppConfig {
   version: string;
   skills_dir: string;
   tools: Record<string, ToolConfig>;
+  custom_tools?: Record<string, CustomToolConfig>;
   preferences?: UserPreferences;
+}
+
+export interface CustomToolConfig {
+  name: string;
+  config_path: string;
+  skills_path: string;
+  enabled: boolean;
+  icon_path?: string | null;
 }
 
 export interface SyncReport {

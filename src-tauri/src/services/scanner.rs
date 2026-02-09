@@ -93,7 +93,7 @@ impl ScannerService {
         // Optimization: Don't canonicalize skill_path upfront. It's expensive on Windows.
         // let canonical_skill_path = skill_path.canonicalize().ok();
 
-        for (tool_id, tool_config) in &config.tools {
+        for (tool_id, tool_config) in config.collect_tool_configs() {
             let link_path = tool_config.skills_path.join(skill_id);
 
             // Check if a symlink exists at the expected location
@@ -131,7 +131,7 @@ impl ScannerService {
                             }
                         };
 
-                        enabled.insert(tool_id.clone(), is_enabled);
+                        enabled.insert(tool_id, is_enabled);
                     }
                 }
             }

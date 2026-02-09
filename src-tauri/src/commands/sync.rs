@@ -14,7 +14,7 @@ pub fn check_sync_status() -> Result<SyncReport, String> {
     let skills = ScannerService::scan_skills(&config.skills_dir)?;
     let mut issues_count = 0;
 
-    for (_tool_id, tool_config) in &config.tools {
+    for (_tool_id, tool_config) in config.collect_tool_configs() {
         for skill in &skills {
             let status = LinkerService::check_link(
                 &skill.path,
@@ -39,7 +39,7 @@ pub fn fix_sync_issues() -> Result<LinkReport, String> {
     let skills = ScannerService::scan_skills(&config.skills_dir)?;
     let mut combined_report = LinkReport::default();
 
-    for (tool_id, tool_config) in &config.tools {
+    for (tool_id, tool_config) in config.collect_tool_configs() {
         let skill_data: Vec<(String, std::path::PathBuf)> = skills
             .iter()
             .map(|s| (s.id.clone(), s.path.clone()))
@@ -47,7 +47,7 @@ pub fn fix_sync_issues() -> Result<LinkReport, String> {
 
         let enabled_skills: Vec<String> = skills
             .iter()
-            .filter(|s| s.is_enabled_for(tool_id))
+            .filter(|s| s.is_enabled_for(&tool_id))
             .map(|s| s.id.clone())
             .collect();
 
