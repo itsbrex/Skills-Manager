@@ -9,6 +9,7 @@ interface Tool {
   name: string;
   detected: boolean;
   cli_available: boolean;
+  source?: "builtin" | "custom";
 }
 
 interface ToolDetectionStepProps {
@@ -29,7 +30,7 @@ export function ToolDetectionStep({ onNext, onBack }: ToolDetectionStepProps) {
     setIsLoading(true);
     try {
       const result = await invoke<Tool[]>("detect_tools");
-      setTools(result);
+      setTools(result.filter((tool) => tool.source !== "custom"));
     } catch (error) {
       console.error("Failed to detect tools:", error);
     } finally {

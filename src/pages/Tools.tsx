@@ -1,25 +1,71 @@
 import { useState, useEffect, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { Tool } from "@/types";
 import { useTranslation } from "@/i18n";
 import { getToolIconUrl, GenericToolIcon } from "@/assets/tools";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function Tools() {
   const { t } = useTranslation();
   const [tools, setTools] = useState<Tool[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingToolId, setEditingToolId] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [idManuallyEdited, setIdManuallyEdited] = useState(false);
+  const [iconFallbackStage, setIconFallbackStage] = useState<Record<string, "asset" | "file" | "none">>({});
+  const [form, setForm] = useState({
+    name: "",
+    id: "",
+    configPath: "",
+    skillsPath: "",
+    iconPath: "",
+  });
+  const formInputStyle: React.CSSProperties = {
+    height: '40px',
+    backgroundColor: 'var(--input)',
+    borderRadius: '10px',
+    border: '1px solid var(--border)',
+    padding: '0 12px',
+    boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+    color: 'var(--foreground)',
+    caretColor: 'var(--foreground)',
+  };
+  const fieldLabelStyle: React.CSSProperties = {
+    display: 'block',
+    fontSize: '12px',
+    color: 'var(--muted-foreground)',
+    marginBottom: '6px',
+    letterSpacing: '0.02em',
+  };
+  const pickerButtonStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '40px',
+    height: '40px',
+    borderRadius: '10px',
+    border: '1px solid var(--border)',
+    background: 'var(--background)',
+    color: 'var(--muted-foreground)',
+    cursor: 'pointer',
+    flexShrink: 0,
+    transition: 'background-color 0.15s, color 0.15s, border-color 0.15s',
+  };
 
   const detectTools = useCallback(async () => {
     setError(null);
     try {
       const result = await invoke<Tool[]>("detect_tools");
       setTools(result);
+      setIconFallbackStage({});
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -83,9 +129,506 @@ export function Tools() {
     }
   }, [detectTools, t]);
 
+  const slugify = (value: string) =>
+    value
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+  const startCreateCustomTool = useCallback(() => {
+    setEditingToolId(null);
+    setForm({
+      name: "",
+      id: "",
+      configPath: "",
+      skillsPath: "",
+      iconPath: "",
+    });
+    setIdManuallyEdited(false);
+    setFormError(null);
+    setFormOpen(true);
+  }, []);
+
+  const startEditCustomTool = useCallback((tool: Tool) => {
+    setEditingToolId(tool.id);
+    setForm({
+      name: tool.name,
+      id: tool.id,
+      configPath: tool.config.config_path,
+      skillsPath: tool.config.skills_path,
+      iconPath: tool.icon_path || "",
+    });
+    setIdManuallyEdited(true);
+    setFormError(null);
+    setFormOpen(true);
+  }, []);
+
+  const handleCustomNameChange = useCallback((value: string) => {
+    setForm(prev => ({
+      ...prev,
+      name: value,
+      id: idManuallyEdited ? prev.id : slugify(value),
+    }));
+  }, [idManuallyEdited]);
+
+  const handleCustomIdChange = useCallback((value: string) => {
+    setIdManuallyEdited(true);
+    setForm(prev => ({ ...prev, id: value }));
+  }, []);
+
+  const handleSelectCustomConfigPath = useCallback(async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: t("tools.selectConfigPath"),
+    });
+    if (selected && typeof selected === "string") {
+      setForm(prev => ({
+        ...prev,
+        configPath: selected,
+        skillsPath: `${selected}/skills`,
+      }));
+    }
+  }, [t]);
+
+  const handleSelectCustomSkillsPath = useCallback(async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: t("tools.selectSkillsPath"),
+    });
+    if (selected && typeof selected === "string") {
+      setForm(prev => ({ ...prev, skillsPath: selected }));
+    }
+  }, [t]);
+
+  const handleSelectCustomIconPath = useCallback(async () => {
+    const selected = await open({
+      directory: false,
+      multiple: false,
+      title: t("tools.selectIconPath"),
+      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "svg", "ico"] }],
+    });
+    if (selected && typeof selected === "string") {
+      setForm(prev => ({ ...prev, iconPath: selected }));
+    }
+  }, [t]);
+
+  const handleSaveCustomTool = useCallback(async () => {
+    const trimmedName = form.name.trim();
+    const trimmedId = form.id.trim();
+    const trimmedConfig = form.configPath.trim();
+    const trimmedSkills = form.skillsPath.trim();
+
+    if (!trimmedName || !trimmedId || !trimmedConfig || !trimmedSkills) {
+      setFormError(t("tools.customErrorRequired"));
+      return;
+    }
+
+    if (!editingToolId) {
+      const existingIds = new Set(tools.map(tool => tool.id));
+      if (existingIds.has(trimmedId)) {
+        setFormError(t("tools.customErrorConflict"));
+        return;
+      }
+    }
+
+    setFormError(null);
+    setError(null);
+
+    try {
+      if (editingToolId) {
+        const currentTool = tools.find(tool => tool.id === editingToolId);
+        await invoke("update_custom_tool", {
+          toolId: editingToolId,
+          name: trimmedName,
+          configPath: trimmedConfig,
+          skillsPath: trimmedSkills,
+          iconPath: form.iconPath.trim() ? form.iconPath.trim() : null,
+          enabled: currentTool?.config.enabled ?? false,
+        });
+      } else {
+        await invoke("create_custom_tool", {
+          toolId: trimmedId,
+          name: trimmedName,
+          configPath: trimmedConfig,
+          skillsPath: trimmedSkills,
+          iconPath: form.iconPath.trim() ? form.iconPath.trim() : null,
+        });
+      }
+
+      await detectTools();
+      setFormOpen(false);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : String(err));
+    }
+  }, [editingToolId, form, tools, detectTools, t]);
+
+  const handleDeleteCustomTool = useCallback(async (tool: Tool) => {
+    const confirmed = await confirm(
+      t("tools.customDeleteConfirm").replace("{name}", tool.name),
+      { title: t("tools.customDelete") }
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setError(null);
+    try {
+      await invoke("delete_custom_tool", { toolId: tool.id });
+      await detectTools();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [detectTools, t]);
+
   useEffect(() => {
     detectTools();
   }, [detectTools]);
+
+  useEffect(() => {
+    if (!formOpen) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFormOpen(false);
+      }
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [formOpen]);
+
+  const builtinTools = tools.filter((tool) => tool.source !== "custom");
+  const customTools = tools.filter((tool) => tool.source === "custom");
+
+  const handleIconError = useCallback((toolId: string) => {
+    setIconFallbackStage(prev => {
+      const current = prev[toolId] ?? "asset";
+      const nextStage = current === "asset" ? "file" : "none";
+      return { ...prev, [toolId]: nextStage };
+    });
+  }, []);
+
+  const renderToolCard = (tool: Tool) => {
+    const isCustom = tool.source === "custom";
+    const iconStage = iconFallbackStage[tool.id] ?? "asset";
+    const customIconSrc = tool.icon_path
+      ? iconStage === "asset"
+        ? convertFileSrc(tool.icon_path)
+        : iconStage === "file"
+          ? `file://${tool.icon_path}`
+          : null
+      : null;
+    const iconUrl = customIconSrc || getToolIconUrl(tool.id);
+
+    return (
+      <div
+        key={tool.id}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '18px 20px',
+          backgroundColor: 'var(--secondary)',
+          borderRadius: '14px',
+          border: '1px solid var(--border)',
+          transition: 'border-color 0.2s, box-shadow 0.2s, transform 0.2s',
+          cursor: 'pointer',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = 'var(--ring)';
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+          e.currentTarget.style.transform = 'translateY(-2px)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = 'var(--border)';
+          e.currentTarget.style.boxShadow = 'none';
+          e.currentTarget.style.transform = 'translateY(0)';
+        }}
+      >
+        {/* Top: Icon + Title + Status + Toggle */}
+        <div style={{ display: 'flex', gap: '14px', marginBottom: '16px', alignItems: 'flex-start' }}>
+          {/* Icon */}
+          {iconUrl ? (
+            <img
+              src={iconUrl}
+              alt={tool.name}
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                flexShrink: 0,
+                objectFit: 'cover',
+              }}
+              onError={() => {
+                if (tool.icon_path) {
+                  handleIconError(tool.id);
+                }
+              }}
+            />
+          ) : (
+            <GenericToolIcon />
+          )}
+
+          {/* Title + Status */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '4px',
+              flexWrap: 'wrap',
+            }}>
+              <span style={{
+                fontSize: '15px',
+                fontWeight: 600,
+                color: 'var(--foreground)',
+                lineHeight: 1.3,
+              }}>
+                {tool.name}
+              </span>
+              <span style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                padding: '2px 8px',
+                borderRadius: '6px',
+                backgroundColor: tool.detected ? 'var(--color-success-bg)' : 'var(--secondary)',
+                color: tool.detected ? 'var(--color-success)' : 'var(--muted-foreground)',
+                border: tool.detected ? '1px solid var(--color-success-border)' : '1px solid var(--border)',
+              }}>
+                {tool.detected ? t("tools.detectedStatus") : t("tools.notDetected")}
+              </span>
+              {tool.cli_available && (
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  backgroundColor: 'var(--background)',
+                  color: 'var(--muted-foreground)',
+                  border: '1px solid var(--border)',
+                }}>
+                  CLI
+                </span>
+              )}
+              {isCustom && (
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startEditCustomTool(tool);
+                    }}
+                    title={t("tools.customEdit")}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--background)',
+                      color: 'var(--muted-foreground)',
+                      cursor: 'pointer',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--muted)';
+                      e.currentTarget.style.color = 'var(--foreground)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--background)';
+                      e.currentTarget.style.color = 'var(--muted-foreground)';
+                    }}
+                  >
+                    <Pencil style={{ width: '12px', height: '12px' }} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteCustomTool(tool);
+                    }}
+                    title={t("tools.customDelete")}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--background)',
+                      color: 'var(--color-danger)',
+                      cursor: 'pointer',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--muted)';
+                      e.currentTarget.style.color = 'var(--color-danger)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--background)';
+                    }}
+                  >
+                    <Trash2 style={{ width: '12px', height: '12px' }} />
+                  </button>
+                </div>
+              )}
+            </div>
+            <p style={{
+              fontSize: '13px',
+              color: 'var(--muted-foreground)',
+              margin: 0,
+              lineHeight: 1.5,
+            }}>
+              ID: {tool.id}
+            </p>
+          </div>
+
+          {/* Toggle Switch */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ marginTop: '2px' }}
+          >
+            <Toggle
+              checked={tool.config.enabled}
+              onChange={(enabled) => toggleToolEnabled(tool.id, enabled)}
+            />
+          </div>
+        </div>
+
+        {/* Bottom: Config Info */}
+        <div style={{
+          paddingTop: '14px',
+          borderTop: '1px solid var(--border)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{
+              fontSize: '12px',
+              color: 'var(--muted-foreground)',
+              flexShrink: 0,
+              width: '80px',
+            }}>
+              {t("tools.configPath")}
+            </span>
+            <code style={{
+              flex: 1,
+              fontSize: '11px',
+              color: 'var(--foreground)',
+              backgroundColor: 'var(--background)',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              wordBreak: 'break-all',
+            }}>
+              {tool.config.config_path || t("tools.notSet")}
+            </code>
+            {!isCustom && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleEditConfigPath(tool.id);
+                }}
+                title={t("tools.editPath")}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--muted-foreground)',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--muted)';
+                  e.currentTarget.style.color = 'var(--foreground)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = 'var(--muted-foreground)';
+                }}
+              >
+                <FolderOpen style={{ width: '14px', height: '14px' }} />
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{
+              fontSize: '12px',
+              color: 'var(--muted-foreground)',
+              flexShrink: 0,
+              width: '80px',
+            }}>
+              {t("tools.skillsPath")}
+            </span>
+            <code style={{
+              flex: 1,
+              fontSize: '11px',
+              color: 'var(--foreground)',
+              backgroundColor: 'var(--background)',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              wordBreak: 'break-all',
+            }}>
+              {tool.config.skills_path || t("tools.notSet")}
+            </code>
+            {!isCustom && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleEditSkillsPath(tool.id);
+                }}
+                title={t("tools.editPath")}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--muted-foreground)',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--muted)';
+                  e.currentTarget.style.color = 'var(--foreground)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = 'var(--muted-foreground)';
+                }}
+              >
+                <FolderOpen style={{ width: '14px', height: '14px' }} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {isCustom && tool.icon_path && iconFallbackStage[tool.id] === "none" && (
+          <p style={{
+            marginTop: '10px',
+            fontSize: '11px',
+            color: 'var(--muted-foreground)',
+          }}>
+            {t("tools.customIconLoadFailed")}
+          </p>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div style={{
@@ -98,7 +641,33 @@ export function Tools() {
     }}>
       <PageHeader
         title={t("tools.title")}
-        actions={<RefreshButton onClick={detectTools} />}
+        actions={
+          <>
+            <RefreshButton onClick={detectTools} />
+            <button
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                fontSize: '13px',
+                fontWeight: 500,
+                color: 'var(--primary-foreground)',
+                backgroundColor: 'var(--foreground)',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+              onClick={startCreateCustomTool}
+            >
+              <Plus style={{ width: '14px', height: '14px' }} />
+              {t("tools.customAdd")}
+            </button>
+          </>
+        }
       />
 
       {/* Content */}
@@ -128,7 +697,7 @@ export function Tools() {
               {t("tools.detected")}
             </h2>
 
-            {tools.length === 0 ? (
+            {builtinTools.length === 0 ? (
               <div style={{
                 textAlign: 'center',
                 padding: '48px 24px',
@@ -148,232 +717,315 @@ export function Tools() {
                 gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
                 gap: '16px',
               }}>
-                {tools.map((tool) => {
-                  const iconUrl = getToolIconUrl(tool.id);
-                  return (
-                    <div
-                      key={tool.id}
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        padding: '18px 20px',
-                        backgroundColor: 'var(--secondary)',
-                        borderRadius: '14px',
-                        border: '1px solid var(--border)',
-                        transition: 'border-color 0.2s, box-shadow 0.2s, transform 0.2s',
-                        cursor: 'pointer',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--ring)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--border)';
-                        e.currentTarget.style.boxShadow = 'none';
-                        e.currentTarget.style.transform = 'translateY(0)';
-                      }}
-                    >
-                      {/* Top: Icon + Title + Status + Toggle */}
-                      <div style={{ display: 'flex', gap: '14px', marginBottom: '16px', alignItems: 'flex-start' }}>
-                        {/* Icon */}
-                        {iconUrl ? (
-                          <img
-                            src={iconUrl}
-                            alt={tool.name}
-                            style={{
-                              width: 44,
-                              height: 44,
-                              borderRadius: 12,
-                              flexShrink: 0,
-                            }}
-                          />
-                        ) : (
-                          <GenericToolIcon />
-                        )}
+                {builtinTools.map(renderToolCard)}
+              </div>
+            )}
+          </section>
 
-                        {/* Title + Status */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            marginBottom: '4px',
-                          }}>
-                            <span style={{
-                              fontSize: '15px',
-                              fontWeight: 600,
-                              color: 'var(--foreground)',
-                              lineHeight: 1.3,
-                            }}>
-                              {tool.name}
-                            </span>
-                            <span style={{
-                              fontSize: '11px',
-                              fontWeight: 500,
-                              padding: '2px 8px',
-                              borderRadius: '6px',
-                              backgroundColor: tool.detected ? 'var(--color-success-bg)' : 'var(--secondary)',
-                              color: tool.detected ? 'var(--color-success)' : 'var(--muted-foreground)',
-                              border: tool.detected ? '1px solid var(--color-success-border)' : '1px solid var(--border)',
-                            }}>
-                              {tool.detected ? t("tools.detectedStatus") : t("tools.notDetected")}
-                            </span>
-                            {tool.cli_available && (
-                              <span style={{
-                                fontSize: '11px',
-                                fontWeight: 500,
-                                padding: '2px 8px',
-                                borderRadius: '6px',
-                                backgroundColor: 'var(--background)',
-                                color: 'var(--muted-foreground)',
-                                border: '1px solid var(--border)',
-                              }}>
-                                CLI
-                              </span>
-                            )}
-                          </div>
-                          <p style={{
-                            fontSize: '13px',
-                            color: 'var(--muted-foreground)',
-                            margin: 0,
-                            lineHeight: 1.5,
-                          }}>
-                            ID: {tool.id}
-                          </p>
-                        </div>
+          {/* Section: Custom Tools */}
+          <section style={{ marginTop: '32px' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '16px',
+            }}>
+              <h2 style={{
+                fontSize: '13px',
+                fontWeight: 500,
+                color: 'var(--muted-foreground)',
+                margin: 0,
+              }}>
+                {t("tools.customTitle")}
+              </h2>
+              <div />
+            </div>
 
-                        {/* Toggle Switch */}
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ marginTop: '2px' }}
-                        >
-                          <Toggle
-                            checked={tool.config.enabled}
-                            onChange={(enabled) => toggleToolEnabled(tool.id, enabled)}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Bottom: Config Info */}
-                      <div style={{
-                        paddingTop: '14px',
-                        borderTop: '1px solid var(--border)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px',
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{
-                            fontSize: '12px',
-                            color: 'var(--muted-foreground)',
-                            flexShrink: 0,
-                            width: '80px',
-                          }}>
-                            {t("tools.configPath")}
-                          </span>
-                          <code style={{
-                            flex: 1,
-                            fontSize: '11px',
-                            color: 'var(--foreground)',
-                            backgroundColor: 'var(--background)',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            wordBreak: 'break-all',
-                          }}>
-                            {tool.config.config_path || t("tools.notSet")}
-                          </code>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditConfigPath(tool.id);
-                            }}
-                            title={t("tools.editPath")}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              width: '24px',
-                              height: '24px',
-                              borderRadius: '6px',
-                              border: 'none',
-                              background: 'transparent',
-                              color: 'var(--muted-foreground)',
-                              cursor: 'pointer',
-                              flexShrink: 0,
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = 'var(--muted)';
-                              e.currentTarget.style.color = 'var(--foreground)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = 'transparent';
-                              e.currentTarget.style.color = 'var(--muted-foreground)';
-                            }}
-                          >
-                            <FolderOpen style={{ width: '14px', height: '14px' }} />
-                          </button>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{
-                            fontSize: '12px',
-                            color: 'var(--muted-foreground)',
-                            flexShrink: 0,
-                            width: '80px',
-                          }}>
-                            {t("tools.skillsPath")}
-                          </span>
-                          <code style={{
-                            flex: 1,
-                            fontSize: '11px',
-                            color: 'var(--foreground)',
-                            backgroundColor: 'var(--background)',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            wordBreak: 'break-all',
-                          }}>
-                            {tool.config.skills_path || t("tools.notSet")}
-                          </code>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditSkillsPath(tool.id);
-                            }}
-                            title={t("tools.editPath")}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              width: '24px',
-                              height: '24px',
-                              borderRadius: '6px',
-                              border: 'none',
-                              background: 'transparent',
-                              color: 'var(--muted-foreground)',
-                              cursor: 'pointer',
-                              flexShrink: 0,
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = 'var(--muted)';
-                              e.currentTarget.style.color = 'var(--foreground)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = 'transparent';
-                              e.currentTarget.style.color = 'var(--muted-foreground)';
-                            }}
-                          >
-                            <FolderOpen style={{ width: '14px', height: '14px' }} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+            {customTools.length === 0 ? (
+              <div style={{
+                textAlign: 'center',
+                padding: '40px 24px',
+                color: 'var(--muted-foreground)',
+                backgroundColor: 'var(--secondary)',
+                borderRadius: '12px',
+                border: '1px dashed var(--border)',
+              }}>
+                <button
+                  onClick={startCreateCustomTool}
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '50%',
+                    border: '1px dashed var(--border)',
+                    background: 'var(--background)',
+                    color: 'var(--muted-foreground)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    marginBottom: '10px',
+                  }}
+                >
+                  <Plus style={{ width: '18px', height: '18px' }} />
+                </button>
+                <p style={{ margin: '0 0 6px 0' }}>{t("tools.customEmpty")}</p>
+                <p style={{ margin: 0, fontSize: '12px' }}>{t("tools.customEmptyDesc")}</p>
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                gap: '16px',
+              }}>
+                {customTools.map(renderToolCard)}
               </div>
             )}
           </section>
         </div>
       </main>
+
+      {formOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(8, 12, 20, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+            padding: '24px',
+          }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setFormOpen(false);
+            }
+          }}
+        >
+          <Card
+            style={{
+              width: 'min(920px, 92vw)',
+              maxHeight: '88vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              background: 'var(--background)',
+              border: '1px solid var(--border)',
+              borderRadius: '16px',
+              boxShadow: '0 24px 64px rgba(0, 0, 0, 0.18)',
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <CardHeader style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <CardTitle style={{ fontSize: '16px' }}>
+                  {editingToolId ? t("tools.customEditTitle") : t("tools.customCreateTitle")}
+                </CardTitle>
+                <button
+                  onClick={() => setFormOpen(false)}
+                  title={t("common.cancel")}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--background)',
+                    color: 'var(--muted-foreground)',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--muted)';
+                    e.currentTarget.style.color = 'var(--foreground)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--background)';
+                    e.currentTarget.style.color = 'var(--muted-foreground)';
+                  }}
+                >
+                  <X style={{ width: '14px', height: '14px' }} />
+                </button>
+              </div>
+            </CardHeader>
+
+            <CardContent style={{ padding: '18px 20px', overflow: 'auto' }}>
+              {formError && (
+                <div style={{ marginBottom: '16px' }}>
+                  <Alert variant="destructive">
+                    <AlertDescription>{formError}</AlertDescription>
+                  </Alert>
+                </div>
+              )}
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                gap: '14px 16px',
+              }}>
+                <div>
+                  <label style={fieldLabelStyle}>{t("tools.customNameLabel")}</label>
+                  <Input
+                    value={form.name}
+                    onChange={(e) => handleCustomNameChange(e.target.value)}
+                    placeholder={t("tools.customNamePlaceholder")}
+                    style={formInputStyle}
+                  />
+                </div>
+                <div>
+                  <label style={fieldLabelStyle}>{t("tools.customIdLabel")}</label>
+                  <Input
+                    value={form.id}
+                    onChange={(e) => handleCustomIdChange(e.target.value)}
+                    placeholder={t("tools.customIdPlaceholder")}
+                    disabled={!!editingToolId}
+                    style={{
+                      ...formInputStyle,
+                      opacity: editingToolId ? 0.7 : 1,
+                      cursor: editingToolId ? 'not-allowed' : 'text',
+                      color: editingToolId ? 'var(--muted-foreground)' : 'var(--foreground)',
+                      WebkitTextFillColor: editingToolId ? 'var(--muted-foreground)' : 'var(--foreground)',
+                    }}
+                  />
+                  {editingToolId && (
+                    <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
+                      {t("tools.customIdLocked")}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <label style={fieldLabelStyle}>{t("tools.customConfigPathLabel")}</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <Input
+                      value={form.configPath}
+                      onChange={(e) => setForm(prev => ({ ...prev, configPath: e.target.value }))}
+                      placeholder={t("tools.customConfigPathPlaceholder")}
+                      style={formInputStyle}
+                    />
+                    <button
+                      onClick={handleSelectCustomConfigPath}
+                      title={t("tools.selectConfigPath")}
+                      style={pickerButtonStyle}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--muted)';
+                        e.currentTarget.style.color = 'var(--foreground)';
+                        e.currentTarget.style.borderColor = 'var(--ring)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--background)';
+                        e.currentTarget.style.color = 'var(--muted-foreground)';
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                      }}
+                    >
+                      <FolderOpen style={{ width: '16px', height: '16px' }} />
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label style={fieldLabelStyle}>{t("tools.customSkillsPathLabel")}</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <Input
+                      value={form.skillsPath}
+                      onChange={(e) => setForm(prev => ({ ...prev, skillsPath: e.target.value }))}
+                      placeholder={t("tools.customSkillsPathPlaceholder")}
+                      style={formInputStyle}
+                    />
+                    <button
+                      onClick={handleSelectCustomSkillsPath}
+                      title={t("tools.selectSkillsPath")}
+                      style={pickerButtonStyle}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--muted)';
+                        e.currentTarget.style.color = 'var(--foreground)';
+                        e.currentTarget.style.borderColor = 'var(--ring)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--background)';
+                        e.currentTarget.style.color = 'var(--muted-foreground)';
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                      }}
+                    >
+                      <FolderOpen style={{ width: '16px', height: '16px' }} />
+                    </button>
+                  </div>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={fieldLabelStyle}>{t("tools.customIconPathLabel")}</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <Input
+                      value={form.iconPath}
+                      onChange={(e) => setForm(prev => ({ ...prev, iconPath: e.target.value }))}
+                      placeholder={t("tools.customIconPathPlaceholder")}
+                      style={formInputStyle}
+                    />
+                    <button
+                      onClick={handleSelectCustomIconPath}
+                      title={t("tools.selectIconPath")}
+                      style={pickerButtonStyle}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--muted)';
+                        e.currentTarget.style.color = 'var(--foreground)';
+                        e.currentTarget.style.borderColor = 'var(--ring)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--background)';
+                        e.currentTarget.style.color = 'var(--muted-foreground)';
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                      }}
+                    >
+                      <FolderOpen style={{ width: '16px', height: '16px' }} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+
+            <CardFooter style={{
+              padding: '16px 20px',
+              borderTop: '1px solid var(--border)',
+              justifyContent: 'flex-end',
+              gap: '10px',
+            }}>
+              <button
+                onClick={() => setFormOpen(false)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 16px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--background)',
+                  color: 'var(--foreground)',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                }}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={handleSaveCustomTool}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 18px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: 'var(--foreground)',
+                  color: 'var(--primary-foreground)',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                }}
+              >
+                {t("common.save")}
+              </button>
+            </CardFooter>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

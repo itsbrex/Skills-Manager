@@ -126,7 +126,14 @@ export function Skills() {
     );
   });
 
-  const toolIds = config ? Object.keys(config.tools).sort() : [];
+  const toolIds = config
+    ? Array.from(
+        new Set([
+          ...Object.keys(config.tools),
+          ...Object.keys(config.custom_tools ?? {}),
+        ])
+      ).sort()
+    : [];
 
   // Show loading state while initial data is being fetched
   if (!config) {

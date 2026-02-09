@@ -46,9 +46,22 @@ pub struct AppConfig {
     pub skills_dir: PathBuf,
     pub tools: HashMap<String, ToolConfig>,
     #[serde(default)]
+    pub custom_tools: HashMap<String, CustomToolConfig>,
+    #[serde(default)]
     pub preferences: Option<UserPreferences>,
     #[serde(default)]
     pub initialized: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomToolConfig {
+    pub name: String,
+    pub config_path: PathBuf,
+    pub skills_path: PathBuf,
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub icon_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +81,7 @@ impl Default for AppConfig {
                 .join(".skills-hub")
                 .join("skills"),
             tools: HashMap::new(),
+            custom_tools: HashMap::new(),
             preferences: Some(UserPreferences::default()),
             initialized: false,
         }
@@ -83,5 +97,46 @@ impl ToolConfig {
             skills_path,
             config_path,
         }
+    }
+}
+
+impl AppConfig {
+    pub fn get_tool_config(&self, tool_id: &str) -> Option<ToolConfig> {
+        if let Some(tool) = self.tools.get(tool_id) {
+            return Some(tool.clone());
+        }
+
+        self.custom_tools.get(tool_id).map(|custom| {
+            let detected = custom.config_path.exists();
+            ToolConfig {
+                enabled: custom.enabled,
+                detected,
+                skills_path: custom.skills_path.clone(),
+                config_path: custom.config_path.clone(),
+            }
+        })
+    }
+
+    pub fn collect_tool_configs(&self) -> Vec<(String, ToolConfig)> {
+        let mut configs: Vec<(String, ToolConfig)> = self
+            .tools
+            .iter()
+            .map(|(id, config)| (id.clone(), config.clone()))
+            .collect();
+
+        for (id, custom) in &self.custom_tools {
+            let detected = custom.config_path.exists();
+            configs.push((
+                id.clone(),
+                ToolConfig {
+                    enabled: custom.enabled,
+                    detected,
+                    skills_path: custom.skills_path.clone(),
+                    config_path: custom.config_path.clone(),
+                },
+            ));
+        }
+
+        configs
     }
 }

@@ -1,5 +1,13 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use super::config::ToolConfig;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ToolSource {
+    Builtin,
+    Custom,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tool {
@@ -8,6 +16,9 @@ pub struct Tool {
     pub detected: bool,
     pub cli_available: bool,
     pub config: ToolConfig,
+    pub source: ToolSource,
+    #[serde(default)]
+    pub icon_path: Option<PathBuf>,
 }
 
 impl Tool {
@@ -19,6 +30,8 @@ impl Tool {
             detected: false,
             cli_available: false,
             config,
+            source: ToolSource::Builtin,
+            icon_path: None,
         }
     }
 }

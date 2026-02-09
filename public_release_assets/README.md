@@ -20,6 +20,7 @@ It uses a powerful **symlink synchronization mechanism**, allowing you to write 
 - **⚡ High Performance**: Built with **Rust** and **Tauri 2.0** for a lightweight, blazing-fast experience.
 - **🛡️ Cross-Platform**: Native support for macOS, Windows, and Linux.
 - **🔌 Multi-Tool Support**: Out-of-the-box support for **Claude Code、Codex、Opencode** and extensible to others.
+- **🧩 Custom Tools**: Add your own tools with custom paths and optional icons.
 - **🎨 Modern UI**: Beautiful interface built with React 19, Tailwind CSS v4, and Radix UI.
 
 ## 📸 Screenshots

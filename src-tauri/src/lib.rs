@@ -1,13 +1,16 @@
 mod commands;
 mod models;
 mod services;
+#[cfg(test)]
+mod test_support;
 
 use commands::{
-    check_sync_status, check_update, delete_skill, detect_available_editors, detect_tools, disable_skill,
-    enable_skill, fix_sync_issues, get_available_editors, get_config, get_tool_status,
-    import_skills_to_hub, is_initialized, list_skills, mark_initialized, open_in_editor,
-    read_directory_tree, read_file, refresh_skills, save_config, scan_existing_skills,
-    set_tool_enabled, update_tool_paths, write_file, EditorState,
+    check_sync_status, check_update, create_custom_tool, delete_custom_tool, delete_skill,
+    detect_available_editors, detect_tools, disable_skill, enable_skill, fix_sync_issues,
+    get_available_editors, get_config, get_tool_status, import_skills_to_hub, is_initialized,
+    list_skills, mark_initialized, open_in_editor, read_directory_tree, read_file, refresh_skills,
+    save_config, scan_existing_skills, set_tool_enabled, update_custom_tool, update_tool_paths,
+    write_file, EditorState,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -30,6 +33,9 @@ pub fn run() {
             get_tool_status,
             set_tool_enabled,
             update_tool_paths,
+            create_custom_tool,
+            update_custom_tool,
+            delete_custom_tool,
             check_sync_status,
             fix_sync_issues,
             scan_existing_skills,

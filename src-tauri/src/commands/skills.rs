@@ -14,8 +14,7 @@ pub fn enable_skill(skill_id: String, tool_id: String) -> Result<(), String> {
     let config = manager.load()?;
 
     let tool_config = config
-        .tools
-        .get(&tool_id)
+        .get_tool_config(&tool_id)
         .ok_or_else(|| format!("Tool not found: {}", tool_id))?;
 
     if !tool_config.enabled {
@@ -36,8 +35,7 @@ pub fn disable_skill(skill_id: String, tool_id: String) -> Result<(), String> {
     let config = manager.load()?;
 
     let tool_config = config
-        .tools
-        .get(&tool_id)
+        .get_tool_config(&tool_id)
         .ok_or_else(|| format!("Tool not found: {}", tool_id))?;
 
     if !tool_config.enabled {
@@ -71,7 +69,7 @@ pub fn delete_skill(skill_id: String) -> Result<(), String> {
     }
 
     // First, remove all symlinks from tool directories
-    for (_tool_id, tool_config) in &config.tools {
+    for (_tool_id, tool_config) in config.collect_tool_configs() {
         let _ = LinkerService::disable_skill(&tool_config.skills_path, &skill_id);
     }
 
@@ -91,9 +89,9 @@ pub fn refresh_skills() -> Result<Vec<Skill>, String> {
     // Use rayon for parallel processing to speed up IO on Windows
     use rayon::prelude::*;
 
-    let tools: Vec<_> = config.tools.values().collect();
+    let tools = config.collect_tool_configs();
 
-    tools.par_iter().for_each(|tool_config| {
+    tools.par_iter().for_each(|(_tool_id, tool_config)| {
         if tool_config.skills_path.exists() {
             if let Ok(entries) = std::fs::read_dir(&tool_config.skills_path) {
                 // Use par_bridge to iterate over directory entries in parallel

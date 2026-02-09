@@ -2,7 +2,7 @@ use std::process::Command;
 use std::env;
 use rayon::prelude::*; // Enable parallel processing
 
-use crate::models::{Tool, ToolConfig, ToolDefinition, SUPPORTED_TOOLS};
+use crate::models::{CustomToolConfig, Tool, ToolConfig, ToolDefinition, ToolSource, SUPPORTED_TOOLS};
 use crate::services::ConfigManager;
 
 pub struct DetectorService;
@@ -12,12 +12,33 @@ impl DetectorService {
         let manager = ConfigManager::new();
         let saved_config = manager.load().ok();
 
+        let mut tools: Vec<Tool> = Vec::new();
+
         // Use parallel iterator to detect all tools simultaneously
         // This prevents one slow detection (e.g. checking a network path) from blocking the UI
-        SUPPORTED_TOOLS
+        let builtin_tools: Vec<Tool> = SUPPORTED_TOOLS
             .par_iter()
             .map(|def| Self::detect_tool(def, &saved_config))
-            .collect()
+            .collect();
+
+        tools.extend(builtin_tools);
+
+        if let Some(config) = saved_config {
+            let mut custom_tools: Vec<(String, CustomToolConfig)> =
+                config.custom_tools.into_iter().collect();
+
+            custom_tools.sort_by(|(id_a, a), (id_b, b)| {
+                let name_a = a.name.to_lowercase();
+                let name_b = b.name.to_lowercase();
+                name_a.cmp(&name_b).then_with(|| id_a.cmp(id_b))
+            });
+
+            for (id, custom) in custom_tools {
+                tools.push(Self::detect_custom_tool(&id, &custom));
+            }
+        }
+
+        tools
     }
 
     pub fn detect_tool(definition: &ToolDefinition, saved_config: &Option<crate::models::AppConfig>) -> Tool {
@@ -69,6 +90,8 @@ impl DetectorService {
             detected: dir_exists,
             cli_available,
             config: tool_config,
+            source: ToolSource::Builtin,
+            icon_path: None,
         }
     }
 
@@ -143,9 +166,85 @@ impl DetectorService {
         let manager = ConfigManager::new();
         let saved_config = manager.load().ok();
 
-        SUPPORTED_TOOLS
+        if let Some(tool) = SUPPORTED_TOOLS
             .iter()
             .find(|def| def.id == tool_id)
             .map(|def| Self::detect_tool(def, &saved_config))
+        {
+            return Some(tool);
+        }
+
+        saved_config
+            .and_then(|config| config.custom_tools.get(tool_id).cloned())
+            .map(|custom| Self::detect_custom_tool(tool_id, &custom))
+    }
+
+    fn detect_custom_tool(id: &str, custom: &CustomToolConfig) -> Tool {
+        let detected = custom.config_path.exists();
+
+        let tool_config = ToolConfig {
+            enabled: custom.enabled,
+            detected,
+            skills_path: custom.skills_path.clone(),
+            config_path: custom.config_path.clone(),
+        };
+
+        Tool {
+            id: id.to_string(),
+            name: custom.name.clone(),
+            detected,
+            cli_available: false,
+            config: tool_config,
+            source: ToolSource::Custom,
+            icon_path: custom.icon_path.clone(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DetectorService;
+    use crate::test_support::with_temp_home;
+    use serde_json::json;
+    use std::fs;
+    use std::path::Path;
+
+    fn write_config(home_dir: &Path) {
+        let config_dir = home_dir.join(".skills-hub");
+        let config_path = config_dir.join("config.json");
+        fs::create_dir_all(&config_dir).unwrap();
+
+        let custom_config_dir = home_dir.join(".my-tool");
+        fs::create_dir_all(&custom_config_dir).unwrap();
+
+        let config_json = json!({
+            "version": "1.0.2",
+            "skills_dir": home_dir.join(".skills-hub").join("skills").to_string_lossy(),
+            "tools": {},
+            "custom_tools": {
+                "my-tool": {
+                    "name": "My Tool",
+                    "config_path": custom_config_dir.to_string_lossy(),
+                    "skills_path": custom_config_dir.join("skills").to_string_lossy(),
+                    "enabled": true,
+                    "icon_path": null
+                }
+            },
+            "initialized": true
+        });
+
+        fs::write(&config_path, serde_json::to_string_pretty(&config_json).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn detect_all_includes_custom_tools_from_config() {
+        with_temp_home(|home_dir| {
+            write_config(home_dir);
+
+            let tools = DetectorService::detect_all();
+
+            let found = tools.iter().any(|tool| tool.id == "my-tool");
+            assert!(found, "expected custom tool to be detected");
+        });
     }
 }

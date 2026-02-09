@@ -4,7 +4,7 @@ pub mod skill;
 pub mod tool;
 pub mod update;
 
-pub use config::{AppConfig, ToolConfig};
+pub use config::{AppConfig, CustomToolConfig, ToolConfig};
 pub use editor::{DetectedEditor, EDITOR_DEFINITIONS};
 pub use skill::{Skill, SkillSource};
-pub use tool::{Tool, ToolDefinition, SUPPORTED_TOOLS};
+pub use tool::{Tool, ToolDefinition, ToolSource, SUPPORTED_TOOLS};
