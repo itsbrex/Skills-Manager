@@ -1,15 +1,24 @@
 use crate::models::Skill;
-use crate::services::{ConfigManager, LinkerService, ScannerService};
+use crate::services::{AppCache, ConfigManager, LinkerService, ScannerService};
+use tauri::State;
 
 #[tauri::command]
-pub fn list_skills() -> Result<Vec<Skill>, String> {
+pub fn list_skills(cache: State<AppCache>) -> Result<Vec<Skill>, String> {
+    // Try to get from cache first
+    if let Some(skills) = cache.get_skills() {
+        return Ok(skills);
+    }
+
+    // Cache miss - scan and cache
     let manager = ConfigManager::new();
     let config = manager.load()?;
-    ScannerService::scan_skills(&config.skills_dir)
+    let skills = ScannerService::scan_skills(&config.skills_dir)?;
+    cache.set_skills(skills.clone());
+    Ok(skills)
 }
 
 #[tauri::command]
-pub fn enable_skill(skill_id: String, tool_id: String) -> Result<(), String> {
+pub fn enable_skill(skill_id: String, tool_id: String, cache: State<AppCache>) -> Result<(), String> {
     let manager = ConfigManager::new();
     let config = manager.load()?;
 
@@ -26,11 +35,15 @@ pub fn enable_skill(skill_id: String, tool_id: String) -> Result<(), String> {
         return Err(format!("Skill not found: {}", skill_id));
     }
 
-    LinkerService::enable_skill(&skill_path, &tool_config.skills_path, &skill_id)
+    LinkerService::enable_skill(&skill_path, &tool_config.skills_path, &skill_id)?;
+
+    // Invalidate cache after modification
+    cache.invalidate_skills();
+    Ok(())
 }
 
 #[tauri::command]
-pub fn disable_skill(skill_id: String, tool_id: String) -> Result<(), String> {
+pub fn disable_skill(skill_id: String, tool_id: String, cache: State<AppCache>) -> Result<(), String> {
     let manager = ConfigManager::new();
     let config = manager.load()?;
 
@@ -42,7 +55,11 @@ pub fn disable_skill(skill_id: String, tool_id: String) -> Result<(), String> {
         return Err(format!("Tool is disabled: {}", tool_id));
     }
 
-    LinkerService::disable_skill(&tool_config.skills_path, &skill_id)
+    LinkerService::disable_skill(&tool_config.skills_path, &skill_id)?;
+
+    // Invalidate cache after modification
+    cache.invalidate_skills();
+    Ok(())
 }
 
 #[tauri::command]
@@ -51,15 +68,17 @@ pub fn scan_existing_skills() -> Result<Vec<crate::models::Skill>, String> {
 }
 
 #[tauri::command]
-pub fn import_skills_to_hub(skill_paths: Vec<String>) -> Result<(), String> {
+pub fn import_skills_to_hub(skill_paths: Vec<String>, cache: State<AppCache>) -> Result<(), String> {
     for path in skill_paths {
         crate::services::LinkerService::import_to_hub(&path)?;
     }
+    // Invalidate cache after import
+    cache.invalidate_skills();
     Ok(())
 }
 
 #[tauri::command]
-pub fn delete_skill(skill_id: String) -> Result<(), String> {
+pub fn delete_skill(skill_id: String, cache: State<AppCache>) -> Result<(), String> {
     let manager = ConfigManager::new();
     let config = manager.load()?;
 
@@ -77,11 +96,13 @@ pub fn delete_skill(skill_id: String) -> Result<(), String> {
     std::fs::remove_dir_all(&skill_path)
         .map_err(|e| format!("Failed to delete skill folder: {}", e))?;
 
+    // Invalidate cache after deletion
+    cache.invalidate_skills();
     Ok(())
 }
 
 #[tauri::command]
-pub fn refresh_skills() -> Result<Vec<Skill>, String> {
+pub fn refresh_skills(cache: State<AppCache>) -> Result<Vec<Skill>, String> {
     let manager = ConfigManager::new();
     let config = manager.load()?;
 
@@ -117,6 +138,8 @@ pub fn refresh_skills() -> Result<Vec<Skill>, String> {
         }
     });
 
-    // Return updated skills list
-    ScannerService::scan_skills(&config.skills_dir)
+    // Scan and update cache
+    let skills = ScannerService::scan_skills(&config.skills_dir)?;
+    cache.set_skills(skills.clone());
+    Ok(skills)
 }

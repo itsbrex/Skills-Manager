@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageLoader, SkeletonList } from "@/components/ui/loading";
 import { Skill, Tool, AppConfig } from "@/types";
 import { useTranslation } from "@/i18n";
 
@@ -41,6 +42,8 @@ export function Skills() {
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
   const [deletingSkill, setDeletingSkill] = useState<string | null>(null);
   const [editingSkill, setEditingSkill] = useState<string | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
 
   // Handle opening a skill in editor
@@ -60,7 +63,27 @@ export function Skills() {
     }
   }, [config, navigate, addToast]);
 
-  const fetchData = useCallback(async (options?: { manual?: boolean }) => {
+  // Initial load - uses cached data via list_skills
+  const loadData = useCallback(async () => {
+    try {
+      const [skillsResult, configResult, toolsResult] = await Promise.all([
+        invoke<Skill[]>("list_skills"),
+        invoke<AppConfig>("get_config"),
+        invoke<Tool[]>("detect_tools"),
+      ]);
+      setSkills(skillsResult);
+      setConfig(configResult);
+      setTools(toolsResult);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setInitialLoading(false);
+    }
+  }, [addToast]);
+
+  // Manual refresh - forces rescan via refresh_skills
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
     try {
       const [skillsResult, configResult, toolsResult] = await Promise.all([
         invoke<Skill[]>("refresh_skills"),
@@ -70,17 +93,33 @@ export function Skills() {
       setSkills(skillsResult);
       setConfig(configResult);
       setTools(toolsResult);
-      if (options?.manual) {
-        addToast(t("common.refreshSuccess"), "success");
-      }
+      addToast(t("common.refreshSuccess"), "success");
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setRefreshing(false);
     }
   }, [addToast, t]);
 
+  // Reload data after toggle/delete operations
+  const reloadData = useCallback(async () => {
+    try {
+      const [skillsResult, configResult, toolsResult] = await Promise.all([
+        invoke<Skill[]>("list_skills"),
+        invoke<AppConfig>("get_config"),
+        invoke<Tool[]>("detect_tools"),
+      ]);
+      setSkills(skillsResult);
+      setConfig(configResult);
+      setTools(toolsResult);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [addToast]);
+
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    loadData();
+  }, [loadData]);
 
   const handleToggle = async (skillId: string, skillName: string, toolId: string, enabled: boolean) => {
     const toggleKey = `${skillId}:${toolId}`;
@@ -93,7 +132,7 @@ export function Skills() {
         await invoke("disable_skill", { skillId, toolId });
         addToast(t("skills.disableSuccess").replace("{skill}", skillName).replace("{tool}", getToolDisplayName(toolId, tools)), "success");
       }
-      await fetchData();
+      await reloadData();
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
@@ -113,7 +152,7 @@ export function Skills() {
     try {
       await invoke("delete_skill", { skillId: skill.id });
       addToast(t("skills.deleteSuccess").replace("{name}", skill.name), "success");
-      await fetchData();
+      await reloadData();
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
@@ -139,10 +178,28 @@ export function Skills() {
     : [];
 
   // Show loading state while initial data is being fetched
+  if (initialLoading) {
+    return (
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        overflow: 'hidden',
+        backgroundColor: 'var(--background)',
+      }}>
+        <PageHeader title={t("skills.title")} />
+        <main style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
+          <SkeletonList count={6} />
+        </main>
+      </div>
+    );
+  }
+
   if (!config) {
     return (
       <div style={{ padding: '24px 32px', color: 'var(--muted-foreground)' }}>
-        {t("common.loading")}
+        <PageLoader message={t("loading.skills")} />
       </div>
     );
   }
@@ -160,7 +217,7 @@ export function Skills() {
         title={t("skills.title")}
         actions={
           <>
-            <RefreshButton onClick={() => fetchData({ manual: true })} />
+            <RefreshButton onClick={handleRefresh} loading={refreshing} />
 
             <div style={{ position: 'relative' }}>
               <svg

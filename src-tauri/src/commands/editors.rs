@@ -1,40 +1,39 @@
 use crate::models::DetectedEditor;
-use crate::services::{detect_editors as do_detect, open_in_external_editor};
-use std::sync::Mutex;
+use crate::services::{detect_editors as do_detect, open_in_external_editor, AppCache};
 use tauri::State;
 
-pub struct EditorState {
-    pub editors: Mutex<Vec<DetectedEditor>>,
-}
-
-impl Default for EditorState {
-    fn default() -> Self {
-        Self {
-            editors: Mutex::new(Vec::new()),
-        }
-    }
-}
-
 #[tauri::command]
-pub fn detect_available_editors(state: State<EditorState>) -> Vec<DetectedEditor> {
+pub fn detect_available_editors(cache: State<AppCache>) -> Vec<DetectedEditor> {
+    // Try to get from cache first
+    if let Some(editors) = cache.get_editors() {
+        return editors;
+    }
+
+    // Cache miss - detect and cache
     let editors = do_detect();
-    let mut cached = state.editors.lock().unwrap();
-    *cached = editors.clone();
+    cache.set_editors(editors.clone());
     editors
 }
 
 #[tauri::command]
-pub fn get_available_editors(state: State<EditorState>) -> Vec<DetectedEditor> {
-    let cached = state.editors.lock().unwrap();
-    if cached.is_empty() {
-        drop(cached);
-        let editors = do_detect();
-        let mut cached = state.editors.lock().unwrap();
-        *cached = editors.clone();
-        editors
-    } else {
-        cached.clone()
+pub fn refresh_editors(cache: State<AppCache>) -> Vec<DetectedEditor> {
+    // Force re-detect and update cache
+    let editors = do_detect();
+    cache.set_editors(editors.clone());
+    editors
+}
+
+#[tauri::command]
+pub fn get_available_editors(cache: State<AppCache>) -> Vec<DetectedEditor> {
+    // Try to get from cache first
+    if let Some(editors) = cache.get_editors() {
+        return editors;
     }
+
+    // Cache miss - detect and cache
+    let editors = do_detect();
+    cache.set_editors(editors.clone());
+    editors
 }
 
 #[tauri::command]

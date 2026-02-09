@@ -33,6 +33,15 @@ export const WindsurfIcon = () => (
   </svg>
 );
 
+// Trae - ByteDance AI editor, cyan/teal gradient
+export const TraeIcon = () => (
+  <svg style={iconStyle} viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="20" fill="#0EA5E9"/>
+    <rect x="25" y="25" width="50" height="50" rx="8" stroke="white" strokeWidth="5" fill="none"/>
+    <path d="M38 45H62M38 55H55" stroke="white" strokeWidth="4" strokeLinecap="round"/>
+  </svg>
+);
+
 // Antigravity - Purple/violet
 export const AntigravityIcon = () => (
   <svg style={iconStyle} viewBox="0 0 100 100">
@@ -138,6 +147,7 @@ export const editorIcons: Record<string, React.FC> = {
   vscode: VSCodeIcon,
   cursor: CursorIcon,
   windsurf: WindsurfIcon,
+  trae: TraeIcon,
   antigravity: AntigravityIcon,
   zed: ZedIcon,
   sublime: SublimeIcon,

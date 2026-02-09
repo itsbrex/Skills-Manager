@@ -12,10 +12,10 @@ use std::os::windows::process::CommandExt;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 pub fn detect_editors() -> Vec<DetectedEditor> {
-    // Use parallel iterator to speed up detection, especially important on Windows
-    // where icon extraction (PowerShell) and process spawning are slow
+    // Use sequential iterator to ensure stable ordering
+    // Parallel detection caused random order which led to icon display issues
     EDITOR_DEFINITIONS
-        .par_iter()
+        .iter()
         .filter_map(|def| {
             // Check command line tool
             let cmd_path = if !def.detect_cmd.is_empty() {
@@ -212,13 +212,13 @@ fn get_command_path(cmd: &str) -> Option<String> {
 
 #[cfg(target_os = "macos")]
 fn find_app_path(app_name: &str) -> Option<String> {
-    // Check /Applications folder
+    // Check /Applications folder - exact match first
     let app_path = format!("/Applications/{}.app", app_name);
     if Path::new(&app_path).exists() {
         return Some(app_path);
     }
 
-    // Check ~/Applications folder
+    // Check ~/Applications folder - exact match
     if let Some(home) = dirs::home_dir() {
         let user_app_path = home.join("Applications").join(format!("{}.app", app_name));
         if user_app_path.exists() {
@@ -226,17 +226,47 @@ fn find_app_path(app_name: &str) -> Option<String> {
         }
     }
 
-    // Check for JetBrains apps with version suffix (e.g., "IntelliJ IDEA CE.app")
-    if let Ok(entries) = fs::read_dir("/Applications") {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with(app_name) && name.ends_with(".app") {
-                return Some(entry.path().to_string_lossy().to_string());
+    // Search for apps with prefix match (handles variants like "Trae CN", "PyCharm CE", "PyCharm Professional")
+    let search_dirs = vec![
+        "/Applications".to_string(),
+        dirs::home_dir().map(|h| h.join("Applications").to_string_lossy().to_string()).unwrap_or_default(),
+    ];
+
+    // Collect all matching apps, then pick the best one (shortest name = most likely the base version)
+    let mut candidates: Vec<String> = Vec::new();
+
+    for dir in search_dirs {
+        if dir.is_empty() {
+            continue;
+        }
+        if let Ok(entries) = fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.ends_with(".app") {
+                    let name_without_ext = name.trim_end_matches(".app");
+                    // Exact match or prefix match (for variants)
+                    if name_without_ext == app_name
+                        || name_without_ext.starts_with(&format!("{} ", app_name))
+                        || name_without_ext.starts_with(&format!("{}-", app_name))
+                    {
+                        candidates.push(entry.path().to_string_lossy().to_string());
+                    }
+                }
             }
         }
     }
 
-    None
+    // Sort by path length (shorter = more likely base app), then alphabetically for stability
+    candidates.sort_by(|a, b| {
+        let len_cmp = a.len().cmp(&b.len());
+        if len_cmp == std::cmp::Ordering::Equal {
+            a.cmp(b)
+        } else {
+            len_cmp
+        }
+    });
+
+    candidates.into_iter().next()
 }
 
 fn extract_app_icon(app_path: &str) -> Option<String> {

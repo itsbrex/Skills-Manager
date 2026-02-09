@@ -12,11 +12,14 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { SkeletonList } from "@/components/ui/loading";
 
 export function Tools() {
   const { t } = useTranslation();
   const [tools, setTools] = useState<Tool[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
@@ -65,19 +68,47 @@ export function Tools() {
     transition: 'background-color 0.15s, color 0.15s, border-color 0.15s',
   };
 
-  const detectTools = useCallback(async (options?: { manual?: boolean }) => {
+  // Initial load - uses cached data
+  const loadTools = useCallback(async () => {
     setError(null);
     try {
       const result = await invoke<Tool[]>("detect_tools");
       setTools(result);
-      if (options?.manual) {
-        addToast(t("common.refreshSuccess"), "success");
-      }
+      setIconFallbackStage({});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setInitialLoading(false);
+    }
+  }, []);
+
+  // Manual refresh - forces re-detection
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      const result = await invoke<Tool[]>("refresh_tools");
+      setTools(result);
+      setIconFallbackStage({});
+      addToast(t("common.refreshSuccess"), "success");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRefreshing(false);
+    }
+  }, [addToast, t]);
+
+  // Reload after operations (uses cache)
+  const reloadTools = useCallback(async () => {
+    setError(null);
+    try {
+      const result = await invoke<Tool[]>("detect_tools");
+      setTools(result);
       setIconFallbackStage({});
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [addToast, t]);
+  }, []);
 
   const toggleToolEnabled = useCallback(async (toolId: string, enabled: boolean) => {
     // Optimistic update
@@ -110,12 +141,12 @@ export function Tools() {
           toolId,
           configPath: selected,
         });
-        await detectTools();
+        await reloadTools();
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
     }
-  }, [detectTools, t]);
+  }, [reloadTools, t]);
 
   const handleEditSkillsPath = useCallback(async (toolId: string) => {
     const selected = await open({
@@ -130,12 +161,12 @@ export function Tools() {
           toolId,
           skillsPath: selected,
         });
-        await detectTools();
+        await reloadTools();
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
     }
-  }, [detectTools, t]);
+  }, [reloadTools, t]);
 
   const slugify = (value: string) =>
     value
@@ -266,12 +297,12 @@ export function Tools() {
         });
       }
 
-      await detectTools();
+      await reloadTools();
       setFormOpen(false);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : String(err));
     }
-  }, [editingToolId, form, tools, detectTools, t]);
+  }, [editingToolId, form, tools, reloadTools, t]);
 
   const handleDeleteCustomTool = useCallback(async (tool: Tool) => {
     const confirmed = await confirm(
@@ -285,15 +316,15 @@ export function Tools() {
     setError(null);
     try {
       await invoke("delete_custom_tool", { toolId: tool.id });
-      await detectTools();
+      await reloadTools();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [detectTools, t]);
+  }, [reloadTools, t]);
 
   useEffect(() => {
-    detectTools();
-  }, [detectTools]);
+    loadTools();
+  }, [loadTools]);
 
   useEffect(() => {
     if (!formOpen) {
@@ -323,6 +354,25 @@ export function Tools() {
       return { ...prev, [toolId]: nextStage };
     });
   }, []);
+
+  // Show skeleton while initial loading
+  if (initialLoading) {
+    return (
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        overflow: 'hidden',
+        backgroundColor: 'var(--background)',
+      }}>
+        <PageHeader title={t("tools.title")} />
+        <main style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
+          <SkeletonList count={6} />
+        </main>
+      </div>
+    );
+  }
 
   const renderToolCard = (tool: Tool) => {
     const isCustom = tool.source === "custom";
@@ -651,7 +701,7 @@ export function Tools() {
         title={t("tools.title")}
         actions={
           <>
-            <RefreshButton onClick={() => detectTools({ manual: true })} />
+            <RefreshButton onClick={handleRefresh} loading={refreshing} />
             <button
               style={{
                 display: 'flex',

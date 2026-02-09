@@ -1,11 +1,28 @@
 use std::path::PathBuf;
 
 use crate::models::{CustomToolConfig, Tool, SUPPORTED_TOOLS};
-use crate::services::{ConfigManager, DetectorService};
+use crate::services::{AppCache, ConfigManager, DetectorService};
+use tauri::State;
 
 #[tauri::command]
-pub fn detect_tools() -> Result<Vec<Tool>, String> {
-    Ok(DetectorService::detect_all())
+pub fn detect_tools(cache: State<AppCache>) -> Result<Vec<Tool>, String> {
+    // Try to get from cache first
+    if let Some(tools) = cache.get_tools() {
+        return Ok(tools);
+    }
+
+    // Cache miss - detect and cache
+    let tools = DetectorService::detect_all();
+    cache.set_tools(tools.clone());
+    Ok(tools)
+}
+
+#[tauri::command]
+pub fn refresh_tools(cache: State<AppCache>) -> Result<Vec<Tool>, String> {
+    // Force re-detect and update cache
+    let tools = DetectorService::detect_all();
+    cache.set_tools(tools.clone());
+    Ok(tools)
 }
 
 #[tauri::command]

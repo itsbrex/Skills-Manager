@@ -17,6 +17,13 @@ export const zh = {
     done: "完成",
     checking: "检查中...",
   },
+  loading: {
+    default: "加载中...",
+    skills: "正在加载 Skills...",
+    tools: "正在检测工具...",
+    editors: "正在检测编辑器...",
+    refreshing: "正在刷新...",
+  },
   nav: {
     skills: "Skills",
     tools: "工 具",

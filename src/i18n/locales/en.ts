@@ -16,6 +16,13 @@ export const en = {
     done: "Done",
     checking: "Checking...",
   },
+  loading: {
+    default: "Loading...",
+    skills: "Loading skills...",
+    tools: "Detecting tools...",
+    editors: "Detecting editors...",
+    refreshing: "Refreshing...",
+  },
   nav: {
     skills: "Skills",
     tools: "Tools",
