@@ -9,21 +9,26 @@ import { Toggle } from "@/components/ui/toggle";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
+import { ToastContainer, useToast } from "@/components/ui/toast";
 
 export function Tools() {
   const { t } = useTranslation();
   const [tools, setTools] = useState<Tool[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const { toasts, addToast, removeToast } = useToast();
 
-  const detectTools = useCallback(async () => {
+  const detectTools = useCallback(async (options?: { manual?: boolean }) => {
     setError(null);
     try {
       const result = await invoke<Tool[]>("detect_tools");
       setTools(result);
+      if (options?.manual) {
+        addToast(t("common.refreshSuccess"), "success");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, []);
+  }, [addToast, t]);
 
   const toggleToolEnabled = useCallback(async (toolId: string, enabled: boolean) => {
     // Optimistic update
@@ -98,7 +103,7 @@ export function Tools() {
     }}>
       <PageHeader
         title={t("tools.title")}
-        actions={<RefreshButton onClick={detectTools} />}
+        actions={<RefreshButton onClick={() => detectTools({ manual: true })} />}
       />
 
       {/* Content */}
@@ -374,6 +379,7 @@ export function Tools() {
           </section>
         </div>
       </main>
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ export const zh = {
     cancel: "取消",
     loading: "加载中...",
     refresh: "刷新",
+    refreshSuccess: "刷新成功",
     search: "搜索",
     change: "更改",
     reset: "重置",

@@ -60,7 +60,7 @@ export function Skills() {
     }
   }, [config, navigate, addToast]);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (options?: { manual?: boolean }) => {
     try {
       const [skillsResult, configResult, toolsResult] = await Promise.all([
         invoke<Skill[]>("refresh_skills"),
@@ -70,10 +70,13 @@ export function Skills() {
       setSkills(skillsResult);
       setConfig(configResult);
       setTools(toolsResult);
+      if (options?.manual) {
+        addToast(t("common.refreshSuccess"), "success");
+      }
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     }
-  }, [addToast]);
+  }, [addToast, t]);
 
   useEffect(() => {
     fetchData();
@@ -150,7 +153,7 @@ export function Skills() {
         title={t("skills.title")}
         actions={
           <>
-            <RefreshButton onClick={fetchData} />
+            <RefreshButton onClick={() => fetchData({ manual: true })} />
 
             <div style={{ position: 'relative' }}>
               <svg

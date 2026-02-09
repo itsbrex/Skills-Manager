@@ -6,6 +6,7 @@ export const en = {
     cancel: "Cancel",
     loading: "Loading...",
     refresh: "Refresh",
+    refreshSuccess: "Refresh successful",
     search: "Search",
     change: "Change",
     reset: "Reset",
