@@ -13,7 +13,7 @@ We do not collect, store, transmit, or share any of your:
 
 ## 2. Local Data Storage
 All data generated or used by Skills Manager stays on your local device.
-- **Configuration:** Stored in `~/.skills-hub/config.json` (or your OS equivalent).
+- **Configuration:** Stored in `~/.skills-manager/config.json` (or your OS equivalent).
 - **Skills:** Stored in the directories you configure.
 
 ## 3. Network Usage

@@ -53,7 +53,7 @@ Skills Manager 是一个 Tauri 桌面应用，用于统一管理多个 AI 编程
 │  File System                                            │
 │  ┌─────────────────┐  ┌─────────────────────────────┐   │
 │  │ 公共 Skills 目录 │  │ 各工具 Skills 目录 (软链接) │   │
-│  │ ~/.skills-hub/  │  │ ~/.claude/, ~/.codex/ ...  │   │
+│  │ ~/.skills-manager/  │  │ ~/.claude/, ~/.codex/ ...  │   │
 │  └─────────────────┘  └─────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -63,7 +63,7 @@ Skills Manager 是一个 Tauri 桌面应用，用于统一管理多个 AI 编程
 ### 公共 Skills 目录结构
 
 ```
-~/.skills-hub/
+~/.skills-manager/
 ├── config.json              # 全局配置
 ├── skills/                  # 所有 skills 存放处
 │   ├── superpowers/
@@ -82,7 +82,7 @@ Skills Manager 是一个 Tauri 桌面应用，用于统一管理多个 AI 编程
 ```json
 {
   "version": "1.0",
-  "skillsDir": "~/.skills-hub/skills",
+  "skillsDir": "~/.skills-manager/skills",
   "tools": {
     "claude-code": {
       "enabled": true,

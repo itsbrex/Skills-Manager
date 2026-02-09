@@ -167,7 +167,7 @@ invoke("enable_skill", { skill_id, tool_id }) // ✗ 不生效
 
 ### 10. 配置文件位置
 
-**决策**: 配置存放在 `~/.skills-hub/config.json`
+**决策**: 配置存放在 `~/.skills-manager/config.json`
 
 **原因**:
 - 与任何单个工具的配置目录解耦
@@ -183,7 +183,7 @@ invoke("enable_skill", { skill_id, tool_id }) // ✗ 不生效
 2. `src-tauri/tauri.conf.json` - `version` 字段
 3. `src-tauri/Cargo.toml` - `version` 字段
 4. `src-tauri/src/models/config.rs` - `AppConfig::default()` 中的 `version` 字段
-5. `~/.skills-hub/config.json` - 用户配置文件中的 `version` 字段（可选，App 会自动迁移）
+5. `~/.skills-manager/config.json` - 用户配置文件中的 `version` 字段（可选，App 会自动迁移）
 
 ---
 

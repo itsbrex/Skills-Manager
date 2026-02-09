@@ -10,14 +10,140 @@ pub struct ConfigManager {
 impl ConfigManager {
     pub fn new() -> Self {
         let config_path = Self::get_config_path();
-        Self { config_path }
+        let manager = Self { config_path };
+        // 自动迁移旧目录
+        manager.migrate_from_old_directory();
+        manager
     }
 
     fn get_config_path() -> PathBuf {
         dirs::home_dir()
             .unwrap_or_default()
-            .join(".skills-hub")
+            .join(".skills-manager")
             .join("config.json")
+    }
+
+    fn get_old_config_dir() -> PathBuf {
+        dirs::home_dir()
+            .unwrap_or_default()
+            .join(".skills-hub")
+    }
+
+    fn get_new_config_dir() -> PathBuf {
+        dirs::home_dir()
+            .unwrap_or_default()
+            .join(".skills-manager")
+    }
+
+    /// 从旧目录 .skills-hub 迁移到新目录 .skills-manager
+    fn migrate_from_old_directory(&self) {
+        let old_dir = Self::get_old_config_dir();
+        let new_dir = Self::get_new_config_dir();
+
+        // 如果旧目录存在且新目录不存在，执行迁移
+        if old_dir.exists() && !new_dir.exists() {
+            if let Err(e) = fs::rename(&old_dir, &new_dir) {
+                // 如果 rename 失败（跨文件系统），尝试复制后删除
+                if let Err(copy_err) = Self::copy_dir_recursive(&old_dir, &new_dir) {
+                    eprintln!("Failed to migrate config directory: rename={}, copy={}", e, copy_err);
+                    return;
+                }
+                // 复制成功后删除旧目录
+                let _ = fs::remove_dir_all(&old_dir);
+            }
+            println!("Migrated config from .skills-hub to .skills-manager");
+
+            // 更新 config.json 中的 skills_dir 路径
+            Self::update_config_paths(&new_dir, &old_dir);
+
+            // 修复各工具目录中的软链接
+            Self::fix_symlinks_after_migration(&old_dir, &new_dir);
+        }
+    }
+
+    /// 更新 config.json 中的路径引用
+    fn update_config_paths(new_dir: &PathBuf, old_dir: &PathBuf) {
+        let config_path = new_dir.join("config.json");
+        if let Ok(content) = fs::read_to_string(&config_path) {
+            let old_path_str = old_dir.to_string_lossy();
+            let new_path_str = new_dir.to_string_lossy();
+            let updated_content = content.replace(&*old_path_str, &*new_path_str);
+            if updated_content != content {
+                let _ = fs::write(&config_path, updated_content);
+                println!("Updated paths in config.json");
+            }
+        }
+    }
+
+    /// 修复各工具目录中指向旧路径的软链接
+    fn fix_symlinks_after_migration(old_dir: &PathBuf, new_dir: &PathBuf) {
+        let home_dir = dirs::home_dir().unwrap_or_default();
+
+        // 已知的工具 skills 目录
+        let tool_skills_dirs = [
+            home_dir.join(".claude").join("skills"),
+            home_dir.join(".codex").join("skills"),
+            home_dir.join(".codebuddy").join("skills"),
+        ];
+
+        for tool_dir in &tool_skills_dirs {
+            if !tool_dir.exists() {
+                continue;
+            }
+
+            if let Ok(entries) = fs::read_dir(tool_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+
+                    // 检查是否是软链接
+                    if let Ok(metadata) = path.symlink_metadata() {
+                        if metadata.file_type().is_symlink() {
+                            if let Ok(target) = fs::read_link(&path) {
+                                let target_str = target.to_string_lossy();
+                                let old_dir_str = old_dir.to_string_lossy();
+
+                                // 如果链接指向旧目录，更新为新目录
+                                if target_str.contains(&*old_dir_str) {
+                                    let new_target_str = target_str.replace(&*old_dir_str, &*new_dir.to_string_lossy());
+                                    let new_target = PathBuf::from(new_target_str.to_string());
+
+                                    // 删除旧链接，创建新链接
+                                    let _ = fs::remove_file(&path);
+
+                                    #[cfg(unix)]
+                                    {
+                                        let _ = std::os::unix::fs::symlink(&new_target, &path);
+                                    }
+
+                                    #[cfg(windows)]
+                                    {
+                                        let _ = std::os::windows::fs::symlink_dir(&new_target, &path);
+                                    }
+
+                                    println!("Fixed symlink: {:?} -> {:?}", path, new_target);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// 递归复制目录
+    fn copy_dir_recursive(src: &PathBuf, dst: &PathBuf) -> Result<(), std::io::Error> {
+        fs::create_dir_all(dst)?;
+        for entry in fs::read_dir(src)? {
+            let entry = entry?;
+            let src_path = entry.path();
+            let dst_path = dst.join(entry.file_name());
+            if src_path.is_dir() {
+                Self::copy_dir_recursive(&src_path, &dst_path)?;
+            } else {
+                fs::copy(&src_path, &dst_path)?;
+            }
+        }
+        Ok(())
     }
 
     pub fn load(&self) -> Result<AppConfig, String> {

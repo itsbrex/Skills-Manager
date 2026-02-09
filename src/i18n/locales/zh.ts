@@ -52,7 +52,7 @@ export const zh = {
     skillsDirectory: "Skills 目录",
     clickToSelect: "点击选择目录",
     orUseDefault: "或使用默认位置",
-    defaultPath: "默认: ~/.skills-hub/skills",
+    defaultPath: "默认: ~/.skills-manager/skills",
     importSkills: "导入现有 Skills",
     importSkillsDesc: "将现有工具中的 Skills 统一收纳到公共目录",
     scanning: "正在扫描...",

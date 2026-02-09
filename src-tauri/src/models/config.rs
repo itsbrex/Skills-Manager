@@ -78,7 +78,7 @@ impl Default for AppConfig {
             version: "1.0.3".to_string(),
             skills_dir: dirs::home_dir()
                 .unwrap_or_default()
-                .join(".skills-hub")
+                .join(".skills-manager")
                 .join("skills"),
             tools: HashMap::new(),
             custom_tools: HashMap::new(),

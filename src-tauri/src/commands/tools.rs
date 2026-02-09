@@ -188,7 +188,7 @@ mod tests {
     use std::path::Path;
 
     fn write_config(home_dir: &Path, enabled: bool) -> std::path::PathBuf {
-        let config_dir = home_dir.join(".skills-hub");
+        let config_dir = home_dir.join(".skills-manager");
         let config_path = config_dir.join("config.json");
         fs::create_dir_all(&config_dir).unwrap();
 
@@ -199,7 +199,7 @@ mod tests {
 
         let config_json = json!({
             "version": "1.0.2",
-            "skills_dir": home_dir.join(".skills-hub").join("skills").to_string_lossy(),
+            "skills_dir": home_dir.join(".skills-manager").join("skills").to_string_lossy(),
             "tools": {},
             "custom_tools": {
                 "my-tool": {

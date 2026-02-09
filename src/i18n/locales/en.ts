@@ -51,7 +51,7 @@ export const en = {
     skillsDirectory: "Skills Directory",
     clickToSelect: "Click to select directory",
     orUseDefault: "Or use default location",
-    defaultPath: "Default: ~/.skills-hub/skills",
+    defaultPath: "Default: ~/.skills-manager/skills",
     importSkills: "Import Existing Skills",
     importSkillsDesc: "Consolidate existing skills into the public directory",
     scanning: "Scanning...",
