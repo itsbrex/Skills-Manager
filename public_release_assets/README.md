@@ -1,7 +1,7 @@
 # Skills Manager
 
 > **A unified desktop application for managing AI coding assistant skills.**
-> Seamlessly organize, sync, and share skills for **Claude Code、Codex、Opencode** and other AI tools.
+> Seamlessly organize, sync, and share skills for **Claude Code, Codex, Opencode** and other AI tools.
 
 ![Version](https://img.shields.io/badge/version-1.0.1-blue) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
 
@@ -11,15 +11,16 @@
 
 **Skills Manager** is a modern desktop application designed to solve the fragmentation of AI assistant skills configurations. Instead of managing skills and prompts separately for different tools, Skills Manager provides a central hub.
 
-It uses a powerful **symlink synchronization mechanism**, allowing you to write a skill once and instantly use it across supported AI tools like Claude Code、Codex、Opencode.
+It uses a powerful **symlink synchronization mechanism**, allowing you to write a skill once and instantly use it across supported AI tools like Claude Code, Codex, Opencode.
 
 ## ✨ Key Features
 
 - **🎯 Unified Management**: Centralize all your AI skills in one secure location.
 - **🔄 Smart Synchronization**: Automatic symlink management ensures your tools always have the latest version of your skills without file duplication.
+- **🎛️ Granular Control**: Enable or disable specific skills for individual tools without deleting the original files.
 - **⚡ High Performance**: Built with **Rust** and **Tauri 2.0** for a lightweight, blazing-fast experience.
 - **🛡️ Cross-Platform**: Native support for macOS, Windows, and Linux.
-- **🔌 Multi-Tool Support**: Out-of-the-box support for **Claude Code、Codex、Opencode** and extensible to others.
+- **🔌 Multi-Tool Support**: Out-of-the-box support for **Claude Code, Codex, Opencode** and extensible to others.
 - **🧩 Custom Tools**: Add your own tools with custom paths and optional icons.
 - **🎨 Modern UI**: Beautiful interface built with React 19, Tailwind CSS v4, and Radix UI.
 

@@ -32,20 +32,23 @@ export function Tools() {
   });
   const formInputStyle: React.CSSProperties = {
     height: '40px',
-    backgroundColor: 'var(--input)',
-    borderRadius: '10px',
+    backgroundColor: 'var(--background)',
+    borderRadius: '8px',
     border: '1px solid var(--border)',
     padding: '0 12px',
-    boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+    boxShadow: 'none',
     color: 'var(--foreground)',
     caretColor: 'var(--foreground)',
+    flex: 1,
+    fontSize: '13px',
   };
   const fieldLabelStyle: React.CSSProperties = {
     display: 'block',
     fontSize: '12px',
+    fontWeight: 500,
     color: 'var(--muted-foreground)',
     marginBottom: '6px',
-    letterSpacing: '0.02em',
+    letterSpacing: '0.01em',
   };
   const pickerButtonStyle: React.CSSProperties = {
     display: 'flex',
@@ -53,9 +56,9 @@ export function Tools() {
     justifyContent: 'center',
     width: '40px',
     height: '40px',
-    borderRadius: '10px',
+    borderRadius: '8px',
     border: '1px solid var(--border)',
-    background: 'var(--background)',
+    background: 'var(--secondary)',
     color: 'var(--muted-foreground)',
     cursor: 'pointer',
     flexShrink: 0,
@@ -794,7 +797,8 @@ export function Tools() {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(8, 12, 20, 0.45)',
+            background: 'rgba(0, 0, 0, 0.5)',
+            backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -809,7 +813,7 @@ export function Tools() {
         >
           <Card
             style={{
-              width: 'min(920px, 92vw)',
+              width: 'min(720px, 92vw)',
               maxHeight: '88vh',
               display: 'flex',
               flexDirection: 'column',
@@ -817,7 +821,7 @@ export function Tools() {
               background: 'var(--background)',
               border: '1px solid var(--border)',
               borderRadius: '16px',
-              boxShadow: '0 24px 64px rgba(0, 0, 0, 0.18)',
+              boxShadow: '0 24px 64px -12px rgba(0, 0, 0, 0.25)',
             }}
             onClick={(event) => event.stopPropagation()}
           >
@@ -999,7 +1003,7 @@ export function Tools() {
                   alignItems: 'center',
                   gap: '6px',
                   padding: '8px 16px',
-                  borderRadius: '10px',
+                  borderRadius: '8px',
                   border: '1px solid var(--border)',
                   background: 'var(--background)',
                   color: 'var(--foreground)',
@@ -1016,7 +1020,7 @@ export function Tools() {
                   alignItems: 'center',
                   gap: '6px',
                   padding: '8px 18px',
-                  borderRadius: '10px',
+                  borderRadius: '8px',
                   border: 'none',
                   background: 'var(--foreground)',
                   color: 'var(--primary-foreground)',
