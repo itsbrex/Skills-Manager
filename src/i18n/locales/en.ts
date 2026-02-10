@@ -51,7 +51,7 @@ export const en = {
     skillsDirectory: "Skills Directory",
     clickToSelect: "Click to select directory",
     orUseDefault: "Or use default location",
-    defaultPath: "Default: ~/.skills-hub/skills",
+    defaultPath: "Default: ~/.skills-manager/skills",
     importSkills: "Import Existing Skills",
     importSkillsDesc: "Consolidate existing skills into the public directory",
     scanning: "Scanning...",
@@ -83,6 +83,7 @@ export const en = {
     disableSuccess: "Disabled {skill} for {tool}",
     noToolsEnabled: "No tools enabled",
     allEnabled: "All enabled",
+    toolNotDetected: "This tool is not detected on your system and cannot be enabled",
   },
   tools: {
     title: "Tools",

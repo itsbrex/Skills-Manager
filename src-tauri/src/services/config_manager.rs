@@ -16,7 +16,7 @@ impl ConfigManager {
     fn get_config_path() -> PathBuf {
         dirs::home_dir()
             .unwrap_or_default()
-            .join(".skills-hub")
+            .join(".skills-manager")
             .join("config.json")
     }
 

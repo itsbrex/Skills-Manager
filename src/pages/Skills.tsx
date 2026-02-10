@@ -462,6 +462,9 @@ export function Skills() {
                               const isEnabled = skill.enabled[toolId] ?? false;
                               const toggleKey = `${skill.id}:${toolId}`;
                               const isToggling = togglingSkill === toggleKey;
+                              const tool = tools.find(t => t.id === toolId);
+                              const isDetected = tool?.detected ?? false;
+                              const isDisabled = isToggling || !isDetected;
 
                               return (
                                 <label
@@ -470,18 +473,20 @@ export function Skills() {
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: '6px',
-                                    cursor: isToggling ? 'wait' : 'pointer',
+                                    cursor: isDisabled ? (isToggling ? 'wait' : 'not-allowed') : 'pointer',
                                     padding: '5px 10px',
                                     borderRadius: '8px',
                                     backgroundColor: isEnabled ? 'rgba(9, 105, 218, 0.12)' : 'var(--background)',
                                     border: isEnabled ? '1px solid rgba(9, 105, 218, 0.35)' : '1px solid var(--border)',
                                     transition: 'all 0.15s',
+                                    opacity: !isDetected ? 0.5 : 1,
                                   }}
                                   onClick={(e) => e.stopPropagation()}
+                                  title={!isDetected ? t("skills.toolNotDetected") : undefined}
                                 >
                                   <Switch
                                     checked={isEnabled}
-                                    disabled={isToggling}
+                                    disabled={isDisabled}
                                     onCheckedChange={(checked) =>
                                       handleToggle(skill.id, skill.name, toolId, checked)
                                     }
@@ -489,7 +494,7 @@ export function Skills() {
                                   <span style={{
                                     fontSize: '12px',
                                     fontWeight: 500,
-                                    color: isEnabled ? 'var(--primary)' : 'var(--muted-foreground)',
+                                    color: !isDetected ? 'var(--muted-foreground)' : (isEnabled ? 'var(--primary)' : 'var(--muted-foreground)'),
                                   }}>
                                     {getToolDisplayName(toolId, tools)}
                                   </span>
