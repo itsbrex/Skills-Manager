@@ -8,7 +8,7 @@ import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoader, SkeletonList } from "@/components/ui/loading";
 import { Skill, Tool, AppConfig } from "@/types";
-import { useTranslation } from "@/i18n";
+import { useTranslation, TranslationPath } from "@/i18n";
 
 function getToolDisplayName(toolId: string, tools: Tool[]): string {
   const tool = tools.find(t => t.id === toolId);
@@ -42,6 +42,8 @@ export function Skills() {
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
   const [deletingSkill, setDeletingSkill] = useState<string | null>(null);
   const [editingSkill, setEditingSkill] = useState<string | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
@@ -157,6 +159,31 @@ export function Skills() {
       addToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
       setDeletingSkill(null);
+    }
+  };
+
+  const handleCreateSkill = async (skillName: string, skillDescription: string) => {
+    setCreating(true);
+    try {
+      const newSkill = await invoke<Skill>("create_skill", {
+        name: skillName,
+        description: skillDescription || null,
+      });
+      addToast(t("skills.createSuccess").replace("{name}", skillName), "success");
+      setShowCreateDialog(false);
+
+      // Navigate to editor
+      const editorId = config?.preferences?.default_editor || "builtin";
+      if (editorId === "builtin") {
+        navigate(`/editor?root=${encodeURIComponent(newSkill.path)}`);
+      } else {
+        await invoke("open_in_editor", { editorId, path: newSkill.path });
+        await reloadData();
+      }
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -283,6 +310,7 @@ export function Skills() {
               }}
               onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
               onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+              onClick={() => setShowCreateDialog(true)}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 5v14M5 12h14"/>
@@ -661,6 +689,178 @@ export function Skills() {
         </div>
       </main>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+
+      {showCreateDialog && (
+        <CreateSkillDialog
+          creating={creating}
+          existingIds={skills.map(s => s.id)}
+          onCancel={() => setShowCreateDialog(false)}
+          onCreate={handleCreateSkill}
+          t={t}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateSkillDialog({
+  creating,
+  existingIds,
+  onCancel,
+  onCreate,
+  t,
+}: {
+  creating: boolean;
+  existingIds: string[];
+  onCancel: () => void;
+  onCreate: (name: string, description: string) => void;
+  t: (key: TranslationPath) => string;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [error, setError] = useState("");
+
+  const toId = (n: string): string =>
+    n.trim().toLowerCase().replace(/ /g, "-").replace(/[^a-z0-9_-]/g, "");
+
+  const handleSubmit = () => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError(t("skills.nameRequired"));
+      return;
+    }
+    const id = toId(trimmed);
+    if (existingIds.includes(id)) {
+      setError(t("skills.nameConflict").replace("{name}", trimmed));
+      return;
+    }
+    onCreate(trimmed, description.trim());
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "rgba(0,0,0,0.4)",
+        zIndex: 1000,
+      }}
+      onClick={onCancel}
+    >
+      <div
+        style={{
+          width: "420px",
+          backgroundColor: "var(--background)",
+          borderRadius: "14px",
+          border: "1px solid var(--border)",
+          boxShadow: "0 16px 48px rgba(0,0,0,0.2)",
+          padding: "24px",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 style={{ fontSize: "16px", fontWeight: 600, color: "var(--foreground)", margin: "0 0 4px 0" }}>
+          {t("skills.createSkill")}
+        </h2>
+        <p style={{ fontSize: "13px", color: "var(--muted-foreground)", margin: "0 0 20px 0" }}>
+          {t("skills.createSkillDesc")}
+        </p>
+
+        {/* Name */}
+        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "var(--foreground)", marginBottom: "6px" }}>
+          {t("skills.skillName")}
+        </label>
+        <input
+          autoFocus
+          type="text"
+          placeholder={t("skills.skillNamePlaceholder")}
+          value={name}
+          onChange={(e) => { setName(e.target.value); setError(""); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !creating) handleSubmit(); }}
+          style={{
+            width: "100%",
+            padding: "8px 12px",
+            fontSize: "13px",
+            border: error ? "1px solid var(--color-error)" : "1px solid var(--border)",
+            borderRadius: "8px",
+            backgroundColor: "var(--background)",
+            color: "var(--foreground)",
+            outline: "none",
+            boxSizing: "border-box",
+            marginBottom: error ? "4px" : "16px",
+          }}
+        />
+        {error && (
+          <p style={{ fontSize: "12px", color: "var(--color-error)", margin: "0 0 12px 0" }}>{error}</p>
+        )}
+
+        {/* Description */}
+        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "var(--foreground)", marginBottom: "6px" }}>
+          {t("skills.skillDescription")}
+        </label>
+        <textarea
+          placeholder={t("skills.skillDescPlaceholder")}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && e.metaKey && !creating) handleSubmit(); }}
+          rows={3}
+          style={{
+            width: "100%",
+            padding: "8px 12px",
+            fontSize: "13px",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            backgroundColor: "var(--background)",
+            color: "var(--foreground)",
+            outline: "none",
+            boxSizing: "border-box",
+            marginBottom: "24px",
+            resize: "vertical",
+            maxHeight: "120px",
+            fontFamily: "inherit",
+            lineHeight: 1.5,
+          }}
+        />
+
+        {/* Actions */}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+          <button
+            onClick={onCancel}
+            disabled={creating}
+            style={{
+              padding: "8px 16px",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: "var(--foreground)",
+              backgroundColor: "var(--secondary)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              cursor: "pointer",
+            }}
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={creating}
+            style={{
+              padding: "8px 16px",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: "var(--primary-foreground)",
+              backgroundColor: "var(--foreground)",
+              border: "none",
+              borderRadius: "8px",
+              cursor: creating ? "wait" : "pointer",
+              opacity: creating ? 0.7 : 1,
+            }}
+          >
+            {creating ? t("skills.creating") : t("skills.create")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

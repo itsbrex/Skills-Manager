@@ -102,6 +102,56 @@ pub fn delete_skill(skill_id: String, cache: State<AppCache>) -> Result<(), Stri
 }
 
 #[tauri::command]
+pub fn create_skill(name: String, description: Option<String>, cache: State<AppCache>) -> Result<Skill, String> {
+    let manager = ConfigManager::new();
+    let config = manager.load()?;
+
+    // Convert name to a valid folder ID: lowercase, spaces to hyphens, remove special chars
+    let id: String = name
+        .trim()
+        .to_lowercase()
+        .chars()
+        .map(|c| if c == ' ' { '-' } else { c })
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+
+    if id.is_empty() {
+        return Err("Invalid skill name".to_string());
+    }
+
+    let skill_path = config.skills_dir.join(&id);
+    if skill_path.exists() {
+        return Err(format!("Skill \"{}\" already exists", id));
+    }
+
+    // Create the skill folder
+    std::fs::create_dir_all(&skill_path)
+        .map_err(|e| format!("Failed to create skill folder: {}", e))?;
+
+    // Generate initial SKILL.md with frontmatter (follows official template)
+    let desc = description
+        .as_deref()
+        .filter(|d| !d.is_empty())
+        .unwrap_or("Replace with description of the skill and when Claude should use it.");
+    let content = format!(
+        "---\nname: {}\ndescription: {}\n---\n\n# Insert instructions below\n",
+        id, desc
+    );
+
+    let skill_md_path = skill_path.join("SKILL.md");
+    std::fs::write(&skill_md_path, &content)
+        .map_err(|e| format!("Failed to write SKILL.md: {}", e))?;
+
+    // Load and return the new Skill object
+    let skill = ScannerService::load_skill_with_config(&skill_path, &config)?;
+
+    // Invalidate cache
+    cache.invalidate_skills();
+
+    Ok(skill)
+}
+
+#[tauri::command]
 pub fn refresh_skills(cache: State<AppCache>) -> Result<Vec<Skill>, String> {
     let manager = ConfigManager::new();
     let config = manager.load()?;

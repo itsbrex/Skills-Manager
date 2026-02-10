@@ -5,12 +5,12 @@ mod services;
 mod test_support;
 
 use commands::{
-    check_sync_status, check_update, create_custom_tool, delete_custom_tool, delete_skill,
-    detect_available_editors, detect_tools, disable_skill, enable_skill, fix_sync_issues,
-    get_available_editors, get_config, get_tool_status, import_skills_to_hub, is_initialized,
-    list_skills, mark_initialized, open_in_editor, read_directory_tree, read_file, refresh_skills,
-    refresh_tools, refresh_editors, save_config, scan_existing_skills, set_tool_enabled,
-    update_custom_tool, update_tool_paths, write_file,
+    check_sync_status, check_update, create_custom_tool, create_skill, delete_custom_tool,
+    delete_skill, detect_available_editors, detect_tools, disable_skill, enable_skill,
+    fix_sync_issues, get_available_editors, get_config, get_tool_status, import_skills_to_hub,
+    is_initialized, list_skills, mark_initialized, open_in_editor, read_directory_tree, read_file,
+    refresh_skills, refresh_tools, refresh_editors, save_config, scan_existing_skills,
+    set_tool_enabled, update_custom_tool, update_tool_paths, write_file,
 };
 use services::AppCache;
 
@@ -30,6 +30,7 @@ pub fn run() {
             enable_skill,
             disable_skill,
             delete_skill,
+            create_skill,
             detect_tools,
             refresh_tools,
             get_tool_status,

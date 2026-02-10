@@ -63,12 +63,15 @@ impl ScannerService {
             .ok_or("Invalid skill directory name")?;
 
         let meta_path = skill_path.join("meta.json");
-        let skill_md_path = skill_path.join("skill.md");
+        let skill_md_upper = skill_path.join("SKILL.md");
+        let skill_md_lower = skill_path.join("skill.md");
 
         let meta = if meta_path.exists() {
             Self::load_meta(&meta_path)?
-        } else if skill_md_path.exists() {
-            Self::parse_frontmatter(&skill_md_path)?
+        } else if skill_md_upper.exists() {
+            Self::parse_frontmatter(&skill_md_upper)?
+        } else if skill_md_lower.exists() {
+            Self::parse_frontmatter(&skill_md_lower)?
         } else {
             Self::generate_meta(&id)
         };
