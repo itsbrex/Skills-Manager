@@ -2,6 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::models::{AppConfig, ToolConfig, SUPPORTED_TOOLS};
+use crate::services::linker::{is_symlink_or_junction, remove_symlink_or_junction};
+#[cfg(windows)]
+use crate::services::linker::LinkerService;
 
 pub struct ConfigManager {
     config_path: PathBuf,
@@ -95,33 +98,32 @@ impl ConfigManager {
                 for entry in entries.flatten() {
                     let path = entry.path();
 
-                    // 检查是否是软链接
-                    if let Ok(metadata) = path.symlink_metadata() {
-                        if metadata.file_type().is_symlink() {
-                            if let Ok(target) = fs::read_link(&path) {
-                                let target_str = target.to_string_lossy();
-                                let old_dir_str = old_dir.to_string_lossy();
+                    // 检查是否是软链接或 Junction（Windows）
+                    if is_symlink_or_junction(&path) {
+                        if let Ok(target) = fs::read_link(&path) {
+                            let target_str = target.to_string_lossy();
+                            let old_dir_str = old_dir.to_string_lossy();
 
-                                // 如果链接指向旧目录，更新为新目录
-                                if target_str.contains(&*old_dir_str) {
-                                    let new_target_str = target_str.replace(&*old_dir_str, &*new_dir.to_string_lossy());
-                                    let new_target = PathBuf::from(new_target_str.to_string());
+                            // 如果链接指向旧目录，更新为新目录
+                            if target_str.contains(&*old_dir_str) {
+                                let new_target_str = target_str.replace(&*old_dir_str, &*new_dir.to_string_lossy());
+                                let new_target = PathBuf::from(new_target_str.to_string());
 
-                                    // 删除旧链接，创建新链接
-                                    let _ = fs::remove_file(&path);
+                                // 删除旧链接（兼容 symlink 和 Junction）
+                                let _ = remove_symlink_or_junction(&path);
 
-                                    #[cfg(unix)]
-                                    {
-                                        let _ = std::os::unix::fs::symlink(&new_target, &path);
-                                    }
-
-                                    #[cfg(windows)]
-                                    {
-                                        let _ = std::os::windows::fs::symlink_dir(&new_target, &path);
-                                    }
-
-                                    println!("Fixed symlink: {:?} -> {:?}", path, new_target);
+                                // 使用 LinkerService 重建链接（含 Junction fallback）
+                                #[cfg(unix)]
+                                {
+                                    let _ = std::os::unix::fs::symlink(&new_target, &path);
                                 }
+
+                                #[cfg(windows)]
+                                {
+                                    let _ = LinkerService::create_windows_symlink(&new_target, &path);
+                                }
+
+                                println!("Fixed symlink: {:?} -> {:?}", path, new_target);
                             }
                         }
                     }

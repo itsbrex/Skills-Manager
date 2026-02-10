@@ -1,5 +1,5 @@
 use crate::models::Skill;
-use crate::services::{AppCache, ConfigManager, LinkerService, ScannerService};
+use crate::services::{AppCache, ConfigManager, LinkerService, ScannerService, is_symlink_or_junction};
 use tauri::State;
 
 #[tauri::command]
@@ -127,8 +127,8 @@ pub fn refresh_skills(cache: State<AppCache>) -> Result<Vec<Skill>, String> {
                             return;
                         }
                     }
-                    // Skip if it's already a symlink (managed by us)
-                    if path.symlink_metadata().map(|m| m.file_type().is_symlink()).unwrap_or(false) {
+                    // Skip if it's already a symlink or Junction (managed by us)
+                    if is_symlink_or_junction(&path) {
                         return;
                     }
                     // Import this skill to hub

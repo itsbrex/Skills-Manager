@@ -30,6 +30,47 @@ pub struct LinkReport {
 
 pub struct LinkerService;
 
+/// Check if a path is a symlink or a Windows Junction.
+/// On Unix, this is equivalent to `is_symlink()`.
+/// On Windows, Junctions created by `mklink /J` are NOT reported as symlinks
+/// by Rust's `FileType::is_symlink()`, so we need additional detection.
+pub fn is_symlink_or_junction(path: &Path) -> bool {
+    if let Ok(meta) = path.symlink_metadata() {
+        if meta.file_type().is_symlink() {
+            return true;
+        }
+
+        // On Windows, check for reparse points (Junctions)
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+            if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Remove a symlink or Junction at the given path.
+/// Handles both file symlinks and directory junctions correctly.
+pub fn remove_symlink_or_junction(path: &Path) -> Result<(), std::io::Error> {
+    // On Windows, Junctions are directory-type, so remove_file won't work.
+    // Try remove_dir first (works for junctions and dir symlinks),
+    // then fall back to remove_file (for file symlinks).
+    #[cfg(windows)]
+    {
+        return fs::remove_dir(path).or_else(|_| fs::remove_file(path));
+    }
+
+    #[cfg(unix)]
+    {
+        // On Unix, symlinks (both file and dir) can be removed with remove_file
+        fs::remove_file(path)
+    }
+}
+
 impl LinkerService {
     pub fn enable_skill(
         skill_source: &Path,
@@ -64,7 +105,7 @@ impl LinkerService {
     }
 
     #[cfg(windows)]
-    fn create_windows_symlink(original: &Path, link: &Path) -> Result<(), String> {
+    pub fn create_windows_symlink(original: &Path, link: &Path) -> Result<(), String> {
         use std::os::windows::process::CommandExt;
 
         // 1. 确保父目录存在
@@ -139,28 +180,25 @@ impl LinkerService {
     ) -> LinkStatus {
         let link_path = tool_skills_dir.join(skill_id);
 
-        match link_path.symlink_metadata() {
-            Ok(meta) => {
-                if meta.file_type().is_symlink() {
-                    match fs::read_link(&link_path) {
-                        Ok(target) => {
-                            if target == skill_source {
-                                if target.exists() {
-                                    LinkStatus::Valid
-                                } else {
-                                    LinkStatus::Broken
-                                }
-                            } else {
-                                LinkStatus::WrongTarget
-                            }
+        if is_symlink_or_junction(&link_path) {
+            match fs::read_link(&link_path) {
+                Ok(target) => {
+                    if target == skill_source {
+                        if target.exists() {
+                            LinkStatus::Valid
+                        } else {
+                            LinkStatus::Broken
                         }
-                        Err(_) => LinkStatus::Broken,
+                    } else {
+                        LinkStatus::WrongTarget
                     }
-                } else {
-                    LinkStatus::NotALink
                 }
+                Err(_) => LinkStatus::Broken,
             }
-            Err(_) => LinkStatus::Missing,
+        } else if link_path.exists() {
+            LinkStatus::NotALink
+        } else {
+            LinkStatus::Missing
         }
     }
 

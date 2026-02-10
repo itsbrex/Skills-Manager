@@ -5,6 +5,7 @@ use std::path::Path;
 
 use crate::models::{Skill, SkillSource, AppConfig};
 use crate::services::detector::DetectorService;
+use crate::services::linker::is_symlink_or_junction;
 
 pub struct ScannerService;
 
@@ -90,49 +91,45 @@ impl ScannerService {
     fn check_enabled_status(skill_path: &Path, skill_id: &str, config: &AppConfig) -> HashMap<String, bool> {
         let mut enabled = HashMap::new();
 
-        // Optimization: Don't canonicalize skill_path upfront. It's expensive on Windows.
-        // let canonical_skill_path = skill_path.canonicalize().ok();
-
         for (tool_id, tool_config) in config.collect_tool_configs() {
             let link_path = tool_config.skills_path.join(skill_id);
 
-            // Check if a symlink exists at the expected location
-            if let Ok(metadata) = link_path.symlink_metadata() {
-                if metadata.file_type().is_symlink() {
-                    // Read the symlink target and check if it points to our skill
-                    if let Ok(target) = fs::read_link(&link_path) {
+            // Check if a symlink or Junction (Windows) exists at the expected location
+            if is_symlink_or_junction(&link_path) {
+                // For symlinks, read_link gives us the target.
+                // For Junctions, read_link also works (returns the junction target).
+                if let Ok(target) = fs::read_link(&link_path) {
 
-                        // FAST PATH: String comparison
-                        // On Windows, canonicalize() causes excessive I/O.
-                        // Most of the time, checking if the target path ends with the skill ID is sufficient.
-                        let target_str = target.to_string_lossy();
-                        // Check for direct match or path ending (handling separators)
-                        let is_fast_match = target_str.ends_with(skill_id) ||
-                                           target == skill_path;
+                    // FAST PATH: String comparison
+                    // On Windows, canonicalize() causes excessive I/O.
+                    // Most of the time, checking if the target path ends with the skill ID is sufficient.
+                    let target_str = target.to_string_lossy();
+                    // Check for direct match or path ending (handling separators)
+                    let is_fast_match = target_str.ends_with(skill_id) ||
+                                       target == skill_path;
 
-                        let is_enabled = if is_fast_match {
-                            true
+                    let is_enabled = if is_fast_match {
+                        true
+                    } else {
+                        // SLOW PATH: Fallback to canonicalization only if simple check fails
+                        let canonical_skill_path = skill_path.canonicalize().ok();
+
+                        // Resolve relative paths
+                        let resolved_target = if target.is_relative() {
+                            link_path.parent()
+                                .map(|p| p.join(&target))
+                                .and_then(|p| p.canonicalize().ok())
                         } else {
-                            // SLOW PATH: Fallback to canonicalization only if simple check fails
-                            let canonical_skill_path = skill_path.canonicalize().ok();
-
-                            // Resolve relative paths
-                            let resolved_target = if target.is_relative() {
-                                link_path.parent()
-                                    .map(|p| p.join(&target))
-                                    .and_then(|p| p.canonicalize().ok())
-                            } else {
-                                target.canonicalize().ok()
-                            };
-
-                            match (&resolved_target, &canonical_skill_path) {
-                                (Some(t), Some(s)) => t == s,
-                                _ => false
-                            }
+                            target.canonicalize().ok()
                         };
 
-                        enabled.insert(tool_id, is_enabled);
-                    }
+                        match (&resolved_target, &canonical_skill_path) {
+                            (Some(t), Some(s)) => t == s,
+                            _ => false
+                        }
+                    };
+
+                    enabled.insert(tool_id, is_enabled);
                 }
             }
         }
