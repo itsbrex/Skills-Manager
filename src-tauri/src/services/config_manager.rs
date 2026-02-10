@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::models::{AppConfig, ToolConfig, SUPPORTED_TOOLS};
-use crate::services::linker::{is_symlink_or_junction, remove_symlink_or_junction};
+use crate::services::linker::{is_symlink_or_junction, normalize_path, remove_symlink_or_junction};
 #[cfg(windows)]
 use crate::services::linker::LinkerService;
 
@@ -70,7 +70,17 @@ impl ConfigManager {
         if let Ok(content) = fs::read_to_string(&config_path) {
             let old_path_str = old_dir.to_string_lossy();
             let new_path_str = new_dir.to_string_lossy();
-            let updated_content = content.replace(&*old_path_str, &*new_path_str);
+
+            // In JSON, backslashes are escaped as \\, so we need to replace both forms:
+            // 1. The JSON-escaped form (e.g. "C:\\Users\\yjw\\.skills-hub")
+            // 2. The raw form (e.g. "C:\Users\yjw\.skills-hub") — for non-JSON contexts
+            let old_escaped = old_path_str.replace('\\', "\\\\");
+            let new_escaped = new_path_str.replace('\\', "\\\\");
+
+            let mut updated_content = content.replace(&old_escaped, &new_escaped);
+            // Also replace raw form in case paths are stored without JSON escaping
+            updated_content = updated_content.replace(&*old_path_str, &*new_path_str);
+
             if updated_content != content {
                 let _ = fs::write(&config_path, updated_content);
                 println!("Updated paths in config.json");
@@ -164,17 +174,70 @@ impl ConfigManager {
         let mut updated = false;
 
         if config.version != current_version {
-            // 在这里添加结构迁移逻辑 (如果有)
-            // 目前只需要更新版本号
             config.version = current_version;
             updated = true;
+        }
+
+        // Normalize all paths loaded from config (fix mixed separators on Windows)
+        let normalized_skills_dir = normalize_path(&config.skills_dir);
+        if normalized_skills_dir != config.skills_dir {
+            config.skills_dir = normalized_skills_dir;
+            updated = true;
+        }
+
+        // Fix stale .skills-hub references left by failed migration on Windows.
+        // On Windows, update_config_paths may have failed because to_string_lossy()
+        // produces single backslashes but JSON contains escaped double backslashes.
+        // This fixes configs where skills_dir still points to the old .skills-hub directory.
+        {
+            let skills_dir_str = config.skills_dir.to_string_lossy();
+            if skills_dir_str.contains(".skills-hub") {
+                let fixed = skills_dir_str.replace(".skills-hub", ".skills-manager");
+                config.skills_dir = PathBuf::from(fixed.to_string());
+                // Also fix tool paths that reference the old directory
+                for tool_config in config.tools.values_mut() {
+                    let sp = tool_config.skills_path.to_string_lossy();
+                    if sp.contains(".skills-hub") {
+                        tool_config.skills_path = PathBuf::from(sp.replace(".skills-hub", ".skills-manager").to_string());
+                    }
+                    let cp = tool_config.config_path.to_string_lossy();
+                    if cp.contains(".skills-hub") {
+                        tool_config.config_path = PathBuf::from(cp.replace(".skills-hub", ".skills-manager").to_string());
+                    }
+                }
+                // Ensure the new skills directory exists
+                if !config.skills_dir.exists() {
+                    let _ = fs::create_dir_all(&config.skills_dir);
+                }
+                updated = true;
+                println!("Fixed stale .skills-hub references in config");
+            }
+        }
+
+        for tool_config in config.tools.values_mut() {
+            let norm_sp = normalize_path(&tool_config.skills_path);
+            let norm_cp = normalize_path(&tool_config.config_path);
+            if norm_sp != tool_config.skills_path || norm_cp != tool_config.config_path {
+                tool_config.skills_path = norm_sp;
+                tool_config.config_path = norm_cp;
+                updated = true;
+            }
+        }
+        for custom in config.custom_tools.values_mut() {
+            let norm_sp = normalize_path(&custom.skills_path);
+            let norm_cp = normalize_path(&custom.config_path);
+            if norm_sp != custom.skills_path || norm_cp != custom.config_path {
+                custom.skills_path = norm_sp;
+                custom.config_path = norm_cp;
+                updated = true;
+            }
         }
 
         // Auto-add newly supported tools that aren't in the config yet
         let home_dir = dirs::home_dir().unwrap_or_default();
         for tool_def in SUPPORTED_TOOLS {
             if !config.tools.contains_key(tool_def.id) {
-                let tool_dir = home_dir.join(tool_def.config_dir);
+                let tool_dir = normalize_path(&home_dir.join(tool_def.config_dir));
                 let detected = tool_dir.exists();
                 let tool_config = ToolConfig {
                     enabled: detected,
@@ -213,7 +276,7 @@ impl ConfigManager {
         let mut config = AppConfig::default();
 
         for tool_def in SUPPORTED_TOOLS {
-            let tool_dir = home_dir.join(tool_def.config_dir);
+            let tool_dir = normalize_path(&home_dir.join(tool_def.config_dir));
             let detected = tool_dir.exists();
             let tool_config = ToolConfig {
                 enabled: detected, // Enable by default if detected

@@ -4,6 +4,7 @@ use rayon::prelude::*; // Enable parallel processing
 
 use crate::models::{CustomToolConfig, Tool, ToolConfig, ToolDefinition, ToolSource, SUPPORTED_TOOLS};
 use crate::services::ConfigManager;
+use crate::services::linker::normalize_path;
 
 pub struct DetectorService;
 
@@ -49,14 +50,16 @@ impl DetectorService {
             .as_ref()
             .and_then(|c| c.tools.get(definition.id))
         {
-            (saved.config_path.clone(), saved.skills_path.clone())
+            // Normalize saved paths in case they contain mixed separators
+            (normalize_path(&saved.config_path), normalize_path(&saved.skills_path))
         } else {
-            let mut config_dir = home_dir.join(definition.config_dir);
+            // Normalize after join to fix mixed separators (e.g. ".config/opencode" on Windows)
+            let mut config_dir = normalize_path(&home_dir.join(definition.config_dir));
 
             // Prioritize default config_dir, but check alternatives if it doesn't exist
             if !config_dir.exists() {
                 for alt in definition.alt_config_dirs {
-                    let alt_dir = home_dir.join(alt);
+                    let alt_dir = normalize_path(&home_dir.join(alt));
                     if alt_dir.exists() {
                         config_dir = alt_dir;
                         break;

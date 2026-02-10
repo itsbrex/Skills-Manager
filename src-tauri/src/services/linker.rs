@@ -1,8 +1,18 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process::Command;
 use serde::{Deserialize, Serialize};
 use crate::services::config_manager::ConfigManager;
+
+/// Normalize path separators to the platform's native separator.
+/// On Windows, converts all `/` to `\`. On Unix, this is a no-op.
+pub fn normalize_path(path: &Path) -> PathBuf {
+    if MAIN_SEPARATOR == '\\' {
+        PathBuf::from(path.to_string_lossy().replace('/', "\\"))
+    } else {
+        path.to_path_buf()
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
