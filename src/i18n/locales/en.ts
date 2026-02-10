@@ -83,6 +83,7 @@ export const en = {
     disableSuccess: "Disabled {skill} for {tool}",
     noToolsEnabled: "No tools enabled",
     allEnabled: "All enabled",
+    toolNotDetected: "This tool is not detected on your system and cannot be enabled",
   },
   tools: {
     title: "Tools",

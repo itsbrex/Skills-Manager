@@ -84,6 +84,7 @@ export const zh = {
     disableSuccess: "已为 {tool} 禁用 {skill}",
     noToolsEnabled: "未启用任何工具",
     allEnabled: "全部启用",
+    toolNotDetected: "该工具未在本系统检测到，无法启用",
   },
   tools: {
     title: "工具",
