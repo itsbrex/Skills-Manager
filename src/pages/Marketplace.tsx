@@ -1,0 +1,749 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { RefreshButton } from "@/components/ui/refresh-button";
+import { PageHeader } from "@/components/ui/page-header";
+import { SkeletonList } from "@/components/ui/loading";
+import { ToastContainer, useToast } from "@/components/ui/toast";
+import {
+  InstallResult,
+  MarketplaceSkill,
+  MarketplaceSkillsResponse,
+  MarketplaceSource,
+} from "@/types";
+import { useTranslation } from "@/i18n";
+import { SkillDetailModal } from "@/components/marketplace/SkillDetailModal";
+
+// Generate consistent colors based on skill name
+function getSkillColor(name: string): { bg: string; icon: string } {
+  const colors = [
+    { bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', icon: '#fff' },
+    { bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', icon: '#fff' },
+    { bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', icon: '#fff' },
+    { bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', icon: '#fff' },
+    { bg: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)', icon: '#fff' },
+    { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', icon: '#fff' },
+    { bg: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)', icon: '#fff' },
+    { bg: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)', icon: '#fff' },
+  ];
+  const index = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
+  return colors[index];
+}
+
+export function Marketplace() {
+  const { t } = useTranslation();
+  const { toasts, addToast, removeToast } = useToast();
+  const [skills, setSkills] = useState<MarketplaceSkill[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [availableSources, setAvailableSources] = useState<MarketplaceSource[]>([]);
+  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
+  const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedSkill, setSelectedSkill] = useState<MarketplaceSkill | null>(null);
+  const [installingSkill, setInstallingSkill] = useState<string | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const isFirstSearch = useRef(true);
+  const isFirstSourceFilter = useRef(true);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  const loadSkills = useCallback(async (options?: {
+    forceRefresh?: boolean;
+    query?: string;
+    page?: number;
+    append?: boolean;
+    sourceIds?: string[];
+  }) => {
+    const forceRefresh = options?.forceRefresh ?? false;
+    const query = options?.query;
+    const page = options?.page ?? 1;
+    const append = options?.append ?? false;
+    const sourceIds = options?.sourceIds;
+    const normalizedQuery = query && query.trim().length > 0 ? query.trim() : undefined;
+
+    try {
+      const result = await invoke<MarketplaceSkillsResponse>("fetch_marketplace_skills", {
+        forceRefresh,
+        query: normalizedQuery,
+        page,
+        sourceIds: sourceIds && sourceIds.length > 0 ? sourceIds : undefined,
+      });
+
+      setSkills((prev) => {
+        if (!append || page === 1) {
+          return result.skills;
+        }
+        const merged = [...prev];
+        const existingIds = new Set(prev.map((skill) => skill.id));
+        for (const skill of result.skills) {
+          if (!existingIds.has(skill.id)) {
+            merged.push(skill);
+          }
+        }
+        return merged;
+      });
+      setHasMore(result.has_more);
+      setCurrentPage(page);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      if (page === 1) {
+        setInitialLoading(false);
+      }
+    }
+  }, [addToast]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSources() {
+      try {
+        const sources = await invoke<MarketplaceSource[]>("get_marketplace_sources");
+        if (cancelled) return;
+        const enabledSources = sources.filter((source) => source.enabled);
+        setAvailableSources(enabledSources);
+        setSelectedSourceIds((current) => (
+          current.filter((id) => enabledSources.some((source) => source.id === id))
+        ));
+      } catch (_err) {
+        // ignore source loading failures to avoid blocking marketplace page
+      }
+    }
+
+    void loadSources();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    void loadSkills({ page: 1, sourceIds: selectedSourceIds });
+  }, [loadSkills]);
+
+  useEffect(() => {
+    if (isFirstSearch.current) {
+      isFirstSearch.current = false;
+      return;
+    }
+
+    const query = searchQuery.trim();
+    if (!query) {
+      void loadSkills({ page: 1, sourceIds: selectedSourceIds });
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void loadSkills({ query, page: 1, sourceIds: selectedSourceIds });
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [searchQuery, loadSkills]);
+
+  useEffect(() => {
+    if (isFirstSourceFilter.current) {
+      isFirstSourceFilter.current = false;
+      return;
+    }
+    const query = searchQuery.trim();
+    void loadSkills({
+      query: query.length > 0 ? query : undefined,
+      page: 1,
+      sourceIds: selectedSourceIds,
+    });
+  }, [selectedSourceIds, loadSkills, searchQuery]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const query = searchQuery.trim();
+      await loadSkills({
+        forceRefresh: true,
+        query: query.length > 0 ? query : undefined,
+        page: 1,
+        sourceIds: selectedSourceIds,
+      });
+      addToast(t("common.refreshSuccess"), "success");
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [addToast, loadSkills, searchQuery, selectedSourceIds, t]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (loadingMore || refreshing || initialLoading || !hasMore) {
+      return;
+    }
+    setLoadingMore(true);
+    try {
+      const query = searchQuery.trim();
+      await loadSkills({
+        query: query.length > 0 ? query : undefined,
+        page: currentPage + 1,
+        append: true,
+        sourceIds: selectedSourceIds,
+      });
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [
+    currentPage,
+    hasMore,
+    initialLoading,
+    loadSkills,
+    loadingMore,
+    refreshing,
+    searchQuery,
+    selectedSourceIds,
+  ]);
+
+  const handleInstall = useCallback(async (skill: MarketplaceSkill, event?: MouseEvent) => {
+    event?.stopPropagation();
+    if (skill.install_status === "installed") return;
+
+    setInstallingSkill(skill.id);
+    try {
+      const result = await invoke<InstallResult>("install_marketplace_skill", { skillId: skill.id });
+      if (result.success) {
+        addToast(t("marketplace.installSuccess").replace("{name}", skill.name), "success");
+        setSelectedSkill((current) => (
+          current && current.id === skill.id
+            ? { ...current, install_status: "installed" }
+            : current
+        ));
+        const query = searchQuery.trim();
+        await loadSkills({
+          forceRefresh: true,
+          query: query.length > 0 ? query : undefined,
+          page: 1,
+          sourceIds: selectedSourceIds,
+        });
+      } else {
+        addToast(result.message || t("marketplace.installFailed"), "error");
+      }
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setInstallingSkill(null);
+    }
+  }, [addToast, loadSkills, searchQuery, selectedSourceIds, t]);
+
+  useEffect(() => {
+    if (!hasMore || initialLoading || refreshing) {
+      return;
+    }
+    const target = loadMoreRef.current;
+    if (!target) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void handleLoadMore();
+        }
+      },
+      { rootMargin: "200px 0px" },
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [handleLoadMore, hasMore, initialLoading, refreshing, skills.length]);
+
+  const availableTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    skills.forEach((skill) => {
+      skill.tags.forEach((tag) => tagSet.add(tag));
+    });
+    return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
+  }, [skills]);
+
+  const filteredSkills = skills.filter((skill) => {
+    const query = searchQuery.trim().toLowerCase();
+    const matchesQuery = !query
+      || skill.name.toLowerCase().includes(query)
+      || skill.description?.toLowerCase().includes(query)
+      || skill.author?.toLowerCase().includes(query)
+      || skill.source_name.toLowerCase().includes(query);
+    const matchesTags = selectedTags.length === 0
+      || selectedTags.some((tag) => skill.tags.includes(tag));
+    return matchesQuery && matchesTags;
+  });
+
+  const showSourceFilter = availableSources.length > 1;
+  const sourceNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    availableSources.forEach((source) => {
+      map.set(source.id, source.name);
+    });
+    return map;
+  }, [availableSources]);
+
+  const sourceFilterLabel = useMemo(() => {
+    if (selectedSourceIds.length === 0) {
+      return t("marketplace.sourceAll");
+    }
+    if (selectedSourceIds.length === 1) {
+      return sourceNameMap.get(selectedSourceIds[0]) || selectedSourceIds[0];
+    }
+    return t("marketplace.sourceSelectedCount").replace("{count}", String(selectedSourceIds.length));
+  }, [selectedSourceIds, sourceNameMap, t]);
+
+  const toggleSourceSelection = useCallback((sourceId: string) => {
+    setSelectedSourceIds((prev) => {
+      if (prev.length === 0) {
+        return availableSources
+          .filter((source) => source.id !== sourceId)
+          .map((source) => source.id);
+      }
+      if (prev.includes(sourceId)) {
+        const next = prev.filter((id) => id !== sourceId);
+        return next.length === 0 ? [] : next;
+      }
+      const next = [...prev, sourceId];
+      return next.length >= availableSources.length ? [] : next;
+    });
+  }, [availableSources]);
+
+  if (initialLoading) {
+    return (
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        overflow: 'hidden',
+        backgroundColor: 'var(--background)',
+      }}>
+        <PageHeader title={t("marketplace.title")} />
+        <main style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
+          <SkeletonList count={6} />
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      overflow: 'hidden',
+      backgroundColor: 'var(--background)',
+    }}>
+      <PageHeader
+        title={t("marketplace.title")}
+        actions={
+          <>
+            <RefreshButton onClick={handleRefresh} loading={refreshing} />
+            {showSourceFilter && (
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setSourceDropdownOpen((v) => !v)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 10px',
+                    fontSize: '12px',
+                    color: 'var(--foreground)',
+                    backgroundColor: sourceDropdownOpen ? 'var(--secondary)' : 'var(--background)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    maxWidth: '220px',
+                  }}
+                >
+                  <span style={{
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {t("marketplace.sourceFilter")}: {sourceFilterLabel}
+                  </span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
+                </button>
+
+                {sourceDropdownOpen && (
+                  <>
+                    <div
+                      style={{ position: 'fixed', inset: 0, zIndex: 10 }}
+                      onClick={() => setSourceDropdownOpen(false)}
+                    />
+                    <div style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 6px)',
+                      left: 0,
+                      minWidth: '220px',
+                      backgroundColor: 'var(--background)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '10px',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                      zIndex: 20,
+                      padding: '6px',
+                    }}>
+                      <button
+                        onClick={() => {
+                          setSelectedSourceIds([]);
+                          setSourceDropdownOpen(false);
+                        }}
+                        style={{
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 10px',
+                          fontSize: '12px',
+                          border: 'none',
+                          borderRadius: '8px',
+                          backgroundColor: selectedSourceIds.length === 0 ? 'var(--secondary)' : 'transparent',
+                          color: 'var(--foreground)',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                        }}
+                      >
+                        <span>{t("marketplace.sourceAll")}</span>
+                        {selectedSourceIds.length === 0 && <span>✓</span>}
+                      </button>
+                      {availableSources.map((source) => {
+                        const selected = selectedSourceIds.length === 0
+                          ? true
+                          : selectedSourceIds.includes(source.id);
+                        return (
+                          <button
+                            key={source.id}
+                            onClick={() => toggleSourceSelection(source.id)}
+                            style={{
+                              width: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '8px 10px',
+                              fontSize: '12px',
+                              border: 'none',
+                              borderRadius: '8px',
+                              backgroundColor: selected ? 'var(--secondary)' : 'transparent',
+                              color: 'var(--foreground)',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                            }}
+                          >
+                            <span>{source.name}</span>
+                            {selected && <span>✓</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+            <div style={{ position: 'relative' }}>
+              <svg
+                style={{
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--muted-foreground)',
+                  pointerEvents: 'none',
+                }}
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="11" cy="11" r="8"/>
+                <path d="m21 21-4.3-4.3"/>
+              </svg>
+              <input
+                type="text"
+                placeholder={t("marketplace.searchPlaceholder")}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  width: '240px',
+                  padding: '8px 12px 8px 36px',
+                  fontSize: '13px',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--background)',
+                  color: 'var(--foreground)',
+                  outline: 'none',
+                  transition: 'border-color 0.15s, box-shadow 0.15s',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ring)';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9, 105, 218, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              />
+            </div>
+          </>
+        }
+      />
+
+      <main style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
+        <div style={{ maxWidth: '1200px' }}>
+          {availableTags.length > 0 && (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
+              {availableTags.map((tag) => {
+                const isSelected = selectedTags.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    onClick={() => {
+                      setSelectedTags((prev) => isSelected
+                        ? prev.filter((t) => t !== tag)
+                        : [...prev, tag]);
+                    }}
+                    style={{
+                      borderRadius: '999px',
+                      padding: '6px 12px',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      border: isSelected ? '1px solid rgba(9, 105, 218, 0.4)' : '1px solid var(--border)',
+                      backgroundColor: isSelected ? 'rgba(9, 105, 218, 0.12)' : 'var(--secondary)',
+                      color: isSelected ? 'var(--primary)' : 'var(--muted-foreground)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {filteredSkills.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '48px 24px',
+              color: 'var(--muted-foreground)',
+              backgroundColor: 'var(--secondary)',
+              borderRadius: '12px',
+              border: '1px solid var(--border)',
+            }}>
+              {skills.length === 0 ? t("marketplace.noSkills") : t("marketplace.noMatch")}
+            </div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+              gap: '16px',
+            }}>
+              {filteredSkills.map((skill) => {
+                const color = getSkillColor(skill.name);
+                const isInstalled = skill.install_status === "installed";
+                const isInstalling = installingSkill === skill.id;
+                return (
+                  <div
+                    key={skill.id}
+                    onClick={() => setSelectedSkill(skill)}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      padding: '18px 20px',
+                      backgroundColor: 'var(--secondary)',
+                      borderRadius: '14px',
+                      border: '1px solid var(--border)',
+                      transition: 'border-color 0.2s, box-shadow 0.2s, transform 0.2s',
+                      cursor: 'pointer',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--ring)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                      e.currentTarget.style.boxShadow = 'none';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: '14px', marginBottom: '16px' }}>
+                      <div style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '12px',
+                        background: color.bg,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                      }}>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color.icon} strokeWidth="2">
+                          <path d="M12 3L13.5 8.5L19 10L13.5 11.5L12 17L10.5 11.5L5 10L10.5 8.5L12 3Z"/>
+                        </svg>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontSize: '15px',
+                          fontWeight: 600,
+                          color: 'var(--foreground)',
+                          marginBottom: '4px',
+                          lineHeight: 1.3,
+                        }}>
+                          {skill.name}
+                        </div>
+                        <p style={{
+                          fontSize: '13px',
+                          color: 'var(--muted-foreground)',
+                          margin: 0,
+                          lineHeight: 1.5,
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}>
+                          {skill.description || t("skills.noDescription")}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div style={{
+                      display: 'flex',
+                      gap: '8px',
+                      flexWrap: 'wrap',
+                      marginBottom: '12px',
+                    }}>
+                      <span style={{
+                        fontSize: '12px',
+                        color: 'var(--muted-foreground)',
+                        backgroundColor: 'var(--background)',
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border)',
+                      }}>
+                        {t("marketplace.source").replace("{source}", skill.source_name)}
+                      </span>
+                      {skill.author && (
+                        <span style={{
+                          fontSize: '12px',
+                          color: 'var(--muted-foreground)',
+                          backgroundColor: 'var(--background)',
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border)',
+                        }}>
+                          {t("marketplace.author").replace("{author}", skill.author)}
+                        </span>
+                      )}
+                    </div>
+
+                    {skill.tags.length > 0 && (
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                        {skill.tags.slice(0, 3).map((tag) => (
+                          <span
+                            key={tag}
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 500,
+                              color: 'var(--primary)',
+                              backgroundColor: 'rgba(9, 105, 218, 0.12)',
+                              padding: '3px 8px',
+                              borderRadius: '999px',
+                              border: '1px solid rgba(9, 105, 218, 0.35)',
+                            }}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginTop: 'auto',
+                    }}>
+                      {isInstalled ? (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '12px',
+                          fontWeight: 500,
+                          color: 'var(--color-success)',
+                          backgroundColor: 'var(--color-success-bg)',
+                          padding: '6px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--color-success-border)',
+                        }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                          {t("marketplace.installed")}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={(e) => handleInstall(skill, e)}
+                          disabled={isInstalling}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            color: 'var(--primary-foreground)',
+                            backgroundColor: 'var(--foreground)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: isInstalling ? 'wait' : 'pointer',
+                            opacity: isInstalling ? 0.7 : 1,
+                          }}
+                        >
+                          {isInstalling ? t("marketplace.installing") : t("marketplace.install")}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {hasMore && (
+            <>
+              <div ref={loadMoreRef} style={{ height: '1px' }} />
+              {loadingMore && (
+                <div style={{
+                  marginTop: '12px',
+                  textAlign: 'center',
+                  fontSize: '12px',
+                  color: 'var(--muted-foreground)',
+                }}>
+                  {t("loading.default")}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </main>
+
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+
+      {selectedSkill && (
+        <SkillDetailModal
+          skill={selectedSkill}
+          onClose={() => setSelectedSkill(null)}
+          onInstall={handleInstall}
+          installing={installingSkill === selectedSkill.id}
+        />
+      )}
+    </div>
+  );
+}

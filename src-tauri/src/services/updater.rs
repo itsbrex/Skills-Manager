@@ -7,10 +7,14 @@ const REPO_NAME: &str = "Skills-Manager";
 
 pub async fn check_for_updates(current_version: &str) -> Result<UpdateInfo, Box<dyn Error>> {
     let client = reqwest::Client::new();
-    let url = format!("https://api.github.com/repos/{}/{}/releases/latest", REPO_OWNER, REPO_NAME);
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/releases/latest",
+        REPO_OWNER, REPO_NAME
+    );
 
     // GitHub requires User-Agent
-    let resp = client.get(&url)
+    let resp = client
+        .get(&url)
         .header("User-Agent", "Skills-Manager-App")
         .send()
         .await?

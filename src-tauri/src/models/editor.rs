@@ -8,14 +8,14 @@ pub struct DetectedEditor {
     pub available: bool,
     pub icon: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub icon_data: Option<String>,  // Base64 encoded PNG from app bundle
+    pub icon_data: Option<String>, // Base64 encoded PNG from app bundle
 }
 
 pub struct EditorDefinition {
     pub id: &'static str,
     pub name: &'static str,
     pub detect_cmd: &'static str,
-    pub app_name: &'static str,  // macOS app name for detection
+    pub app_name: &'static str, // macOS app name for detection
     pub open_cmd: &'static str,
     pub icon: &'static str,
     pub always_available: bool,

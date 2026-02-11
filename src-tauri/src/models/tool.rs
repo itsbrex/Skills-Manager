@@ -1,6 +1,6 @@
+use super::config::ToolConfig;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use super::config::ToolConfig;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]

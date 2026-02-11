@@ -1,8 +1,8 @@
+use crate::services::config_manager::ConfigManager;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process::Command;
-use serde::{Deserialize, Serialize};
-use crate::services::config_manager::ConfigManager;
 
 /// Normalize path separators to the platform's native separator.
 /// On Windows, converts all `/` to `\`. On Unix, this is a no-op.
@@ -166,7 +166,10 @@ impl LinkerService {
 
             Err(format!(
                 "Failed to create junction.\nCommand: mklink /J {:?} {:?}\nError: {}\nOutput: {}",
-                link_str, original_str, stderr.trim(), stdout.trim()
+                link_str,
+                original_str,
+                stderr.trim(),
+                stdout.trim()
             ))
         }
     }
@@ -183,11 +186,7 @@ impl LinkerService {
             .map_err(|e| format!("Failed to remove link: {}", e))
     }
 
-    pub fn check_link(
-        skill_source: &Path,
-        tool_skills_dir: &Path,
-        skill_id: &str,
-    ) -> LinkStatus {
+    pub fn check_link(skill_source: &Path, tool_skills_dir: &Path, skill_id: &str) -> LinkStatus {
         let link_path = tool_skills_dir.join(skill_id);
 
         if is_symlink_or_junction(&link_path) {
@@ -337,12 +336,9 @@ impl LinkerService {
 }
 
 fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
-    std::fs::create_dir_all(dst)
-        .map_err(|e| format!("Failed to create directory: {}", e))?;
+    std::fs::create_dir_all(dst).map_err(|e| format!("Failed to create directory: {}", e))?;
 
-    for entry in std::fs::read_dir(src)
-        .map_err(|e| format!("Failed to read directory: {}", e))?
-    {
+    for entry in std::fs::read_dir(src).map_err(|e| format!("Failed to read directory: {}", e))? {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
         let file_name = entry.file_name();
         let file_name_str = file_name.to_string_lossy();
@@ -352,7 +348,9 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), Stri
             continue;
         }
 
-        let ty = entry.file_type().map_err(|e| format!("Failed to get file type: {}", e))?;
+        let ty = entry
+            .file_type()
+            .map_err(|e| format!("Failed to get file type: {}", e))?;
 
         if ty.is_dir() {
             copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;

@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Layout } from "@/components/layout/Layout";
 import { Skills } from "@/pages/Skills";
 import { Tools } from "@/pages/Tools";
+import { Marketplace } from "@/pages/Marketplace";
 import { Settings } from "@/pages/Settings";
 import { EditorPage } from "@/pages/Editor";
 import { Welcome } from "@/pages/Welcome";
@@ -76,6 +77,7 @@ function App() {
             <Route path="/" element={<Layout />}>
               <Route index element={<Skills />} />
               <Route path="tools" element={<Tools />} />
+              <Route path="marketplace" element={<Marketplace />} />
               <Route path="settings" element={<Settings />} />
             </Route>
             <Route path="/editor" element={<EditorPage />} />

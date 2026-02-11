@@ -1,15 +1,15 @@
 use crate::models::{DetectedEditor, EDITOR_DEFINITIONS};
+use rayon::prelude::*;
+use std::env;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
-use std::env;
-use rayon::prelude::*; // Parallel iterator
+use std::process::Command; // Parallel iterator
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
 #[cfg(target_os = "macos")]
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 
 pub fn detect_editors() -> Vec<DetectedEditor> {
     // Use sequential iterator to ensure stable ordering
@@ -99,7 +99,6 @@ fn get_command_path(cmd: &str) -> Option<String> {
     // Optimized: Check PATH environment variable first
     if let Ok(path_var) = env::var("PATH") {
         for path_str in env::split_paths(&path_var) {
-
             #[cfg(target_os = "windows")]
             {
                 // Check with extensions on Windows
@@ -108,7 +107,7 @@ fn get_command_path(cmd: &str) -> Option<String> {
                 // Also check without extension if it might be a full name
                 let direct = path_str.join(cmd);
                 if direct.is_file() {
-                     return Some(direct.to_string_lossy().to_string());
+                    return Some(direct.to_string_lossy().to_string());
                 }
 
                 for ext in extensions {
@@ -123,12 +122,12 @@ fn get_command_path(cmd: &str) -> Option<String> {
             {
                 let full_path = path_str.join(cmd);
                 if full_path.is_file() {
-                     use std::os::unix::fs::PermissionsExt;
-                     if let Ok(metadata) = full_path.metadata() {
+                    use std::os::unix::fs::PermissionsExt;
+                    if let Ok(metadata) = full_path.metadata() {
                         if metadata.permissions().mode() & 0o111 != 0 {
                             return Some(full_path.to_string_lossy().to_string());
                         }
-                     }
+                    }
                 }
             }
         }
@@ -176,7 +175,9 @@ fn get_command_path(cmd: &str) -> Option<String> {
                         .map(|s| s.trim())
                         .find(|s| {
                             let lower = s.to_lowercase();
-                            lower.ends_with(".exe") || lower.ends_with(".cmd") || lower.ends_with(".bat")
+                            lower.ends_with(".exe")
+                                || lower.ends_with(".cmd")
+                                || lower.ends_with(".bat")
                         })
                         .or_else(|| output_str.lines().map(|s| s.trim()).next())
                         .map(|s| s.to_string())
@@ -229,7 +230,9 @@ fn find_app_path(app_name: &str) -> Option<String> {
     // Search for apps with prefix match (handles variants like "Trae CN", "PyCharm CE", "PyCharm Professional")
     let search_dirs = vec![
         "/Applications".to_string(),
-        dirs::home_dir().map(|h| h.join("Applications").to_string_lossy().to_string()).unwrap_or_default(),
+        dirs::home_dir()
+            .map(|h| h.join("Applications").to_string_lossy().to_string())
+            .unwrap_or_default(),
     ];
 
     // Collect all matching apps, then pick the best one (shortest name = most likely the base version)
@@ -275,11 +278,11 @@ fn extract_app_icon(app_path: &str) -> Option<String> {
         // Special handling for VS Code: ensure we try to get the icon from the executable, not the batch script
         let mut path_str = app_path.to_string();
         if path_str.to_lowercase().ends_with("\\bin\\code.cmd") {
-             // Try to find Code.exe in the parent directory of bin
-             let candidate = path_str.replace("\\bin\\code.cmd", "\\Code.exe");
-             if Path::new(&candidate).exists() {
-                 path_str = candidate;
-             }
+            // Try to find Code.exe in the parent directory of bin
+            let candidate = path_str.replace("\\bin\\code.cmd", "\\Code.exe");
+            if Path::new(&candidate).exists() {
+                path_str = candidate;
+            }
         }
 
         let script = format!(
@@ -358,10 +361,7 @@ fn extract_app_icon(app_path: &str) -> Option<String> {
         // Use sips to convert icns to PNG (64x64 for retina displays)
         let sips_result = Command::new("sips")
             .args([
-                "-s", "format", "png",
-                "-z", "64", "64",
-                &icns_path,
-                "--out", &temp_png,
+                "-s", "format", "png", "-z", "64", "64", &icns_path, "--out", &temp_png,
             ])
             .output();
 

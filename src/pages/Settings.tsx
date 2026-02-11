@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { AppConfig, UserPreferences, DetectedEditor, UpdateInfo } from "@/types";
+import { AppConfig, UserPreferences, DetectedEditor, UpdateInfo, MarketplaceSource } from "@/types";
 import { checkUpdate } from "@/services/updater";
 import { useTranslation, Language } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
@@ -22,6 +22,7 @@ const defaultPreferences: UserPreferences = {
   default_editor: "system",
   tab_size: 2,
   show_sync_notifications: true,
+  github_token: "",
 };
 
 
@@ -128,6 +129,21 @@ export function Settings() {
     }
   };
 
+  const updateMarketplaceSource = (
+    sourceId: string,
+    updates: Partial<MarketplaceSource>
+  ) => {
+    if (!config) return;
+    const sources = config.marketplace_sources || [];
+    const updatedSources = sources.map((source) =>
+      source.id === sourceId ? { ...source, ...updates } : source
+    );
+    setConfig({
+      ...config,
+      marketplace_sources: updatedSources,
+    });
+  };
+
   const handleSave = async () => {
     if (!config) return;
 
@@ -193,6 +209,16 @@ export function Settings() {
   const prefs = config.preferences || defaultPreferences;
   const selectedEditor = availableEditors.find(e => e.id === prefs.default_editor) || availableEditors[0];
   const FallbackEditorIcon = selectedEditor ? getEditorIcon(selectedEditor.id) : null;
+  const marketplaceSources = config.marketplace_sources || [];
+  const marketplaceRows = marketplaceSources.flatMap((source) => {
+    const rows: Array<{ type: "source" | "api"; source: MarketplaceSource }> = [
+      { type: "source", source },
+    ];
+    if (source.source_type === "skillsmp") {
+      rows.push({ type: "api", source });
+    }
+    return rows;
+  });
 
   return (
     <div style={{
@@ -431,6 +457,109 @@ export function Settings() {
                 onChange={(v) => updatePreference("show_sync_notifications", v)}
               />
             </SettingsRow>
+          </SettingsCard>
+
+          {/* Marketplace Section */}
+          <SectionTitle>{t("settings.marketplace")}</SectionTitle>
+          <SettingsCard>
+            <SettingsRow
+              label={t("settings.githubToken")}
+              description={t("settings.githubTokenDesc")}
+              isLast={marketplaceRows.length === 0}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="password"
+                  value={prefs.github_token || ""}
+                  onChange={(e) => updatePreference("github_token", e.target.value)}
+                  placeholder={t("settings.githubTokenPlaceholder")}
+                  style={{
+                    width: '220px',
+                    padding: '8px 10px',
+                    fontSize: '12px',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    backgroundColor: 'var(--background)',
+                    color: 'var(--foreground)',
+                    outline: 'none',
+                  }}
+                />
+                <span style={{
+                  fontSize: '12px',
+                  color: (prefs.github_token || "").trim() ? 'var(--color-success)' : 'var(--muted-foreground)',
+                }}>
+                  {(prefs.github_token || "").trim()
+                    ? t("settings.marketplaceKeySaved")
+                    : t("settings.marketplaceKeyMissing")}
+                </span>
+              </div>
+            </SettingsRow>
+
+            {marketplaceRows.length === 0 ? (
+              <div style={{
+                padding: '16px 0',
+                fontSize: '13px',
+                color: 'var(--muted-foreground)',
+              }}>
+                {t("settings.marketplaceEmpty")}
+              </div>
+            ) : (
+              marketplaceRows.map((row, index) => {
+                const isLast = index === marketplaceRows.length - 1;
+                if (row.type === "source") {
+                  const typeLabel = row.source.source_type === "github_repo"
+                    ? t("settings.marketplaceSourceTypeGithub")
+                    : t("settings.marketplaceSourceTypeSkillsmp");
+                  return (
+                    <SettingsRow
+                      key={`${row.source.id}-source`}
+                      label={row.source.name}
+                      description={`${typeLabel} · ${row.source.url}`}
+                      isLast={isLast}
+                    >
+                      <Toggle
+                        checked={row.source.enabled}
+                        onChange={(v) => updateMarketplaceSource(row.source.id, { enabled: v })}
+                      />
+                    </SettingsRow>
+                  );
+                }
+
+                return (
+                  <SettingsRow
+                    key={`${row.source.id}-api`}
+                    label={t("settings.marketplaceApiKey")}
+                    description={t("settings.marketplaceApiKeyDesc")}
+                    isLast={isLast}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="password"
+                        value={row.source.api_key || ""}
+                        onChange={(e) => updateMarketplaceSource(row.source.id, { api_key: e.target.value })}
+                        placeholder={t("settings.marketplaceApiKeyPlaceholder")}
+                        style={{
+                          width: '220px',
+                          padding: '8px 10px',
+                          fontSize: '12px',
+                          border: '1px solid var(--border)',
+                          borderRadius: '8px',
+                          backgroundColor: 'var(--background)',
+                          color: 'var(--foreground)',
+                          outline: 'none',
+                        }}
+                      />
+                      <span style={{
+                        fontSize: '12px',
+                        color: row.source.api_key ? 'var(--color-success)' : 'var(--muted-foreground)',
+                      }}>
+                        {row.source.api_key ? t("settings.marketplaceKeySaved") : t("settings.marketplaceKeyMissing")}
+                      </span>
+                    </div>
+                  </SettingsRow>
+                );
+              })
+            )}
           </SettingsCard>
 
           {/* Appearance Section */}

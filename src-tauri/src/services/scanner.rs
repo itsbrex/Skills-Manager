@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use crate::models::{Skill, SkillSource, AppConfig};
+use crate::models::{AppConfig, Skill, SkillSource};
 use crate::services::detector::DetectorService;
 use crate::services::linker::is_symlink_or_junction;
 
@@ -23,7 +23,10 @@ impl ScannerService {
         Self::scan_skills_with_config(skills_dir, &config)
     }
 
-    pub fn scan_skills_with_config(skills_dir: &Path, config: &AppConfig) -> Result<Vec<Skill>, String> {
+    pub fn scan_skills_with_config(
+        skills_dir: &Path,
+        config: &AppConfig,
+    ) -> Result<Vec<Skill>, String> {
         if !skills_dir.exists() {
             return Ok(Vec::new());
         }
@@ -35,7 +38,8 @@ impl ScannerService {
 
         // Use rayon for parallel processing of skills
         // This significantly speeds up scanning on Windows where file I/O (especially canonicalize) is slow
-        let skills: Vec<Skill> = entries.par_iter()
+        let skills: Vec<Skill> = entries
+            .par_iter()
             .filter_map(|entry| {
                 let path = entry.path();
                 if path.is_dir() {
@@ -91,7 +95,11 @@ impl ScannerService {
     }
 
     /// Check if this skill is enabled for each tool by looking for symlinks
-    fn check_enabled_status(skill_path: &Path, skill_id: &str, config: &AppConfig) -> HashMap<String, bool> {
+    fn check_enabled_status(
+        skill_path: &Path,
+        skill_id: &str,
+        config: &AppConfig,
+    ) -> HashMap<String, bool> {
         let mut enabled = HashMap::new();
 
         for (tool_id, tool_config) in config.collect_tool_configs() {
@@ -102,14 +110,12 @@ impl ScannerService {
                 // For symlinks, read_link gives us the target.
                 // For Junctions, read_link also works (returns the junction target).
                 if let Ok(target) = fs::read_link(&link_path) {
-
                     // FAST PATH: String comparison
                     // On Windows, canonicalize() causes excessive I/O.
                     // Most of the time, checking if the target path ends with the skill ID is sufficient.
                     let target_str = target.to_string_lossy();
                     // Check for direct match or path ending (handling separators)
-                    let is_fast_match = target_str.ends_with(skill_id) ||
-                                       target == skill_path;
+                    let is_fast_match = target_str.ends_with(skill_id) || target == skill_path;
 
                     let is_enabled = if is_fast_match {
                         true
@@ -119,7 +125,8 @@ impl ScannerService {
 
                         // Resolve relative paths
                         let resolved_target = if target.is_relative() {
-                            link_path.parent()
+                            link_path
+                                .parent()
                                 .map(|p| p.join(&target))
                                 .and_then(|p| p.canonicalize().ok())
                         } else {
@@ -128,7 +135,7 @@ impl ScannerService {
 
                         match (&resolved_target, &canonical_skill_path) {
                             (Some(t), Some(s)) => t == s,
-                            _ => false
+                            _ => false,
                         }
                     };
 
@@ -233,8 +240,7 @@ impl ScannerService {
         let content = serde_json::to_string_pretty(&json)
             .map_err(|e| format!("Failed to serialize meta: {}", e))?;
 
-        fs::write(&meta_path, content)
-            .map_err(|e| format!("Failed to write meta.json: {}", e))
+        fs::write(&meta_path, content).map_err(|e| format!("Failed to write meta.json: {}", e))
     }
 
     pub fn scan_all_tools() -> Result<Vec<Skill>, String> {

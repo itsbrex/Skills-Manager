@@ -27,8 +27,7 @@ pub fn refresh_tools(cache: State<AppCache>) -> Result<Vec<Tool>, String> {
 
 #[tauri::command]
 pub fn get_tool_status(tool_id: String) -> Result<Tool, String> {
-    DetectorService::get_tool_by_id(&tool_id)
-        .ok_or_else(|| format!("Tool not found: {}", tool_id))
+    DetectorService::get_tool_by_id(&tool_id).ok_or_else(|| format!("Tool not found: {}", tool_id))
 }
 
 #[tauri::command]
@@ -213,7 +212,11 @@ mod tests {
             "initialized": true
         });
 
-        fs::write(&config_path, serde_json::to_string_pretty(&config_json).unwrap()).unwrap();
+        fs::write(
+            &config_path,
+            serde_json::to_string_pretty(&config_json).unwrap(),
+        )
+        .unwrap();
         config_path
     }
 
@@ -253,8 +256,14 @@ mod tests {
             let json: serde_json::Value = serde_json::from_str(&updated).unwrap();
             let config_path_value = json["custom_tools"]["my-tool"]["config_path"].as_str();
             let skills_path_value = json["custom_tools"]["my-tool"]["skills_path"].as_str();
-            assert_eq!(config_path_value, Some(new_config.to_string_lossy().as_ref()));
-            assert_eq!(skills_path_value, Some(new_skills.to_string_lossy().as_ref()));
+            assert_eq!(
+                config_path_value,
+                Some(new_config.to_string_lossy().as_ref())
+            );
+            assert_eq!(
+                skills_path_value,
+                Some(new_skills.to_string_lossy().as_ref())
+            );
         });
     }
 }

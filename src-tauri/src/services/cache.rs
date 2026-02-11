@@ -22,10 +22,7 @@ impl Default for AppCache {
 impl AppCache {
     /// Get cached skills if available
     pub fn get_skills(&self) -> Option<Vec<Skill>> {
-        self.skills
-            .read()
-            .ok()
-            .and_then(|guard| guard.clone())
+        self.skills.read().ok().and_then(|guard| guard.clone())
     }
 
     /// Set skills cache
@@ -44,10 +41,7 @@ impl AppCache {
 
     /// Get cached tools if available
     pub fn get_tools(&self) -> Option<Vec<Tool>> {
-        self.tools
-            .read()
-            .ok()
-            .and_then(|guard| guard.clone())
+        self.tools.read().ok().and_then(|guard| guard.clone())
     }
 
     /// Set tools cache
@@ -59,10 +53,7 @@ impl AppCache {
 
     /// Get cached editors if available
     pub fn get_editors(&self) -> Option<Vec<DetectedEditor>> {
-        self.editors
-            .read()
-            .ok()
-            .and_then(|guard| guard.clone())
+        self.editors.read().ok().and_then(|guard| guard.clone())
     }
 
     /// Set editors cache

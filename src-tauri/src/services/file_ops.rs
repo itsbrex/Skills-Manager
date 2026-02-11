@@ -48,23 +48,21 @@ fn build_tree(path: &Path, root: &Path) -> Result<FileNode, String> {
                 // Skip symlinks to avoid recursion loops and issues with external paths
                 let is_symlink = entry.file_type().map(|ft| ft.is_symlink()).unwrap_or(false);
 
-                !is_symlink &&
-                !name_str.starts_with('.') &&
-                name_str != "node_modules" &&
-                name_str != "target" &&
-                name_str != "dist" &&
-                name_str != "build"
+                !is_symlink
+                    && !name_str.starts_with('.')
+                    && name_str != "node_modules"
+                    && name_str != "target"
+                    && name_str != "dist"
+                    && name_str != "build"
             })
             .filter_map(|entry| build_tree(&entry.path(), root).ok())
             .collect();
 
         // Sort: directories first, then files, alphabetically
-        children.sort_by(|a, b| {
-            match (a.is_dir, b.is_dir) {
-                (true, false) => std::cmp::Ordering::Less,
-                (false, true) => std::cmp::Ordering::Greater,
-                _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-            }
+        children.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
         });
 
         Ok(FileNode {

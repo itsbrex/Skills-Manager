@@ -2,9 +2,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::models::{AppConfig, ToolConfig, SUPPORTED_TOOLS};
-use crate::services::linker::{is_symlink_or_junction, normalize_path, remove_symlink_or_junction};
 #[cfg(windows)]
 use crate::services::linker::LinkerService;
+use crate::services::linker::{is_symlink_or_junction, normalize_path, remove_symlink_or_junction};
 
 pub struct ConfigManager {
     config_path: PathBuf,
@@ -27,15 +27,11 @@ impl ConfigManager {
     }
 
     fn get_old_config_dir() -> PathBuf {
-        dirs::home_dir()
-            .unwrap_or_default()
-            .join(".skills-hub")
+        dirs::home_dir().unwrap_or_default().join(".skills-hub")
     }
 
     fn get_new_config_dir() -> PathBuf {
-        dirs::home_dir()
-            .unwrap_or_default()
-            .join(".skills-manager")
+        dirs::home_dir().unwrap_or_default().join(".skills-manager")
     }
 
     /// 从旧目录 .skills-hub 迁移到新目录 .skills-manager
@@ -48,7 +44,10 @@ impl ConfigManager {
             if let Err(e) = fs::rename(&old_dir, &new_dir) {
                 // 如果 rename 失败（跨文件系统），尝试复制后删除
                 if let Err(copy_err) = Self::copy_dir_recursive(&old_dir, &new_dir) {
-                    eprintln!("Failed to migrate config directory: rename={}, copy={}", e, copy_err);
+                    eprintln!(
+                        "Failed to migrate config directory: rename={}, copy={}",
+                        e, copy_err
+                    );
                     return;
                 }
                 // 复制成功后删除旧目录
@@ -116,7 +115,8 @@ impl ConfigManager {
 
                             // 如果链接指向旧目录，更新为新目录
                             if target_str.contains(&*old_dir_str) {
-                                let new_target_str = target_str.replace(&*old_dir_str, &*new_dir.to_string_lossy());
+                                let new_target_str =
+                                    target_str.replace(&*old_dir_str, &*new_dir.to_string_lossy());
                                 let new_target = PathBuf::from(new_target_str.to_string());
 
                                 // 删除旧链接（兼容 symlink 和 Junction）
@@ -130,7 +130,8 @@ impl ConfigManager {
 
                                 #[cfg(windows)]
                                 {
-                                    let _ = LinkerService::create_windows_symlink(&new_target, &path);
+                                    let _ =
+                                        LinkerService::create_windows_symlink(&new_target, &path);
                                 }
 
                                 println!("Fixed symlink: {:?} -> {:?}", path, new_target);
@@ -166,8 +167,8 @@ impl ConfigManager {
         let content = fs::read_to_string(&self.config_path)
             .map_err(|e| format!("Failed to read config: {}", e))?;
 
-        let mut config: AppConfig = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse config: {}", e))?;
+        let mut config: AppConfig =
+            serde_json::from_str(&content).map_err(|e| format!("Failed to parse config: {}", e))?;
 
         // Version Check & Migration
         let current_version = AppConfig::default().version;
@@ -175,6 +176,11 @@ impl ConfigManager {
 
         if config.version != current_version {
             config.version = current_version;
+            updated = true;
+        }
+
+        if config.marketplace_sources.is_none() {
+            config.marketplace_sources = AppConfig::default().marketplace_sources;
             updated = true;
         }
 
@@ -198,11 +204,13 @@ impl ConfigManager {
                 for tool_config in config.tools.values_mut() {
                     let sp = tool_config.skills_path.to_string_lossy();
                     if sp.contains(".skills-hub") {
-                        tool_config.skills_path = PathBuf::from(sp.replace(".skills-hub", ".skills-manager").to_string());
+                        tool_config.skills_path =
+                            PathBuf::from(sp.replace(".skills-hub", ".skills-manager").to_string());
                     }
                     let cp = tool_config.config_path.to_string_lossy();
                     if cp.contains(".skills-hub") {
-                        tool_config.config_path = PathBuf::from(cp.replace(".skills-hub", ".skills-manager").to_string());
+                        tool_config.config_path =
+                            PathBuf::from(cp.replace(".skills-hub", ".skills-manager").to_string());
                     }
                 }
                 // Ensure the new skills directory exists
@@ -267,8 +275,7 @@ impl ConfigManager {
         let content = serde_json::to_string_pretty(config)
             .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
-        fs::write(&self.config_path, content)
-            .map_err(|e| format!("Failed to write config: {}", e))
+        fs::write(&self.config_path, content).map_err(|e| format!("Failed to write config: {}", e))
     }
 
     pub fn init_default(&self) -> Result<AppConfig, String> {

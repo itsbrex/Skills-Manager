@@ -44,6 +44,9 @@ export interface UserPreferences {
 
   // Notifications
   show_sync_notifications: boolean;
+
+  // Marketplace auth
+  github_token?: string | null;
 }
 
 export interface AppConfig {
@@ -52,6 +55,7 @@ export interface AppConfig {
   tools: Record<string, ToolConfig>;
   custom_tools?: Record<string, CustomToolConfig>;
   preferences?: UserPreferences;
+  marketplace_sources?: MarketplaceSource[];
 }
 
 export interface CustomToolConfig {
@@ -93,6 +97,49 @@ export interface FileNode {
   path: string;
   is_dir: boolean;
   children?: FileNode[];
+}
+
+export interface MarketplaceSource {
+  id: string;
+  name: string;
+  url: string;
+  source_type: "github_repo" | "skillsmp";
+  enabled: boolean;
+  builtin: boolean;
+  api_key?: string | null;
+}
+
+export interface MarketplaceSkill {
+  id: string;
+  name: string;
+  description: string | null;
+  author: string | null;
+  source_id: string;
+  source_name: string;
+  repo_url: string | null;
+  skill_path: string | null;
+  tags: string[];
+  install_status: "not_installed" | "installed";
+}
+
+export interface MarketplaceSkillsResponse {
+  skills: MarketplaceSkill[];
+  has_more: boolean;
+}
+
+export interface SkillFileNode {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  download_url: string | null;
+  children?: SkillFileNode[];
+}
+
+export interface InstallResult {
+  success: boolean;
+  skill_id: string;
+  message: string | null;
+  installed_path: string | null;
 }
 
 export interface UpdateInfo {

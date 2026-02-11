@@ -1,5 +1,7 @@
 use crate::models::Skill;
-use crate::services::{AppCache, ConfigManager, LinkerService, ScannerService, is_symlink_or_junction};
+use crate::services::{
+    is_symlink_or_junction, AppCache, ConfigManager, LinkerService, ScannerService,
+};
 use tauri::State;
 
 #[tauri::command]
@@ -18,7 +20,11 @@ pub fn list_skills(cache: State<AppCache>) -> Result<Vec<Skill>, String> {
 }
 
 #[tauri::command]
-pub fn enable_skill(skill_id: String, tool_id: String, cache: State<AppCache>) -> Result<(), String> {
+pub fn enable_skill(
+    skill_id: String,
+    tool_id: String,
+    cache: State<AppCache>,
+) -> Result<(), String> {
     let manager = ConfigManager::new();
     let config = manager.load()?;
 
@@ -43,7 +49,11 @@ pub fn enable_skill(skill_id: String, tool_id: String, cache: State<AppCache>) -
 }
 
 #[tauri::command]
-pub fn disable_skill(skill_id: String, tool_id: String, cache: State<AppCache>) -> Result<(), String> {
+pub fn disable_skill(
+    skill_id: String,
+    tool_id: String,
+    cache: State<AppCache>,
+) -> Result<(), String> {
     let manager = ConfigManager::new();
     let config = manager.load()?;
 
@@ -68,7 +78,10 @@ pub fn scan_existing_skills() -> Result<Vec<crate::models::Skill>, String> {
 }
 
 #[tauri::command]
-pub fn import_skills_to_hub(skill_paths: Vec<String>, cache: State<AppCache>) -> Result<(), String> {
+pub fn import_skills_to_hub(
+    skill_paths: Vec<String>,
+    cache: State<AppCache>,
+) -> Result<(), String> {
     for path in skill_paths {
         crate::services::LinkerService::import_to_hub(&path)?;
     }
@@ -102,7 +115,11 @@ pub fn delete_skill(skill_id: String, cache: State<AppCache>) -> Result<(), Stri
 }
 
 #[tauri::command]
-pub fn create_skill(name: String, description: Option<String>, cache: State<AppCache>) -> Result<Skill, String> {
+pub fn create_skill(
+    name: String,
+    description: Option<String>,
+    cache: State<AppCache>,
+) -> Result<Skill, String> {
     let manager = ConfigManager::new();
     let config = manager.load()?;
 

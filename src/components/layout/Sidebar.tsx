@@ -9,6 +9,7 @@ import { UpdateInfo } from "@/types";
 const navItems = [
   { path: "/", labelKey: "nav.skills" as const, icon: "sparkles" },
   { path: "/tools", labelKey: "nav.tools" as const, icon: "wrench" },
+  { path: "/marketplace", labelKey: "nav.marketplace" as const, icon: "store" },
   { path: "/settings", labelKey: "nav.settings" as const, icon: "cog" },
 ];
 
@@ -22,6 +23,13 @@ const icons: Record<string, React.ReactNode> = {
   wrench: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+    </svg>
+  ),
+  store: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7h18l-1.2 12.2a2 2 0 0 1-2 1.8H6.2a2 2 0 0 1-2-1.8L3 7z"/>
+      <path d="M3 7l2-4h14l2 4"/>
+      <path d="M9 11a3 3 0 0 0 6 0"/>
     </svg>
   ),
   cog: (

@@ -1,3 +1,4 @@
+use crate::models::marketplace::{MarketplaceSource, SourceType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -18,13 +19,47 @@ pub struct UserPreferences {
     pub tab_size: u8,
     #[serde(default = "default_true")]
     pub show_sync_notifications: bool,
+    #[serde(default)]
+    pub github_token: Option<String>,
 }
 
-fn default_theme() -> String { "system".to_string() }
-fn default_language() -> String { "en".to_string() }
-fn default_editor() -> String { "builtin".to_string() }
-fn default_tab_size() -> u8 { 2 }
-fn default_true() -> bool { true }
+fn default_theme() -> String {
+    "system".to_string()
+}
+fn default_language() -> String {
+    "en".to_string()
+}
+fn default_editor() -> String {
+    "builtin".to_string()
+}
+fn default_tab_size() -> u8 {
+    2
+}
+fn default_true() -> bool {
+    true
+}
+fn default_marketplace_sources() -> Vec<MarketplaceSource> {
+    vec![
+        MarketplaceSource {
+            id: "composio-awesome".to_string(),
+            name: "ComposioHQ Awesome Skills".to_string(),
+            url: "https://github.com/ComposioHQ/awesome-claude-skills".to_string(),
+            source_type: SourceType::GithubRepo,
+            enabled: true,
+            builtin: true,
+            api_key: None,
+        },
+        MarketplaceSource {
+            id: "skillsmp".to_string(),
+            name: "SkillsMP".to_string(),
+            url: "https://skillsmp.com".to_string(),
+            source_type: SourceType::SkillsMp,
+            enabled: false,
+            builtin: true,
+            api_key: None,
+        },
+    ]
+}
 
 impl Default for UserPreferences {
     fn default() -> Self {
@@ -36,6 +71,7 @@ impl Default for UserPreferences {
             default_editor: default_editor(),
             tab_size: default_tab_size(),
             show_sync_notifications: true,
+            github_token: None,
         }
     }
 }
@@ -49,6 +85,8 @@ pub struct AppConfig {
     pub custom_tools: HashMap<String, CustomToolConfig>,
     #[serde(default)]
     pub preferences: Option<UserPreferences>,
+    #[serde(default)]
+    pub marketplace_sources: Option<Vec<MarketplaceSource>>,
     #[serde(default)]
     pub initialized: bool,
 }
@@ -83,6 +121,7 @@ impl Default for AppConfig {
             tools: HashMap::new(),
             custom_tools: HashMap::new(),
             preferences: Some(UserPreferences::default()),
+            marketplace_sources: Some(default_marketplace_sources()),
             initialized: false,
         }
     }

@@ -1,10 +1,12 @@
-use std::process::Command;
+use rayon::prelude::*;
 use std::env;
-use rayon::prelude::*; // Enable parallel processing
+use std::process::Command; // Enable parallel processing
 
-use crate::models::{CustomToolConfig, Tool, ToolConfig, ToolDefinition, ToolSource, SUPPORTED_TOOLS};
-use crate::services::ConfigManager;
+use crate::models::{
+    CustomToolConfig, Tool, ToolConfig, ToolDefinition, ToolSource, SUPPORTED_TOOLS,
+};
 use crate::services::linker::normalize_path;
+use crate::services::ConfigManager;
 
 pub struct DetectorService;
 
@@ -42,7 +44,10 @@ impl DetectorService {
         tools
     }
 
-    pub fn detect_tool(definition: &ToolDefinition, saved_config: &Option<crate::models::AppConfig>) -> Tool {
+    pub fn detect_tool(
+        definition: &ToolDefinition,
+        saved_config: &Option<crate::models::AppConfig>,
+    ) -> Tool {
         let home_dir = dirs::home_dir().unwrap_or_default();
 
         // Prioritize saved custom paths, fallback to defaults
@@ -51,7 +56,10 @@ impl DetectorService {
             .and_then(|c| c.tools.get(definition.id))
         {
             // Normalize saved paths in case they contain mixed separators
-            (normalize_path(&saved.config_path), normalize_path(&saved.skills_path))
+            (
+                normalize_path(&saved.config_path),
+                normalize_path(&saved.skills_path),
+            )
         } else {
             // Normalize after join to fix mixed separators (e.g. ".config/opencode" on Windows)
             let mut config_dir = normalize_path(&home_dir.join(definition.config_dir));
@@ -236,7 +244,11 @@ mod tests {
             "initialized": true
         });
 
-        fs::write(&config_path, serde_json::to_string_pretty(&config_json).unwrap()).unwrap();
+        fs::write(
+            &config_path,
+            serde_json::to_string_pretty(&config_json).unwrap(),
+        )
+        .unwrap();
     }
 
     #[test]

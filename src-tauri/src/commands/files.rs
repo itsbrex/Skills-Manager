@@ -1,4 +1,6 @@
-use crate::services::{read_directory_tree as do_read_tree, read_file_content, write_file_content, FileNode};
+use crate::services::{
+    read_directory_tree as do_read_tree, read_file_content, write_file_content, FileNode,
+};
 
 #[tauri::command]
 pub fn read_directory_tree(path: String) -> Result<FileNode, String> {

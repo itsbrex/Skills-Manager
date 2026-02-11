@@ -1,5 +1,5 @@
+use crate::services::{ConfigManager, LinkReport, LinkStatus, LinkerService, ScannerService};
 use serde::{Deserialize, Serialize};
-use crate::services::{ConfigManager, LinkerService, LinkReport, LinkStatus, ScannerService};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncReport {
@@ -16,11 +16,8 @@ pub fn check_sync_status() -> Result<SyncReport, String> {
 
     for (_tool_id, tool_config) in config.collect_tool_configs() {
         for skill in &skills {
-            let status = LinkerService::check_link(
-                &skill.path,
-                &tool_config.skills_path,
-                &skill.id,
-            );
+            let status =
+                LinkerService::check_link(&skill.path, &tool_config.skills_path, &skill.id);
 
             if status != LinkStatus::Valid && status != LinkStatus::Missing {
                 issues_count += 1;
@@ -51,7 +48,8 @@ pub fn fix_sync_issues() -> Result<LinkReport, String> {
             .map(|s| s.id.clone())
             .collect();
 
-        let report = LinkerService::sync_all(&skill_data, &tool_config.skills_path, &enabled_skills);
+        let report =
+            LinkerService::sync_all(&skill_data, &tool_config.skills_path, &enabled_skills);
 
         combined_report.success.extend(report.success);
         combined_report.failed.extend(report.failed);

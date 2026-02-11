@@ -7,12 +7,14 @@ mod test_support;
 use commands::{
     check_sync_status, check_update, create_custom_tool, create_skill, delete_custom_tool,
     delete_skill, detect_available_editors, detect_tools, disable_skill, enable_skill,
-    fix_sync_issues, get_available_editors, get_config, get_tool_status, import_skills_to_hub,
-    is_initialized, list_skills, mark_initialized, open_in_editor, read_directory_tree, read_file,
-    refresh_skills, refresh_tools, refresh_editors, save_config, scan_existing_skills,
-    set_tool_enabled, update_custom_tool, update_tool_paths, write_file,
+    fetch_marketplace_skills, fetch_skill_file_content, fetch_skill_files, fix_sync_issues,
+    get_available_editors, get_config, get_marketplace_sources, get_tool_status,
+    import_skills_to_hub, install_marketplace_skill, is_initialized, list_skills, mark_initialized,
+    open_in_editor, read_directory_tree, read_file, refresh_editors, refresh_skills, refresh_tools,
+    save_config, save_marketplace_api_key, scan_existing_skills, set_tool_enabled,
+    toggle_marketplace_source, update_custom_tool, update_tool_paths, write_file,
 };
-use services::AppCache;
+use services::{AppCache, MarketplaceCache};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -20,6 +22,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppCache::default())
+        .manage(MarketplaceCache::default())
         .invoke_handler(tauri::generate_handler![
             get_config,
             save_config,
@@ -50,6 +53,13 @@ pub fn run() {
             read_directory_tree,
             read_file,
             write_file,
+            fetch_marketplace_skills,
+            fetch_skill_files,
+            fetch_skill_file_content,
+            install_marketplace_skill,
+            get_marketplace_sources,
+            toggle_marketplace_source,
+            save_marketplace_api_key,
             check_update,
         ])
         .run(tauri::generate_context!())
