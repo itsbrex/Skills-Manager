@@ -505,31 +505,31 @@ export function Marketplace() {
         }
       />
 
-      <main style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
+      <main style={{ flex: 1, overflow: 'auto', padding: '12px 20px' }}>
         <div style={{ maxWidth: '1200px' }}>
           {availableTags.length > 0 && (
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
               {availableTags.map((tag) => {
                 const isSelected = selectedTags.includes(tag);
                 return (
-                  <button
-                    key={tag}
-                    onClick={() => {
-                      setSelectedTags((prev) => isSelected
-                        ? prev.filter((t) => t !== tag)
-                        : [...prev, tag]);
-                    }}
-                    style={{
-                      borderRadius: '999px',
-                      padding: '6px 12px',
-                      fontSize: '12px',
-                      fontWeight: 500,
-                      border: isSelected ? '1px solid rgba(9, 105, 218, 0.4)' : '1px solid var(--border)',
-                      backgroundColor: isSelected ? 'rgba(9, 105, 218, 0.12)' : 'var(--secondary)',
-                      color: isSelected ? 'var(--primary)' : 'var(--muted-foreground)',
-                      cursor: 'pointer',
-                    }}
-                  >
+                    <button
+                      key={tag}
+                      onClick={() => {
+                        setSelectedTags((prev) => isSelected
+                          ? prev.filter((t) => t !== tag)
+                          : [...prev, tag]);
+                      }}
+                      style={{
+                        borderRadius: '999px',
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontWeight: 500,
+                        border: isSelected ? '1px solid rgba(9, 105, 218, 0.4)' : '1px solid var(--border)',
+                        backgroundColor: isSelected ? 'rgba(9, 105, 218, 0.12)' : 'var(--secondary)',
+                        color: isSelected ? 'var(--primary)' : 'var(--muted-foreground)',
+                        cursor: 'pointer',
+                      }}
+                    >
                     {tag}
                   </button>
                 );
@@ -540,10 +540,10 @@ export function Marketplace() {
           {filteredSkills.length === 0 ? (
             <div style={{
               textAlign: 'center',
-              padding: '48px 24px',
+              padding: '32px 20px',
               color: 'var(--muted-foreground)',
               backgroundColor: 'var(--secondary)',
-              borderRadius: '12px',
+              borderRadius: '10px',
               border: '1px solid var(--border)',
             }}>
               {skills.length === 0 ? t("marketplace.noSkills") : t("marketplace.noMatch")}
@@ -551,8 +551,8 @@ export function Marketplace() {
           ) : (
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-              gap: '16px',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: '12px',
             }}>
               {filteredSkills.map((skill) => {
                 const color = getSkillColor(skill.name);
@@ -560,194 +560,189 @@ export function Marketplace() {
                 const isInstalling = installingSkill === skill.id;
                 const externalUrl = skill.external_url || skill.repo_url;
                 return (
-                  <div
-                    key={skill.id}
-                    onClick={() => setSelectedSkill(skill)}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      padding: '18px 20px',
-                      backgroundColor: 'var(--secondary)',
-                      borderRadius: '14px',
-                      border: '1px solid var(--border)',
-                      transition: 'border-color 0.2s, box-shadow 0.2s, transform 0.2s',
-                      cursor: 'pointer',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--ring)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--border)';
-                      e.currentTarget.style.boxShadow = 'none';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                    }}
-                  >
-                    <div style={{ display: 'flex', gap: '14px', marginBottom: '16px' }}>
-                      <div style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '12px',
-                        background: color.bg,
+                    <div
+                      key={skill.id}
+                      onClick={() => setSelectedSkill(skill)}
+                      style={{
                         display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                      }}>
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color.icon} strokeWidth="2">
-                          <path d="M12 3L13.5 8.5L19 10L13.5 11.5L12 17L10.5 11.5L5 10L10.5 8.5L12 3Z"/>
-                        </svg>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                        flexDirection: 'column',
+                        padding: '12px 14px',
+                        backgroundColor: 'var(--secondary)',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border)',
+                        transition: 'border-color 0.2s, box-shadow 0.2s, transform 0.2s',
+                        cursor: 'pointer',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--ring)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '8px' }}>
                         <div style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '10px',
+                          background: color.bg,
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '6px',
-                          fontSize: '15px',
-                          fontWeight: 600,
-                          color: 'var(--foreground)',
-                          marginBottom: '4px',
-                          lineHeight: 1.3,
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
                         }}>
-                          <span style={{
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}>
-                            {skill.name}
-                          </span>
-                          {externalUrl && (
-                            <span
-                              style={{
-                                color: 'var(--muted-foreground)',
-                                cursor: 'pointer',
-                                flexShrink: 0,
-                                display: 'flex',
-                                alignItems: 'center',
-                              }}
-                              onClick={(e) => handleOpenExternalLink(e, externalUrl)}
-                              title={t("marketplace.openInBrowser")}
-                            >
-                              <ExternalLink size={14} style={{ marginTop: '1px' }} />
-                            </span>
-                          )}
-                        </div>
-                        <p style={{
-                          fontSize: '13px',
-                          color: 'var(--muted-foreground)',
-                          margin: 0,
-                          lineHeight: 1.5,
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                        }}>
-                          {skill.description || t("skills.noDescription")}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div style={{
-                      display: 'flex',
-                      gap: '8px',
-                      flexWrap: 'wrap',
-                      marginBottom: '12px',
-                    }}>
-                      <span style={{
-                        fontSize: '12px',
-                        color: 'var(--muted-foreground)',
-                        backgroundColor: 'var(--background)',
-                        padding: '4px 8px',
-                        borderRadius: '6px',
-                        border: '1px solid var(--border)',
-                      }}>
-                        {t("marketplace.source").replace("{source}", skill.source_name)}
-                      </span>
-                      {skill.author && (
-                        <span style={{
-                          fontSize: '12px',
-                          color: 'var(--muted-foreground)',
-                          backgroundColor: 'var(--background)',
-                          padding: '4px 8px',
-                          borderRadius: '6px',
-                          border: '1px solid var(--border)',
-                        }}>
-                          {t("marketplace.author").replace("{author}", skill.author)}
-                        </span>
-                      )}
-                    </div>
-
-                    {skill.tags.length > 0 && (
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                        {skill.tags.slice(0, 3).map((tag) => (
-                          <span
-                            key={tag}
-                            style={{
-                              fontSize: '11px',
-                              fontWeight: 500,
-                              color: 'var(--primary)',
-                              backgroundColor: 'rgba(9, 105, 218, 0.12)',
-                              padding: '3px 8px',
-                              borderRadius: '999px',
-                              border: '1px solid rgba(9, 105, 218, 0.35)',
-                            }}
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginTop: 'auto',
-                    }}>
-                      {isInstalled ? (
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          color: 'var(--color-success)',
-                          backgroundColor: 'var(--color-success-bg)',
-                          padding: '6px 10px',
-                          borderRadius: '8px',
-                          border: '1px solid var(--color-success-border)',
-                        }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="20 6 9 17 4 12"/>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color.icon} strokeWidth="2">
+                            <path d="M12 3L13.5 8.5L19 10L13.5 11.5L12 17L10.5 11.5L5 10L10.5 8.5L12 3Z"/>
                           </svg>
-                          {t("marketplace.installed")}
-                        </span>
-                      ) : (
-                        <button
-                          onClick={(e) => handleInstall(skill, e)}
-                          disabled={isInstalling}
-                          style={{
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{
                             display: 'flex',
                             alignItems: 'center',
                             gap: '6px',
-                            padding: '8px 14px',
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            color: 'var(--foreground)',
+                            marginBottom: '3px',
+                            lineHeight: 1.3,
+                          }}>
+                            <span style={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {skill.name}
+                            </span>
+                            {externalUrl && (
+                              <span
+                                style={{
+                                  color: 'var(--muted-foreground)',
+                                  cursor: 'pointer',
+                                  flexShrink: 0,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                }}
+                                onClick={(e) => handleOpenExternalLink(e, externalUrl)}
+                                title={t("marketplace.openInBrowser")}
+                              >
+                                <ExternalLink size={13} />
+                              </span>
+                            )}
+                          </div>
+                          <p style={{
                             fontSize: '12px',
+                            color: 'var(--muted-foreground)',
+                            margin: 0,
+                            lineHeight: 1.4,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                          }}>
+                            {skill.description || t("skills.noDescription")}
+                          </p>
+                        </div>
+                        {isInstalled ? (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '10px',
                             fontWeight: 500,
-                            color: 'var(--primary-foreground)',
-                            backgroundColor: 'var(--foreground)',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: isInstalling ? 'wait' : 'pointer',
-                            opacity: isInstalling ? 0.7 : 1,
-                          }}
-                        >
-                          {isInstalling ? t("marketplace.installing") : t("marketplace.install")}
-                        </button>
-                      )}
+                            color: 'var(--color-success)',
+                            backgroundColor: 'var(--color-success-bg)',
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--color-success-border)',
+                            flexShrink: 0,
+                          }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                            {t("marketplace.installed")}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => handleInstall(skill, e)}
+                            disabled={isInstalling}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '5px 10px',
+                              fontSize: '10px',
+                              fontWeight: 500,
+                              color: 'var(--primary-foreground)',
+                              backgroundColor: 'var(--foreground)',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: isInstalling ? 'wait' : 'pointer',
+                              opacity: isInstalling ? 0.7 : 1,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {isInstalling ? t("marketplace.installing") : t("marketplace.install")}
+                          </button>
+                        )}
+                      </div>
+
+                      <div style={{
+                        display: 'flex',
+                        gap: '6px',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        marginBottom: '6px',
+                      }}>
+                        <span style={{
+                          fontSize: '10px',
+                          color: 'var(--muted-foreground)',
+                          backgroundColor: 'var(--background)',
+                          padding: '2px 6px',
+                          borderRadius: '5px',
+                          border: '1px solid var(--border)',
+                        }}>
+                          {t("marketplace.source").replace("{source}", skill.source_name)}
+                        </span>
+                        {skill.author && (
+                          <span style={{
+                            fontSize: '10px',
+                            color: 'var(--muted-foreground)',
+                            backgroundColor: 'var(--background)',
+                            padding: '2px 6px',
+                            borderRadius: '5px',
+                            border: '1px solid var(--border)',
+                          }}>
+                            {t("marketplace.author").replace("{author}", skill.author)}
+                          </span>
+                        )}
+                        {skill.tags.length > 0 && (
+                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            {skill.tags.slice(0, 3).map((tag) => (
+                              <span
+                                key={tag}
+                                style={{
+                                  fontSize: '10px',
+                                  fontWeight: 500,
+                                  color: 'var(--primary)',
+                                  backgroundColor: 'rgba(9, 105, 218, 0.12)',
+                                  padding: '2px 6px',
+                                  borderRadius: '999px',
+                                  border: '1px solid rgba(9, 105, 218, 0.35)',
+                                }}
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
                 );
               })}
             </div>
@@ -758,9 +753,9 @@ export function Marketplace() {
               <div ref={loadMoreRef} style={{ height: '1px' }} />
               {loadingMore && (
                 <div style={{
-                  marginTop: '12px',
+                  marginTop: '8px',
                   textAlign: 'center',
-                  fontSize: '12px',
+                  fontSize: '11px',
                   color: 'var(--muted-foreground)',
                 }}>
                   {t("loading.default")}
