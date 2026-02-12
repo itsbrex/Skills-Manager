@@ -1622,12 +1622,12 @@ mod tests {
         extract_root_skill_dirs_from_tree_entries, extract_skill_description_from_markdown,
         get_cached_github_tree, github_tree_cache, github_tree_cache_key, normalize_github_token,
         set_cached_github_tree, should_include_github_root_dir, CachedGitHubTree, GitHubContent,
-        GitHubTreeEntry, InstallStatus, MarketplaceCache, MarketplaceSkill, PersistedMarketplaceState,
-        PersistedSkillDescriptionEntry, GITHUB_TREE_CACHE_TTL, PERSISTED_CACHE_TTL,
-        PERSISTED_SKILL_DESCRIPTION_CACHE_TTL,
+        GitHubTreeEntry, InstallStatus, MarketplaceCache, MarketplaceSkill,
+        PersistedMarketplaceState, PersistedSkillDescriptionEntry, GITHUB_TREE_CACHE_TTL,
+        PERSISTED_CACHE_TTL, PERSISTED_SKILL_DESCRIPTION_CACHE_TTL,
     };
-    use std::fs;
     use std::collections::HashSet;
+    use std::fs;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use crate::test_support::with_temp_home;
@@ -1869,7 +1869,10 @@ description: "来自 frontmatter 的描述"
             .expect("write cache file");
 
             let restored = MarketplaceCache::default().get_fresh_with_meta(&None, &None);
-            assert!(restored.is_none(), "expired persisted cache should not be used");
+            assert!(
+                restored.is_none(),
+                "expired persisted cache should not be used"
+            );
         });
     }
 
@@ -1906,7 +1909,10 @@ description: "来自 frontmatter 的描述"
                 .join(".skills-manager")
                 .join("cache")
                 .join("marketplace-skill-descriptions.json");
-            assert!(cache_path.exists(), "description cache file should be persisted");
+            assert!(
+                cache_path.exists(),
+                "description cache file should be persisted"
+            );
         });
     }
 
@@ -1925,8 +1931,8 @@ description: "来自 frontmatter 的描述"
                 .duration_since(UNIX_EPOCH)
                 .expect("current time should be after unix epoch")
                 .as_secs();
-            let expired_secs = now_secs
-                .saturating_sub(PERSISTED_SKILL_DESCRIPTION_CACHE_TTL.as_secs() + 1);
+            let expired_secs =
+                now_secs.saturating_sub(PERSISTED_SKILL_DESCRIPTION_CACHE_TTL.as_secs() + 1);
             let payload = std::collections::HashMap::from([
                 (
                     "fresh-key".to_string(),

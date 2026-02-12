@@ -70,7 +70,7 @@ impl ScannerService {
         let skill_md_upper = skill_path.join("SKILL.md");
         let skill_md_lower = skill_path.join("skill.md");
 
-        let meta = if meta_path.exists() {
+        let mut meta = if meta_path.exists() {
             Self::load_meta(&meta_path)?
         } else if skill_md_upper.exists() {
             Self::parse_frontmatter(&skill_md_upper)?
@@ -79,6 +79,28 @@ impl ScannerService {
         } else {
             Self::generate_meta(&id)
         };
+        if meta.description.is_none() {
+            let fallback = if skill_md_upper.exists() {
+                Self::parse_frontmatter(&skill_md_upper).ok()
+            } else if skill_md_lower.exists() {
+                Self::parse_frontmatter(&skill_md_lower).ok()
+            } else {
+                None
+            };
+            if let Some(fallback_meta) = fallback {
+                let description = fallback_meta.description.and_then(|raw| {
+                    let trimmed = raw.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                });
+                if description.is_some() {
+                    meta.description = description;
+                }
+            }
+        }
 
         // Check enabled status by looking for symlinks in each tool's skills directory
         let enabled = Self::check_enabled_status(skill_path, &id, config);
@@ -262,5 +284,80 @@ impl ScannerService {
         all_skills.dedup_by(|a, b| a.id == b.id);
 
         Ok(all_skills)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ScannerService;
+    use crate::models::AppConfig;
+    use crate::test_support::with_temp_home;
+    use std::fs;
+
+    #[test]
+    fn load_skill_with_config_falls_back_to_skill_md_description_when_meta_is_null() {
+        with_temp_home(|home| {
+            let config = AppConfig::default();
+            let skill_dir = home
+                .join(".skills-manager")
+                .join("skills")
+                .join("marketplace-test-skill");
+            fs::create_dir_all(&skill_dir).expect("create skill dir");
+
+            let meta_content = r#"{
+  "name": "marketplace-test-skill",
+  "description": null,
+  "version": "1.0"
+}"#;
+            fs::write(skill_dir.join("meta.json"), meta_content).expect("write meta.json");
+
+            let skill_md = r#"---
+name: marketplace-test-skill
+description: "Description from SKILL.md"
+---
+
+# marketplace-test-skill
+"#;
+            fs::write(skill_dir.join("SKILL.md"), skill_md).expect("write SKILL.md");
+
+            let skill =
+                ScannerService::load_skill_with_config(&skill_dir, &config).expect("load skill");
+            assert_eq!(
+                skill.description,
+                Some("Description from SKILL.md".to_string())
+            );
+        });
+    }
+
+    #[test]
+    fn load_skill_with_config_keeps_meta_description_when_present() {
+        with_temp_home(|home| {
+            let config = AppConfig::default();
+            let skill_dir = home
+                .join(".skills-manager")
+                .join("skills")
+                .join("marketplace-test-skill");
+            fs::create_dir_all(&skill_dir).expect("create skill dir");
+
+            let meta_content = r#"{
+  "name": "marketplace-test-skill",
+  "description": "Description from meta",
+  "version": "1.0"
+}"#;
+            fs::write(skill_dir.join("meta.json"), meta_content).expect("write meta.json");
+
+            let skill_md = r#"---
+name: marketplace-test-skill
+description: "Description from SKILL.md"
+---
+
+# marketplace-test-skill
+"#;
+            fs::write(skill_dir.join("SKILL.md"), skill_md).expect("write SKILL.md");
+
+            let skill =
+                ScannerService::load_skill_with_config(&skill_dir, &config).expect("load skill");
+            assert_eq!(skill.description, Some("Description from meta".to_string()));
+        });
     }
 }
