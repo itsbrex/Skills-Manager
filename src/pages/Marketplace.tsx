@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalLink } from "lucide-react";
@@ -74,7 +82,7 @@ export function Marketplace() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [descriptionHydrationTick, setDescriptionHydrationTick] = useState(0);
-  const isFirstSearch = useRef(true);
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const isFirstSourceFilter = useRef(true);
   const descriptionInFlightRef = useRef<Set<string>>(new Set());
   const descriptionFetchedRef = useRef<Set<string>>(new Set());
@@ -157,36 +165,15 @@ export function Marketplace() {
   }, [loadSkills]);
 
   useEffect(() => {
-    if (isFirstSearch.current) {
-      isFirstSearch.current = false;
-      return;
-    }
-
-    const query = searchQuery.trim();
-    if (!query) {
-      void loadSkills({ page: 1, sourceIds: selectedSourceIds });
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      void loadSkills({ query, page: 1, sourceIds: selectedSourceIds });
-    }, 350);
-
-    return () => window.clearTimeout(timer);
-  }, [searchQuery, loadSkills]);
-
-  useEffect(() => {
     if (isFirstSourceFilter.current) {
       isFirstSourceFilter.current = false;
       return;
     }
-    const query = searchQuery.trim();
     void loadSkills({
-      query: query.length > 0 ? query : undefined,
       page: 1,
       sourceIds: selectedSourceIds,
     });
-  }, [selectedSourceIds, loadSkills, searchQuery]);
+  }, [selectedSourceIds, loadSkills]);
 
   useEffect(() => {
     const candidates = skills
@@ -295,10 +282,8 @@ export function Marketplace() {
     descriptionInFlightRef.current.clear();
     setRefreshing(true);
     try {
-      const query = searchQuery.trim();
       await loadSkills({
         forceRefresh: true,
-        query: query.length > 0 ? query : undefined,
         page: 1,
         sourceIds: selectedSourceIds,
       });
@@ -308,7 +293,7 @@ export function Marketplace() {
     } finally {
       setRefreshing(false);
     }
-  }, [addToast, loadSkills, searchQuery, selectedSourceIds, t]);
+  }, [addToast, loadSkills, selectedSourceIds, t]);
 
   const handleLoadMore = useCallback(async () => {
     if (loadingMore || refreshing || initialLoading || !hasMore) {
@@ -316,9 +301,7 @@ export function Marketplace() {
     }
     setLoadingMore(true);
     try {
-      const query = searchQuery.trim();
       await loadSkills({
-        query: query.length > 0 ? query : undefined,
         page: currentPage + 1,
         append: true,
         sourceIds: selectedSourceIds,
@@ -333,7 +316,6 @@ export function Marketplace() {
     loadSkills,
     loadingMore,
     refreshing,
-    searchQuery,
     selectedSourceIds,
   ]);
 
@@ -351,10 +333,8 @@ export function Marketplace() {
             ? { ...current, install_status: "installed" }
             : current
         ));
-        const query = searchQuery.trim();
         await loadSkills({
           forceRefresh: true,
-          query: query.length > 0 ? query : undefined,
           page: 1,
           sourceIds: selectedSourceIds,
         });
@@ -366,7 +346,7 @@ export function Marketplace() {
     } finally {
       setInstallingSkill(null);
     }
-  }, [addToast, loadSkills, searchQuery, selectedSourceIds, t]);
+  }, [addToast, loadSkills, selectedSourceIds, t]);
 
   const handleOpenExternalLink = useCallback(async (event: MouseEvent, url: string) => {
     event.stopPropagation();
@@ -409,17 +389,26 @@ export function Marketplace() {
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
   }, [skills]);
 
-  const filteredSkills = skills.filter((skill) => {
-    const query = searchQuery.trim().toLowerCase();
-    const matchesQuery = !query
-      || skill.name.toLowerCase().includes(query)
-      || skill.description?.toLowerCase().includes(query)
-      || skill.author?.toLowerCase().includes(query)
-      || skill.source_name.toLowerCase().includes(query);
-    const matchesTags = selectedTags.length === 0
-      || selectedTags.some((tag) => skill.tags.includes(tag));
-    return matchesQuery && matchesTags;
-  });
+  const normalizedSearchQuery = useMemo(
+    () => deferredSearchQuery.trim().toLowerCase(),
+    [deferredSearchQuery],
+  );
+  const filteredSkills = useMemo(() => {
+    return skills.filter((skill) => {
+      const searchableText = [
+        skill.name,
+        skill.description || "",
+        skill.author || "",
+        skill.source_name,
+      ]
+        .join("\n")
+        .toLowerCase();
+      const matchesQuery = !normalizedSearchQuery || searchableText.includes(normalizedSearchQuery);
+      const matchesTags = selectedTags.length === 0
+        || selectedTags.some((tag) => skill.tags.includes(tag));
+      return matchesQuery && matchesTags;
+    });
+  }, [normalizedSearchQuery, selectedTags, skills]);
 
   const showSourceFilter = availableSources.length > 1;
   const sourceNameMap = useMemo(() => {

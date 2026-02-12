@@ -97,32 +97,12 @@ pub async fn fetch_marketplace_skills(
                         } else {
                             cached
                         };
-                    if let Some(ref q) = normalized_query {
-                        let lower_q = q.to_lowercase();
-                        let filtered: Vec<MarketplaceSkill> = filtered_by_source
-                            .into_iter()
-                            .filter(|skill| {
-                                skill.name.to_lowercase().contains(&lower_q)
-                                    || skill
-                                        .description
-                                        .as_ref()
-                                        .map(|d| d.to_lowercase().contains(&lower_q))
-                                        .unwrap_or(false)
-                                    || skill
-                                        .author
-                                        .as_ref()
-                                        .map(|a| a.to_lowercase().contains(&lower_q))
-                                        .unwrap_or(false)
-                                    || skill.source_name.to_lowercase().contains(&lower_q)
-                            })
-                            .collect();
-                        return Ok(MarketplaceSkillsResponse {
-                            skills: filtered,
-                            has_more: false,
-                        });
-                    }
+                    let filtered = MarketplaceService::filter_marketplace_skills_by_query(
+                        filtered_by_source,
+                        normalized_query.as_deref(),
+                    );
                     return Ok(MarketplaceSkillsResponse {
-                        skills: filtered_by_source,
+                        skills: filtered,
                         has_more: false,
                     });
                 }

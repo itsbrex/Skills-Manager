@@ -267,7 +267,50 @@ fn remove_persisted_marketplace_cache_state() {
 
 pub struct MarketplaceService;
 
+fn normalize_marketplace_query(query: Option<&str>) -> Option<String> {
+    query
+        .map(str::trim)
+        .filter(|q| !q.is_empty())
+        .map(|q| q.to_lowercase())
+}
+
+fn marketplace_skill_matches_query(skill: &MarketplaceSkill, query: &str) -> bool {
+    skill.name.to_lowercase().contains(query)
+        || skill
+            .description
+            .as_ref()
+            .map(|d| d.to_lowercase().contains(query))
+            .unwrap_or(false)
+        || skill
+            .author
+            .as_ref()
+            .map(|a| a.to_lowercase().contains(query))
+            .unwrap_or(false)
+        || skill.source_name.to_lowercase().contains(query)
+}
+
+fn filter_marketplace_skills_by_query(
+    skills: Vec<MarketplaceSkill>,
+    query: Option<&str>,
+) -> Vec<MarketplaceSkill> {
+    let Some(normalized_query) = normalize_marketplace_query(query) else {
+        return skills;
+    };
+
+    skills
+        .into_iter()
+        .filter(|skill| marketplace_skill_matches_query(skill, &normalized_query))
+        .collect()
+}
+
 impl MarketplaceService {
+    pub(crate) fn filter_marketplace_skills_by_query(
+        skills: Vec<MarketplaceSkill>,
+        query: Option<&str>,
+    ) -> Vec<MarketplaceSkill> {
+        filter_marketplace_skills_by_query(skills, query)
+    }
+
     pub async fn fetch_marketplace_skills(
         sources: &[MarketplaceSource],
         skills_dir: &Path,
@@ -283,7 +326,7 @@ impl MarketplaceService {
     pub async fn fetch_marketplace_skills_page(
         sources: &[MarketplaceSource],
         skills_dir: &Path,
-        _query: Option<String>,
+        query: Option<String>,
         github_token: Option<&str>,
         page: u32,
     ) -> Result<MarketplaceSkillsResponse, String> {
@@ -317,6 +360,8 @@ impl MarketplaceService {
         if skills.is_empty() && !errors.is_empty() {
             return Err(errors.join("; "));
         }
+
+        let skills = Self::filter_marketplace_skills_by_query(skills, query.as_deref());
 
         Ok(MarketplaceSkillsResponse { skills, has_more })
     }
@@ -1909,6 +1954,51 @@ description: "来自 frontmatter 的描述"
             assert!(loaded.contains_key("fresh-key"));
             assert!(!loaded.contains_key("expired-key"));
         });
+    }
+
+    #[test]
+    fn filter_marketplace_skills_by_query_matches_core_fields_case_insensitive() {
+        let mut alpha = sample_marketplace_skill("source-a", "alpha-skill");
+        alpha.description = Some("Zero trust workflow".to_string());
+        alpha.author = Some("Alice".to_string());
+        alpha.source_name = "GitHub Alpha".to_string();
+
+        let mut beta = sample_marketplace_skill("source-b", "beta-tool");
+        beta.description = Some("Data pipeline".to_string());
+        beta.author = Some("Bob".to_string());
+        beta.source_name = "Internal".to_string();
+
+        let skills = vec![alpha.clone(), beta.clone()];
+
+        let by_name = super::filter_marketplace_skills_by_query(skills.clone(), Some("ALPHA"));
+        assert_eq!(by_name.len(), 1);
+        assert_eq!(by_name[0].id, alpha.id);
+
+        let by_desc = super::filter_marketplace_skills_by_query(skills.clone(), Some("workflow"));
+        assert_eq!(by_desc.len(), 1);
+        assert_eq!(by_desc[0].id, alpha.id);
+
+        let by_author = super::filter_marketplace_skills_by_query(skills.clone(), Some("alice"));
+        assert_eq!(by_author.len(), 1);
+        assert_eq!(by_author[0].id, alpha.id);
+
+        let by_source = super::filter_marketplace_skills_by_query(skills, Some("github alpha"));
+        assert_eq!(by_source.len(), 1);
+        assert_eq!(by_source[0].id, alpha.id);
+    }
+
+    #[test]
+    fn filter_marketplace_skills_by_query_returns_all_for_empty_query() {
+        let skills = vec![
+            sample_marketplace_skill("source-a", "alpha"),
+            sample_marketplace_skill("source-b", "beta"),
+        ];
+
+        let filtered_blank = super::filter_marketplace_skills_by_query(skills.clone(), Some("   "));
+        assert_eq!(filtered_blank.len(), skills.len());
+
+        let filtered_none = super::filter_marketplace_skills_by_query(skills.clone(), None);
+        assert_eq!(filtered_none.len(), skills.len());
     }
 
     fn sample_marketplace_skill(source_id: &str, slug: &str) -> MarketplaceSkill {
