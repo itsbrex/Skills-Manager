@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { ExternalLink } from "lucide-react";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
-import { SkeletonList } from "@/components/ui/loading";
+import { PageLoader } from "@/components/ui/loading";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import {
   InstallResult,
@@ -230,6 +232,17 @@ export function Marketplace() {
     }
   }, [addToast, loadSkills, searchQuery, selectedSourceIds, t]);
 
+  const handleOpenExternalLink = useCallback(async (event: MouseEvent, url: string) => {
+    event.stopPropagation();
+    if (url) {
+      try {
+        await openUrl(url);
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : String(err), "error");
+      }
+    }
+  }, [addToast]);
+
   useEffect(() => {
     if (!hasMore || initialLoading || refreshing) {
       return;
@@ -294,9 +307,8 @@ export function Marketplace() {
   const toggleSourceSelection = useCallback((sourceId: string) => {
     setSelectedSourceIds((prev) => {
       if (prev.length === 0) {
-        return availableSources
-          .filter((source) => source.id !== sourceId)
-          .map((source) => source.id);
+        // When showing all, click to select ONLY the clicked source
+        return [sourceId];
       }
       if (prev.includes(sourceId)) {
         const next = prev.filter((id) => id !== sourceId);
@@ -319,7 +331,7 @@ export function Marketplace() {
       }}>
         <PageHeader title={t("marketplace.title")} />
         <main style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
-          <SkeletonList count={6} />
+          <PageLoader />
         </main>
       </div>
     );
@@ -589,13 +601,37 @@ export function Marketplace() {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
                           fontSize: '15px',
                           fontWeight: 600,
                           color: 'var(--foreground)',
                           marginBottom: '4px',
                           lineHeight: 1.3,
                         }}>
-                          {skill.name}
+                          <span style={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {skill.name}
+                          </span>
+                          {skill.repo_url && (
+                            <span
+                              style={{
+                                color: 'var(--muted-foreground)',
+                                cursor: 'pointer',
+                                flexShrink: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                              }}
+                              onClick={(e) => handleOpenExternalLink(e, skill.repo_url!)}
+                              title={t("marketplace.openInBrowser")}
+                            >
+                              <ExternalLink size={14} style={{ marginTop: '1px' }} />
+                            </span>
+                          )}
                         </div>
                         <p style={{
                           fontSize: '13px',

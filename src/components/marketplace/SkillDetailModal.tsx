@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import MonacoEditor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -7,6 +8,7 @@ import { FileTree } from "@/components/editor/FileTree";
 import { MarketplaceSkill, SkillFileNode, FileNode } from "@/types";
 import { useTranslation } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
+import { ExternalLink } from "lucide-react";
 
 interface SkillDetailModalProps {
   skill: MarketplaceSkill;
@@ -305,6 +307,17 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
     return parseMarkdownWithFrontmatter(previewContent);
   }, [isMarkdown, previewContent]);
 
+  const handleOpenExternalLink = useCallback(async (event: MouseEvent, url: string) => {
+    event.stopPropagation();
+    if (url) {
+      try {
+        await openUrl(url);
+      } catch (err) {
+        console.error("Failed to open URL:", err);
+      }
+    }
+  }, []);
+
   return (
     <div
       style={{
@@ -339,9 +352,26 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
           padding: "18px 22px",
           borderBottom: "1px solid var(--border)",
         }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--foreground)" }}>
-              {skill.name}
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--foreground)" }}>
+                {skill.name}
+              </div>
+              {skill.repo_url && (
+                <span
+                  style={{
+                    color: "var(--muted-foreground)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    flexShrink: 0,
+                  }}
+                  onClick={(e) => handleOpenExternalLink(e, skill.repo_url!)}
+                  title={t("marketplace.openInBrowser")}
+                >
+                  <ExternalLink size={15} />
+                </span>
+              )}
             </div>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
               {skill.author && (

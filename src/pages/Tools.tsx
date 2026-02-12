@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { SkeletonList } from "@/components/ui/loading";
+import { PageLoader } from "@/components/ui/loading";
 
 export function Tools() {
   const { t } = useTranslation();
@@ -368,7 +368,7 @@ export function Tools() {
       }}>
         <PageHeader title={t("tools.title")} />
         <main style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
-          <SkeletonList count={6} />
+          <PageLoader />
         </main>
       </div>
     );

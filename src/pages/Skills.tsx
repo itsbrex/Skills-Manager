@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
-import { PageLoader, SkeletonList } from "@/components/ui/loading";
+import { PageLoader } from "@/components/ui/loading";
 import { Skill, Tool, AppConfig } from "@/types";
 import { useTranslation, TranslationPath } from "@/i18n";
 
@@ -217,7 +217,7 @@ export function Skills() {
       }}>
         <PageHeader title={t("skills.title")} />
         <main style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
-          <SkeletonList count={6} />
+          <PageLoader />
         </main>
       </div>
     );

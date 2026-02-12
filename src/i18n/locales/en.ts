@@ -120,6 +120,7 @@ export const en = {
     networkError: "Network request failed",
     rateLimited: "Too many requests, try again later",
     skillsmpNeedKey: "SkillsMP requires an API key",
+    openInBrowser: "Open in browser",
   },
   tools: {
     title: "Tools",

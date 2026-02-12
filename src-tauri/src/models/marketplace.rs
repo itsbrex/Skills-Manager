@@ -91,7 +91,11 @@ pub struct SkillsMPSearchResult {
         alias = "repoUrl",
         alias = "github_url",
         alias = "githubUrl",
-        alias = "url"
+        alias = "url",
+        alias = "github",
+        alias = "link",
+        alias = "repository",
+        alias = "repository_url"
     )]
     pub repo_url: Option<String>,
     #[serde(default)]

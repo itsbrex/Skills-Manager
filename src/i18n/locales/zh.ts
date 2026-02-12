@@ -121,6 +121,7 @@ export const zh = {
     networkError: "网络请求失败，请检查网络连接",
     rateLimited: "请求过于频繁，请稍后再试",
     skillsmpNeedKey: "SkillsMP 需要配置 API Key，请在设置中配置",
+    openInBrowser: "在浏览器中打开",
   },
   tools: {
     title: "工具",
