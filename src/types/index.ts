@@ -103,7 +103,7 @@ export interface MarketplaceSource {
   id: string;
   name: string;
   url: string;
-  source_type: "github_repo" | "skillsmp";
+  source_type: "github_repo";
   enabled: boolean;
   builtin: boolean;
   api_key?: string | null;

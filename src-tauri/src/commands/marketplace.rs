@@ -225,28 +225,3 @@ pub fn toggle_marketplace_source(source_id: String, enabled: bool) -> Result<(),
 
     manager.save(&config)
 }
-
-#[tauri::command]
-pub fn save_marketplace_api_key(source_id: String, api_key: String) -> Result<(), String> {
-    let manager = ConfigManager::new();
-    let mut config = manager.load()?;
-
-    let sources = config
-        .marketplace_sources
-        .get_or_insert_with(|| AppConfig::default().marketplace_sources.unwrap_or_default());
-
-    let mut found = false;
-    for source in sources.iter_mut() {
-        if source.id == source_id {
-            source.api_key = Some(api_key.clone());
-            found = true;
-            break;
-        }
-    }
-
-    if !found {
-        return Err(format!("未找到市场源: {}", source_id));
-    }
-
-    manager.save(&config)
-}

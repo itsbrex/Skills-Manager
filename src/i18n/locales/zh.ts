@@ -120,7 +120,6 @@ export const zh = {
     noPreview: "选择左侧文件查看内容",
     networkError: "网络请求失败，请检查网络连接",
     rateLimited: "请求过于频繁，请稍后再试",
-    skillsmpNeedKey: "SkillsMP 需要配置 API Key，请在设置中配置",
     openInBrowser: "在浏览器中打开",
   },
   tools: {
@@ -183,13 +182,9 @@ export const zh = {
     marketplace: "技能市场",
     marketplaceEmpty: "暂无可配置的市场源",
     marketplaceSourceTypeGithub: "GitHub 仓库",
-    marketplaceSourceTypeSkillsmp: "SkillsMP API",
     githubToken: "GitHub Token",
     githubTokenDesc: "可选：用于提升 GitHub API 限额，缓解市场刷新与详情预览失败",
     githubTokenPlaceholder: "粘贴你的 GitHub Personal Access Token",
-    marketplaceApiKey: "SkillsMP API Key",
-    marketplaceApiKeyDesc: "用于访问 SkillsMP 的私有接口",
-    marketplaceApiKeyPlaceholder: "粘贴你的 API Key",
     marketplaceKeySaved: "已配置",
     marketplaceKeyMissing: "未配置",
     // Appearance

@@ -39,26 +39,15 @@ fn default_true() -> bool {
     true
 }
 fn default_marketplace_sources() -> Vec<MarketplaceSource> {
-    vec![
-        MarketplaceSource {
-            id: "composio-awesome".to_string(),
-            name: "ComposioHQ Awesome Skills".to_string(),
-            url: "https://github.com/ComposioHQ/awesome-claude-skills".to_string(),
-            source_type: SourceType::GithubRepo,
-            enabled: true,
-            builtin: true,
-            api_key: None,
-        },
-        MarketplaceSource {
-            id: "skillsmp".to_string(),
-            name: "SkillsMP".to_string(),
-            url: "https://skillsmp.com".to_string(),
-            source_type: SourceType::SkillsMp,
-            enabled: false,
-            builtin: true,
-            api_key: None,
-        },
-    ]
+    vec![MarketplaceSource {
+        id: "composio-awesome".to_string(),
+        name: "ComposioHQ Awesome Skills".to_string(),
+        url: "https://github.com/ComposioHQ/awesome-claude-skills".to_string(),
+        source_type: SourceType::GithubRepo,
+        enabled: true,
+        builtin: true,
+        api_key: None,
+    }]
 }
 
 impl Default for UserPreferences {
@@ -177,5 +166,19 @@ impl AppConfig {
         }
 
         configs
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::default_marketplace_sources;
+    use crate::models::SourceType;
+
+    #[test]
+    fn default_marketplace_sources_only_contains_composio_github_repo() {
+        let sources = default_marketplace_sources();
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].id, "composio-awesome");
+        assert_eq!(sources[0].source_type, SourceType::GithubRepo);
     }
 }

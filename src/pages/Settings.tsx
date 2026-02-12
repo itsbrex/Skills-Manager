@@ -210,15 +210,7 @@ export function Settings() {
   const selectedEditor = availableEditors.find(e => e.id === prefs.default_editor) || availableEditors[0];
   const FallbackEditorIcon = selectedEditor ? getEditorIcon(selectedEditor.id) : null;
   const marketplaceSources = config.marketplace_sources || [];
-  const marketplaceRows = marketplaceSources.flatMap((source) => {
-    const rows: Array<{ type: "source" | "api"; source: MarketplaceSource }> = [
-      { type: "source", source },
-    ];
-    if (source.source_type === "skillsmp") {
-      rows.push({ type: "api", source });
-    }
-    return rows;
-  });
+  const marketplaceRows = marketplaceSources;
 
   return (
     <div style={{
@@ -504,58 +496,20 @@ export function Settings() {
                 {t("settings.marketplaceEmpty")}
               </div>
             ) : (
-              marketplaceRows.map((row, index) => {
+              marketplaceRows.map((source, index) => {
                 const isLast = index === marketplaceRows.length - 1;
-                if (row.type === "source") {
-                  const typeLabel = row.source.source_type === "github_repo"
-                    ? t("settings.marketplaceSourceTypeGithub")
-                    : t("settings.marketplaceSourceTypeSkillsmp");
-                  return (
-                    <SettingsRow
-                      key={`${row.source.id}-source`}
-                      label={row.source.name}
-                      description={`${typeLabel} · ${row.source.url}`}
-                      isLast={isLast}
-                    >
-                      <Toggle
-                        checked={row.source.enabled}
-                        onChange={(v) => updateMarketplaceSource(row.source.id, { enabled: v })}
-                      />
-                    </SettingsRow>
-                  );
-                }
-
+                const typeLabel = t("settings.marketplaceSourceTypeGithub");
                 return (
                   <SettingsRow
-                    key={`${row.source.id}-api`}
-                    label={t("settings.marketplaceApiKey")}
-                    description={t("settings.marketplaceApiKeyDesc")}
+                    key={`${source.id}-source`}
+                    label={source.name}
+                    description={`${typeLabel} · ${source.url}`}
                     isLast={isLast}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <input
-                        type="password"
-                        value={row.source.api_key || ""}
-                        onChange={(e) => updateMarketplaceSource(row.source.id, { api_key: e.target.value })}
-                        placeholder={t("settings.marketplaceApiKeyPlaceholder")}
-                        style={{
-                          width: '220px',
-                          padding: '8px 10px',
-                          fontSize: '12px',
-                          border: '1px solid var(--border)',
-                          borderRadius: '8px',
-                          backgroundColor: 'var(--background)',
-                          color: 'var(--foreground)',
-                          outline: 'none',
-                        }}
-                      />
-                      <span style={{
-                        fontSize: '12px',
-                        color: row.source.api_key ? 'var(--color-success)' : 'var(--muted-foreground)',
-                      }}>
-                        {row.source.api_key ? t("settings.marketplaceKeySaved") : t("settings.marketplaceKeyMissing")}
-                      </span>
-                    </div>
+                    <Toggle
+                      checked={source.enabled}
+                      onChange={(v) => updateMarketplaceSource(source.id, { enabled: v })}
+                    />
                   </SettingsRow>
                 );
               })

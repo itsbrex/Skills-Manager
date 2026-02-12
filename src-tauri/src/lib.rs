@@ -11,8 +11,8 @@ use commands::{
     get_available_editors, get_config, get_marketplace_sources, get_tool_status,
     import_skills_to_hub, install_marketplace_skill, is_initialized, list_skills, mark_initialized,
     open_in_editor, read_directory_tree, read_file, refresh_editors, refresh_skills, refresh_tools,
-    save_config, save_marketplace_api_key, scan_existing_skills, set_tool_enabled,
-    toggle_marketplace_source, update_custom_tool, update_tool_paths, write_file,
+    save_config, scan_existing_skills, set_tool_enabled, toggle_marketplace_source,
+    update_custom_tool, update_tool_paths, write_file,
 };
 use services::{AppCache, MarketplaceCache};
 
@@ -59,7 +59,6 @@ pub fn run() {
             install_marketplace_skill,
             get_marketplace_sources,
             toggle_marketplace_source,
-            save_marketplace_api_key,
             check_update,
         ])
         .run(tauri::generate_context!())

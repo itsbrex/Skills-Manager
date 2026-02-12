@@ -12,12 +12,11 @@ use serde_json::Value;
 
 use crate::models::{
     GitHubContent, InstallResult, InstallStatus, MarketplaceSkill, MarketplaceSkillsResponse,
-    MarketplaceSource, SkillFileNode, SkillsMPResponse, SkillsMPSearchResult, SourceType,
+    MarketplaceSource, SkillFileNode, SourceType,
 };
 
 const CACHE_TTL: Duration = Duration::from_secs(15 * 60);
 const GITHUB_API_BASE: &str = "https://api.github.com";
-const DEFAULT_SKILLSMP_QUERY: &str = "skill";
 const GITHUB_TREE_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
 
 #[derive(Debug, Clone, Deserialize)]
@@ -121,11 +120,6 @@ impl MarketplaceCache {
     }
 }
 
-struct SkillsMpFetchResult {
-    skills: Vec<MarketplaceSkill>,
-    has_more: bool,
-}
-
 pub struct MarketplaceService;
 
 impl MarketplaceService {
@@ -144,38 +138,28 @@ impl MarketplaceService {
     pub async fn fetch_marketplace_skills_page(
         sources: &[MarketplaceSource],
         skills_dir: &Path,
-        query: Option<String>,
+        _query: Option<String>,
         github_token: Option<&str>,
         page: u32,
     ) -> Result<MarketplaceSkillsResponse, String> {
         let page = page.max(1);
         let mut skills = Vec::new();
         let mut errors: Vec<String> = Vec::new();
-        let mut has_more = false;
+        let has_more = false;
 
         for source in sources.iter().filter(|s| s.enabled) {
-            let result = match source.source_type {
-                SourceType::GithubRepo => {
-                    if page == 1 {
-                        Self::fetch_github_repo(source, github_token)
-                            .await
-                            .map(|skills| SkillsMpFetchResult {
-                                skills,
-                                has_more: false,
-                            })
-                    } else {
-                        continue;
-                    }
-                }
-                SourceType::SkillsMp => Self::fetch_skillsmp(source, query.as_deref(), page).await,
-            };
+            if source.source_type != SourceType::GithubRepo {
+                continue;
+            }
+            if page > 1 {
+                continue;
+            }
 
-            match result {
-                Ok(mut result) => {
-                    has_more = has_more || result.has_more;
-                    skills.append(&mut result.skills);
+            match Self::fetch_github_repo(source, github_token).await {
+                Ok(mut fetched) => skills.append(&mut fetched),
+                Err(err) => {
+                    errors.push(format!("{}: {}", source.name, err));
                 }
-                Err(err) => errors.push(format!("{}: {}", source.name, err)),
             }
         }
 
@@ -249,92 +233,6 @@ impl MarketplaceService {
         }
 
         Ok(skills)
-    }
-
-    async fn fetch_skillsmp(
-        source: &MarketplaceSource,
-        query: Option<&str>,
-        page: u32,
-    ) -> Result<SkillsMpFetchResult, String> {
-        let api_key = source
-            .api_key
-            .as_deref()
-            .filter(|v| !v.trim().is_empty())
-            .ok_or_else(|| "SkillsMP API Key 未配置".to_string())?;
-
-        let client = Client::new();
-        let base = source.url.trim_end_matches('/');
-        let url = format!("{}/api/v1/skills/search", base);
-        let q = query.unwrap_or(DEFAULT_SKILLSMP_QUERY);
-
-        let response = client
-            .get(url)
-            .query(&[("q", q), ("page", &page.to_string())])
-            .header("Authorization", format!("Bearer {}", api_key))
-            .send()
-            .await
-            .map_err(|e| format!("SkillsMP 请求失败: {}", e))?;
-
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .map_err(|e| format!("SkillsMP 响应读取失败: {}", e))?;
-
-        if !status.is_success() {
-            return Err(format!("SkillsMP 响应错误: {}", body));
-        }
-
-        let value: Value =
-            serde_json::from_str(&body).map_err(|e| format!("SkillsMP 响应解析失败: {}", e))?;
-
-        if value.get("success").and_then(|v| v.as_bool()) == Some(false) {
-            let err_message = extract_skillsmp_error_message(&value)
-                .unwrap_or_else(|| "SkillsMP 返回失败".to_string());
-            return Err(format!("SkillsMP 响应错误: {}", err_message));
-        }
-
-        let has_more = extract_skillsmp_has_more(&value);
-        let items = extract_skillsmp_items(&value);
-        let mut skills = Vec::new();
-
-        for item in items {
-            let parsed: SkillsMPSearchResult =
-                serde_json::from_value(item.clone()).unwrap_or_default();
-            let name = parsed
-                .name
-                .clone()
-                .or_else(|| parsed.id.clone())
-                .unwrap_or_else(|| "Unnamed Skill".to_string());
-            let raw_id = parsed.id.clone().unwrap_or_else(|| name.clone());
-            let tags = parsed
-                .tags
-                .clone()
-                .unwrap_or_else(|| extract_tag_list(&item));
-            let (repo_url, skill_path) =
-                normalize_skillsmp_github_location(parsed.repo_url.as_deref());
-            let external_url = build_marketplace_external_url(
-                parsed.repo_url.as_deref(),
-                repo_url.as_deref(),
-                skill_path.as_deref(),
-            );
-
-            skills.push(MarketplaceSkill {
-                id: make_marketplace_skill_id(&source.id, &raw_id),
-                name,
-                description: parsed.description.clone(),
-                author: parsed.author.clone(),
-                source_id: source.id.clone(),
-                source_name: source.name.clone(),
-                repo_url,
-                skill_path,
-                external_url,
-                tags,
-                install_status: InstallStatus::NotInstalled,
-            });
-        }
-
-        Ok(SkillsMpFetchResult { skills, has_more })
     }
 
     pub async fn fetch_skill_files(
@@ -1104,44 +1002,6 @@ fn build_marketplace_external_url(
     Some(base)
 }
 
-fn normalize_skillsmp_github_location(raw_url: Option<&str>) -> (Option<String>, Option<String>) {
-    let Some(raw) = raw_url.map(|url| url.trim()).filter(|url| !url.is_empty()) else {
-        return (None, None);
-    };
-
-    let cleaned = raw
-        .split('#')
-        .next()
-        .unwrap_or(raw)
-        .split('?')
-        .next()
-        .unwrap_or(raw)
-        .trim_end_matches('/');
-
-    let prefix = "https://github.com/";
-    let Some(rest) = cleaned.strip_prefix(prefix) else {
-        return (Some(cleaned.to_string()), None);
-    };
-
-    let parts: Vec<&str> = rest.split('/').filter(|seg| !seg.is_empty()).collect();
-    if parts.len() < 2 {
-        return (Some(cleaned.to_string()), None);
-    }
-
-    let owner = parts[0];
-    let repo = parts[1].trim_end_matches(".git");
-    let repo_url = format!("{}{}", prefix, format!("{}/{}", owner, repo));
-
-    if parts.len() > 4 && (parts[2] == "tree" || parts[2] == "blob") {
-        let path = parts[4..].join("/");
-        if !path.is_empty() {
-            return (Some(repo_url), Some(path));
-        }
-    }
-
-    (Some(repo_url), None)
-}
-
 fn make_marketplace_skill_id(source_id: &str, raw: &str) -> String {
     let combined = format!("{}-{}", source_id, raw);
     combined
@@ -1151,107 +1011,6 @@ fn make_marketplace_skill_id(source_id: &str, raw: &str) -> String {
         .collect::<String>()
         .trim_matches('-')
         .to_string()
-}
-
-fn extract_skillsmp_items(value: &Value) -> Vec<Value> {
-    if let Some(array) = value.as_array() {
-        return array.clone();
-    }
-
-    if let Some(skills) = value
-        .get("data")
-        .and_then(|v| v.get("skills"))
-        .and_then(|v| v.as_array())
-    {
-        return skills.clone();
-    }
-
-    if let Ok(parsed) = serde_json::from_value::<SkillsMPResponse>(value.clone()) {
-        if !parsed.data.is_empty() {
-            return parsed
-                .data
-                .into_iter()
-                .map(|item| serde_json::to_value(item).unwrap_or(Value::Null))
-                .filter(|v| !v.is_null())
-                .collect();
-        }
-        if !parsed.results.is_empty() {
-            return parsed
-                .results
-                .into_iter()
-                .map(|item| serde_json::to_value(item).unwrap_or(Value::Null))
-                .filter(|v| !v.is_null())
-                .collect();
-        }
-    }
-
-    if let Some(data) = value.get("data").and_then(|v| v.as_array()) {
-        return data.clone();
-    }
-
-    if let Some(results) = value.get("results").and_then(|v| v.as_array()) {
-        return results.clone();
-    }
-
-    if let Some(skills) = value.get("skills").and_then(|v| v.as_array()) {
-        return skills.clone();
-    }
-
-    Vec::new()
-}
-
-fn extract_skillsmp_has_more(value: &Value) -> bool {
-    value
-        .get("data")
-        .and_then(|v| v.get("pagination"))
-        .and_then(|v| {
-            v.get("hasNext")
-                .or_else(|| v.get("has_next"))
-                .and_then(|x| x.as_bool())
-        })
-        .or_else(|| {
-            value.get("pagination").and_then(|v| {
-                v.get("hasNext")
-                    .or_else(|| v.get("has_next"))
-                    .and_then(|x| x.as_bool())
-            })
-        })
-        .unwrap_or(false)
-}
-
-fn extract_skillsmp_error_message(value: &Value) -> Option<String> {
-    if let Some(msg) = value.get("message").and_then(|v| v.as_str()) {
-        return Some(msg.to_string());
-    }
-
-    let err = value.get("error")?;
-    if let Some(msg) = err.as_str() {
-        return Some(msg.to_string());
-    }
-    if let Some(msg) = err.get("message").and_then(|v| v.as_str()) {
-        return Some(msg.to_string());
-    }
-    if let Some(code) = err.get("code").and_then(|v| v.as_str()) {
-        return Some(code.to_string());
-    }
-
-    None
-}
-
-fn extract_tag_list(item: &Value) -> Vec<String> {
-    let candidates = ["tags", "topics", "categories"];
-    for key in candidates {
-        if let Some(arr) = item.get(key).and_then(|v| v.as_array()) {
-            let tags: Vec<String> = arr
-                .iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect();
-            if !tags.is_empty() {
-                return tags;
-            }
-        }
-    }
-    Vec::new()
 }
 
 fn collect_file_nodes(node: &SkillFileNode, files: &mut Vec<SkillFileNode>) {
@@ -1319,13 +1078,11 @@ fn is_same_marketplace_skill(dir: &PathBuf, source_id: &str) -> Result<bool, Str
 mod tests {
     use super::{
         build_marketplace_external_url, build_skill_tree_from_tree_entries, collect_file_nodes,
-        extract_root_skill_dirs_from_tree_entries, extract_skillsmp_has_more,
-        extract_skillsmp_items, get_cached_github_tree, github_tree_cache, github_tree_cache_key,
-        normalize_github_token, normalize_skillsmp_github_location, set_cached_github_tree,
+        extract_root_skill_dirs_from_tree_entries, get_cached_github_tree, github_tree_cache,
+        github_tree_cache_key, normalize_github_token, set_cached_github_tree,
         should_include_github_root_dir, CachedGitHubTree, GitHubContent, GitHubTreeEntry,
-        SkillsMPSearchResult, GITHUB_TREE_CACHE_TTL,
+        GITHUB_TREE_CACHE_TTL,
     };
-    use serde_json::json;
     use std::collections::HashSet;
     use std::time::{Duration, SystemTime};
 
@@ -1342,30 +1099,6 @@ mod tests {
             normalize_github_token(Some("  ghp_example_token  ")),
             Some("ghp_example_token".to_string())
         );
-    }
-
-    #[test]
-    fn extract_skillsmp_items_supports_nested_data_skills_shape() {
-        let value = json!({
-            "success": true,
-            "data": {
-                "skills": [
-                    { "id": "s1", "name": "Skill One" },
-                    { "id": "s2", "name": "Skill Two" }
-                ]
-            }
-        });
-
-        let items = extract_skillsmp_items(&value);
-        assert_eq!(items.len(), 2);
-    }
-
-    #[test]
-    fn normalize_skillsmp_github_location_extracts_repo_and_path() {
-        let url = "https://github.com/foo/bar/tree/main/.claude/skills/my-skill";
-        let (repo_url, skill_path) = normalize_skillsmp_github_location(Some(url));
-        assert_eq!(repo_url, Some("https://github.com/foo/bar".to_string()));
-        assert_eq!(skill_path, Some(".claude/skills/my-skill".to_string()));
     }
 
     #[test]
@@ -1398,41 +1131,13 @@ mod tests {
     fn build_marketplace_external_url_returns_repo_for_non_github() {
         let link = build_marketplace_external_url(
             None,
-            Some("https://skillsmp.com/skills/my-skill"),
+            Some("https://example.com/skills/my-skill"),
             Some(".claude/skills/my-skill"),
         );
         assert_eq!(
             link,
-            Some("https://skillsmp.com/skills/my-skill".to_string())
+            Some("https://example.com/skills/my-skill".to_string())
         );
-    }
-
-    #[test]
-    fn skillsmp_item_parses_github_url_alias() {
-        let value = json!({
-            "id": "s1",
-            "name": "Skill One",
-            "githubUrl": "https://github.com/foo/bar/tree/main/.claude/skills/skill-one"
-        });
-        let parsed: SkillsMPSearchResult = serde_json::from_value(value).unwrap();
-        assert_eq!(
-            parsed.repo_url,
-            Some("https://github.com/foo/bar/tree/main/.claude/skills/skill-one".to_string())
-        );
-    }
-
-    #[test]
-    fn extract_skillsmp_has_more_supports_nested_pagination_shape() {
-        let value = json!({
-            "success": true,
-            "data": {
-                "skills": [],
-                "pagination": {
-                    "hasNext": true
-                }
-            }
-        });
-        assert!(extract_skillsmp_has_more(&value));
     }
 
     #[test]

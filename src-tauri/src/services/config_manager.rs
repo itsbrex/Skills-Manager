@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use crate::models::{AppConfig, ToolConfig, SUPPORTED_TOOLS};
+use crate::models::{AppConfig, SourceType, ToolConfig, SUPPORTED_TOOLS};
 #[cfg(windows)]
 use crate::services::linker::LinkerService;
 use crate::services::linker::{is_symlink_or_junction, normalize_path, remove_symlink_or_junction};
@@ -181,6 +181,22 @@ impl ConfigManager {
 
         if config.marketplace_sources.is_none() {
             config.marketplace_sources = AppConfig::default().marketplace_sources;
+            updated = true;
+        }
+
+        // Keep marketplace sources constrained to supported providers.
+        // Unknown legacy providers are removed during load to prevent stale config from surfacing.
+        let default_sources = AppConfig::default().marketplace_sources.unwrap_or_default();
+        let previous_sources = config.marketplace_sources.clone();
+        let mut normalized_sources = previous_sources
+            .clone()
+            .unwrap_or_else(|| default_sources.clone());
+        normalized_sources.retain(|source| source.source_type == SourceType::GithubRepo);
+        if normalized_sources.is_empty() {
+            normalized_sources = default_sources;
+        }
+        if previous_sources.as_ref() != Some(&normalized_sources) {
+            config.marketplace_sources = Some(normalized_sources);
             updated = true;
         }
 

@@ -9,7 +9,7 @@ pub use config::{AppConfig, CustomToolConfig, ToolConfig};
 pub use editor::{DetectedEditor, EDITOR_DEFINITIONS};
 pub use marketplace::{
     GitHubContent, InstallResult, InstallStatus, MarketplaceSkill, MarketplaceSkillsResponse,
-    MarketplaceSource, SkillFileNode, SkillsMPResponse, SkillsMPSearchResult, SourceType,
+    MarketplaceSource, SkillFileNode, SourceType,
 };
 pub use skill::{Skill, SkillSource};
 pub use tool::{Tool, ToolDefinition, ToolSource, SUPPORTED_TOOLS};

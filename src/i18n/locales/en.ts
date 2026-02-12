@@ -119,7 +119,6 @@ export const en = {
     noPreview: "Select a file to preview",
     networkError: "Network request failed",
     rateLimited: "Too many requests, try again later",
-    skillsmpNeedKey: "SkillsMP requires an API key",
     openInBrowser: "Open in browser",
   },
   tools: {
@@ -182,13 +181,9 @@ export const en = {
     marketplace: "Marketplace",
     marketplaceEmpty: "No marketplace sources configured",
     marketplaceSourceTypeGithub: "GitHub Repository",
-    marketplaceSourceTypeSkillsmp: "SkillsMP API",
     githubToken: "GitHub Token",
     githubTokenDesc: "Optional: increases GitHub API rate limits for marketplace refresh and details",
     githubTokenPlaceholder: "Paste your GitHub personal access token",
-    marketplaceApiKey: "SkillsMP API Key",
-    marketplaceApiKeyDesc: "Private key used to access SkillsMP",
-    marketplaceApiKeyPlaceholder: "Paste your API key",
     marketplaceKeySaved: "Saved",
     marketplaceKeyMissing: "Not set",
     // Appearance

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MarketplaceSource {
     pub id: String,
     pub name: String,
@@ -12,11 +12,11 @@ pub struct MarketplaceSource {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum SourceType {
-    #[serde(rename = "github_repo")]
     GithubRepo,
-    #[serde(rename = "skillsmp")]
-    SkillsMp,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,43 +76,14 @@ pub struct GitHubContent {
     pub size: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct SkillsMPSearchResult {
-    #[serde(default, alias = "skill_id", alias = "slug")]
-    pub id: Option<String>,
-    #[serde(default, alias = "title")]
-    pub name: Option<String>,
-    #[serde(default, alias = "summary")]
-    pub description: Option<String>,
-    #[serde(default, alias = "owner", alias = "author")]
-    pub author: Option<String>,
-    #[serde(
-        default,
-        alias = "repo_url",
-        alias = "repoUrl",
-        alias = "github_url",
-        alias = "githubUrl",
-        alias = "url",
-        alias = "github",
-        alias = "link",
-        alias = "repository",
-        alias = "repository_url"
-    )]
-    pub repo_url: Option<String>,
-    #[serde(default)]
-    pub tags: Option<Vec<String>>,
-}
+#[cfg(test)]
+mod tests {
+    use super::SourceType;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct SkillsMPResponse {
-    #[serde(default)]
-    pub data: Vec<SkillsMPSearchResult>,
-    #[serde(default)]
-    pub results: Vec<SkillsMPSearchResult>,
-    #[serde(default)]
-    pub success: Option<bool>,
-    #[serde(default)]
-    pub message: Option<String>,
-    #[serde(default)]
-    pub error: Option<String>,
+    #[test]
+    fn source_type_deserialize_unknown_value_to_unknown_variant() {
+        let value: SourceType =
+            serde_json::from_str("\"legacy_provider\"").expect("should deserialize");
+        assert_eq!(value, SourceType::Unknown);
+    }
 }
