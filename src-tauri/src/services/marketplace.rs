@@ -4,10 +4,10 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::models::{
@@ -16,9 +16,11 @@ use crate::models::{
 };
 
 const CACHE_TTL: Duration = Duration::from_secs(15 * 60);
+const PERSISTED_CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 const GITHUB_API_BASE: &str = "https://api.github.com";
 const GITHUB_TREE_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
 const SKILL_DESCRIPTION_CACHE_TTL: Duration = Duration::from_secs(30 * 60);
+const PERSISTED_SKILL_DESCRIPTION_CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Debug, Clone, Deserialize)]
 struct GitHubTreeEntry {
@@ -45,6 +47,12 @@ struct CachedSkillDescription {
     description: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedSkillDescriptionEntry {
+    fetched_at_unix_secs: u64,
+    description: Option<String>,
+}
+
 static GITHUB_TREE_CACHE: OnceLock<Mutex<HashMap<String, CachedGitHubTree>>> = OnceLock::new();
 static SKILL_DESCRIPTION_CACHE: OnceLock<Mutex<HashMap<String, CachedSkillDescription>>> =
     OnceLock::new();
@@ -53,12 +61,50 @@ pub struct MarketplaceCache {
     state: Mutex<Option<CachedMarketplaceState>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedMarketplaceState {
+    fetched_at_unix_secs: u64,
+    skills: Vec<MarketplaceSkill>,
+    query: Option<String>,
+    has_more: bool,
+    source_filter: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone)]
 struct CachedMarketplaceState {
     fetched_at: SystemTime,
     skills: Vec<MarketplaceSkill>,
     query: Option<String>,
     has_more: bool,
     source_filter: Option<Vec<String>>,
+}
+
+impl PersistedMarketplaceState {
+    fn from_cached(state: &CachedMarketplaceState) -> Self {
+        let fetched_at_unix_secs = state
+            .fetched_at
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .map(|duration| duration.as_secs())
+            .unwrap_or_default();
+        Self {
+            fetched_at_unix_secs,
+            skills: state.skills.clone(),
+            query: state.query.clone(),
+            has_more: state.has_more,
+            source_filter: state.source_filter.clone(),
+        }
+    }
+
+    fn into_cached(self) -> CachedMarketplaceState {
+        CachedMarketplaceState {
+            fetched_at: UNIX_EPOCH + Duration::from_secs(self.fetched_at_unix_secs),
+            skills: self.skills,
+            query: self.query,
+            has_more: self.has_more,
+            source_filter: self.source_filter,
+        }
+    }
 }
 
 impl Default for MarketplaceCache {
@@ -70,7 +116,7 @@ impl Default for MarketplaceCache {
 }
 
 impl MarketplaceCache {
-    pub fn get_fresh_with_meta(
+    fn get_fresh_from_memory(
         &self,
         query: &Option<String>,
         source_filter: &Option<Vec<String>>,
@@ -92,6 +138,37 @@ impl MarketplaceCache {
         })
     }
 
+    pub fn get_fresh_with_meta(
+        &self,
+        query: &Option<String>,
+        source_filter: &Option<Vec<String>>,
+    ) -> Option<MarketplaceSkillsResponse> {
+        if let Some(cached) = self.get_fresh_from_memory(query, source_filter) {
+            return Some(cached);
+        }
+
+        if query.is_some() || source_filter.is_some() {
+            return None;
+        }
+
+        let persisted = load_persisted_marketplace_cache_state()?;
+        if persisted.query != *query || persisted.source_filter != *source_filter {
+            return None;
+        }
+        if persisted.fetched_at.elapsed().ok()? > PERSISTED_CACHE_TTL {
+            return None;
+        }
+
+        let response = MarketplaceSkillsResponse {
+            skills: persisted.skills.clone(),
+            has_more: persisted.has_more,
+        };
+        if let Ok(mut guard) = self.state.lock() {
+            *guard = Some(persisted);
+        }
+        Some(response)
+    }
+
     pub fn set(
         &self,
         skills: Vec<MarketplaceSkill>,
@@ -99,14 +176,20 @@ impl MarketplaceCache {
         has_more: bool,
         source_filter: Option<Vec<String>>,
     ) {
+        let state = CachedMarketplaceState {
+            fetched_at: SystemTime::now(),
+            skills,
+            query,
+            has_more,
+            source_filter,
+        };
+
         if let Ok(mut guard) = self.state.lock() {
-            *guard = Some(CachedMarketplaceState {
-                fetched_at: SystemTime::now(),
-                skills,
-                query,
-                has_more,
-                source_filter,
-            });
+            *guard = Some(state.clone());
+        }
+
+        if state.query.is_none() && state.source_filter.is_none() {
+            persist_marketplace_cache_state(&state);
         }
     }
 
@@ -114,6 +197,7 @@ impl MarketplaceCache {
         if let Ok(mut guard) = self.state.lock() {
             *guard = None;
         }
+        remove_persisted_marketplace_cache_state();
     }
 
     pub fn get_cached_skill(&self, skill_id: &str) -> Option<MarketplaceSkill> {
@@ -123,9 +207,61 @@ impl MarketplaceCache {
     }
 
     pub fn get_any(&self) -> Option<Vec<MarketplaceSkill>> {
-        let guard = self.state.lock().ok()?;
-        let cached = guard.as_ref()?;
-        Some(cached.skills.clone())
+        if let Some(skills) = self
+            .state
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|cached| cached.skills.clone()))
+        {
+            return Some(skills);
+        }
+
+        let persisted = load_persisted_marketplace_cache_state()?;
+        let skills = persisted.skills.clone();
+        if let Ok(mut guard) = self.state.lock() {
+            *guard = Some(persisted);
+        }
+        Some(skills)
+    }
+}
+
+fn persisted_marketplace_cache_path() -> Option<PathBuf> {
+    Some(
+        dirs::home_dir()?
+            .join(".skills-manager")
+            .join("cache")
+            .join("marketplace-skills.json"),
+    )
+}
+
+fn load_persisted_marketplace_cache_state() -> Option<CachedMarketplaceState> {
+    let path = persisted_marketplace_cache_path()?;
+    let content = fs::read_to_string(path).ok()?;
+    let persisted: PersistedMarketplaceState = serde_json::from_str(&content).ok()?;
+    Some(persisted.into_cached())
+}
+
+fn persist_marketplace_cache_state(state: &CachedMarketplaceState) {
+    let Some(path) = persisted_marketplace_cache_path() else {
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        if fs::create_dir_all(parent).is_err() {
+            return;
+        }
+    }
+    let persisted = PersistedMarketplaceState::from_cached(state);
+    if let Ok(content) = serde_json::to_string(&persisted) {
+        let _ = fs::write(path, content);
+    }
+}
+
+fn remove_persisted_marketplace_cache_state() {
+    let Some(path) = persisted_marketplace_cache_path() else {
+        return;
+    };
+    if path.exists() {
+        let _ = fs::remove_file(path);
     }
 }
 
@@ -460,7 +596,7 @@ fn set_cached_github_tree(owner: &str, repo: &str, branch: &str, tree: &[GitHubT
 }
 
 fn skill_description_cache() -> &'static Mutex<HashMap<String, CachedSkillDescription>> {
-    SKILL_DESCRIPTION_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+    SKILL_DESCRIPTION_CACHE.get_or_init(|| Mutex::new(load_persisted_skill_description_cache()))
 }
 
 fn make_skill_description_cache_key(repo_url: &str, skill_path: &str) -> String {
@@ -472,6 +608,9 @@ fn get_cached_skill_description(cache_key: &str) -> Option<Option<String>> {
     let cached = guard.get(cache_key).cloned()?;
     if cached.fetched_at.elapsed().ok()? > SKILL_DESCRIPTION_CACHE_TTL {
         guard.remove(cache_key);
+        let snapshot = guard.clone();
+        drop(guard);
+        persist_skill_description_cache(&snapshot);
         return None;
     }
     Some(cached.description)
@@ -486,6 +625,87 @@ fn set_cached_skill_description(cache_key: &str, description: Option<String>) {
                 description,
             },
         );
+        let snapshot = guard.clone();
+        drop(guard);
+        persist_skill_description_cache(&snapshot);
+    }
+}
+
+fn persisted_skill_description_cache_path() -> Option<PathBuf> {
+    Some(
+        dirs::home_dir()?
+            .join(".skills-manager")
+            .join("cache")
+            .join("marketplace-skill-descriptions.json"),
+    )
+}
+
+fn load_persisted_skill_description_cache() -> HashMap<String, CachedSkillDescription> {
+    let Some(path) = persisted_skill_description_cache_path() else {
+        return HashMap::new();
+    };
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(_) => return HashMap::new(),
+    };
+    let persisted: HashMap<String, PersistedSkillDescriptionEntry> =
+        match serde_json::from_str(&content) {
+            Ok(persisted) => persisted,
+            Err(_) => return HashMap::new(),
+        };
+
+    let now = SystemTime::now();
+    persisted
+        .into_iter()
+        .filter_map(|(cache_key, entry)| {
+            let persisted_at = UNIX_EPOCH + Duration::from_secs(entry.fetched_at_unix_secs);
+            let elapsed = now.duration_since(persisted_at).ok()?;
+            if elapsed > PERSISTED_SKILL_DESCRIPTION_CACHE_TTL {
+                return None;
+            }
+            Some((
+                cache_key,
+                CachedSkillDescription {
+                    // 使用当前时间作为内存缓存时间，避免应用重启后立即被内存 TTL 淘汰
+                    fetched_at: now,
+                    description: entry.description,
+                },
+            ))
+        })
+        .collect()
+}
+
+fn persist_skill_description_cache(snapshot: &HashMap<String, CachedSkillDescription>) {
+    let Some(path) = persisted_skill_description_cache_path() else {
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        if fs::create_dir_all(parent).is_err() {
+            return;
+        }
+    }
+
+    let persisted: HashMap<String, PersistedSkillDescriptionEntry> = snapshot
+        .iter()
+        .map(|(cache_key, entry)| {
+            let fetched_at_unix_secs = entry
+                .fetched_at
+                .duration_since(UNIX_EPOCH)
+                .ok()
+                .map(|duration| duration.as_secs())
+                .unwrap_or_default();
+            (
+                cache_key.clone(),
+                PersistedSkillDescriptionEntry {
+                    fetched_at_unix_secs,
+                    description: entry.description.clone(),
+                },
+            )
+        })
+        .collect();
+
+    if let Ok(content) = serde_json::to_string(&persisted) {
+        let _ = fs::write(path, content);
     }
 }
 
@@ -1357,10 +1577,15 @@ mod tests {
         extract_root_skill_dirs_from_tree_entries, extract_skill_description_from_markdown,
         get_cached_github_tree, github_tree_cache, github_tree_cache_key, normalize_github_token,
         set_cached_github_tree, should_include_github_root_dir, CachedGitHubTree, GitHubContent,
-        GitHubTreeEntry, GITHUB_TREE_CACHE_TTL,
+        GitHubTreeEntry, InstallStatus, MarketplaceCache, MarketplaceSkill, PersistedMarketplaceState,
+        PersistedSkillDescriptionEntry, GITHUB_TREE_CACHE_TTL, PERSISTED_CACHE_TTL,
+        PERSISTED_SKILL_DESCRIPTION_CACHE_TTL,
     };
+    use std::fs;
     use std::collections::HashSet;
-    use std::time::{Duration, SystemTime};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    use crate::test_support::with_temp_home;
 
     #[test]
     fn normalize_github_token_returns_none_for_missing_or_blank_token() {
@@ -1554,6 +1779,152 @@ description: "来自 frontmatter 的描述"
             description,
             Some("这是第一段描述，会被提取出来。".to_string())
         );
+    }
+
+    #[test]
+    fn marketplace_cache_persists_primary_listing_across_instances() {
+        with_temp_home(|_| {
+            let cache = MarketplaceCache::default();
+            let expected = sample_marketplace_skill("source-a", "skill-a");
+            cache.set(vec![expected.clone()], None, false, None);
+
+            let restored = MarketplaceCache::default()
+                .get_fresh_with_meta(&None, &None)
+                .expect("expected persisted cache on new instance");
+
+            assert_eq!(restored.skills.len(), 1);
+            assert_eq!(restored.skills[0].id, expected.id);
+            assert_eq!(restored.skills[0].name, expected.name);
+        });
+    }
+
+    #[test]
+    fn marketplace_cache_ignores_expired_persisted_listing() {
+        with_temp_home(|_| {
+            let expired_secs = (SystemTime::now() - PERSISTED_CACHE_TTL - Duration::from_secs(1))
+                .duration_since(UNIX_EPOCH)
+                .expect("expired timestamp should be after unix epoch")
+                .as_secs();
+            let persisted = PersistedMarketplaceState {
+                fetched_at_unix_secs: expired_secs,
+                skills: vec![sample_marketplace_skill("source-a", "skill-a")],
+                query: None,
+                has_more: false,
+                source_filter: None,
+            };
+
+            let path = super::persisted_marketplace_cache_path().expect("cache path should exist");
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).expect("create cache dir");
+            }
+            fs::write(
+                &path,
+                serde_json::to_string(&persisted).expect("serialize persisted cache"),
+            )
+            .expect("write cache file");
+
+            let restored = MarketplaceCache::default().get_fresh_with_meta(&None, &None);
+            assert!(restored.is_none(), "expired persisted cache should not be used");
+        });
+    }
+
+    #[test]
+    fn marketplace_cache_invalidate_removes_persisted_listing() {
+        with_temp_home(|_| {
+            let cache = MarketplaceCache::default();
+            cache.set(
+                vec![sample_marketplace_skill("source-a", "skill-a")],
+                None,
+                false,
+                None,
+            );
+            cache.invalidate();
+
+            let restored = MarketplaceCache::default().get_fresh_with_meta(&None, &None);
+            assert!(restored.is_none(), "cache should be empty after invalidate");
+        });
+    }
+
+    #[test]
+    fn skill_description_cache_persists_to_disk() {
+        with_temp_home(|home| {
+            if let Ok(mut guard) = super::skill_description_cache().lock() {
+                guard.clear();
+            }
+
+            super::set_cached_skill_description(
+                "https://github.com/example/repo::skill-a",
+                Some("cached description".to_string()),
+            );
+
+            let cache_path = home
+                .join(".skills-manager")
+                .join("cache")
+                .join("marketplace-skill-descriptions.json");
+            assert!(cache_path.exists(), "description cache file should be persisted");
+        });
+    }
+
+    #[test]
+    fn load_persisted_skill_description_cache_ignores_expired_entries() {
+        with_temp_home(|home| {
+            let cache_path = home
+                .join(".skills-manager")
+                .join("cache")
+                .join("marketplace-skill-descriptions.json");
+            if let Some(parent) = cache_path.parent() {
+                fs::create_dir_all(parent).expect("create cache dir");
+            }
+
+            let now_secs = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("current time should be after unix epoch")
+                .as_secs();
+            let expired_secs = now_secs
+                .saturating_sub(PERSISTED_SKILL_DESCRIPTION_CACHE_TTL.as_secs() + 1);
+            let payload = std::collections::HashMap::from([
+                (
+                    "fresh-key".to_string(),
+                    PersistedSkillDescriptionEntry {
+                        fetched_at_unix_secs: now_secs,
+                        description: Some("fresh".to_string()),
+                    },
+                ),
+                (
+                    "expired-key".to_string(),
+                    PersistedSkillDescriptionEntry {
+                        fetched_at_unix_secs: expired_secs,
+                        description: Some("expired".to_string()),
+                    },
+                ),
+            ]);
+
+            fs::write(
+                &cache_path,
+                serde_json::to_string(&payload).expect("serialize payload"),
+            )
+            .expect("write cache file");
+
+            let loaded = super::load_persisted_skill_description_cache();
+            assert!(loaded.contains_key("fresh-key"));
+            assert!(!loaded.contains_key("expired-key"));
+        });
+    }
+
+    fn sample_marketplace_skill(source_id: &str, slug: &str) -> MarketplaceSkill {
+        MarketplaceSkill {
+            id: format!("{}::{}", source_id, slug),
+            name: slug.to_string(),
+            description: None,
+            author: Some("tester".to_string()),
+            source_id: source_id.to_string(),
+            source_name: "source".to_string(),
+            repo_url: Some("https://github.com/example/repo".to_string()),
+            skill_path: Some(slug.to_string()),
+            external_url: None,
+            tags: vec!["test".to_string()],
+            install_status: InstallStatus::NotInstalled,
+        }
     }
 
     fn count_files(node: &super::SkillFileNode) -> usize {
