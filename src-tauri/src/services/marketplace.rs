@@ -18,6 +18,7 @@ use crate::models::{
 const CACHE_TTL: Duration = Duration::from_secs(15 * 60);
 const GITHUB_API_BASE: &str = "https://api.github.com";
 const GITHUB_TREE_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
+const SKILL_DESCRIPTION_CACHE_TTL: Duration = Duration::from_secs(30 * 60);
 
 #[derive(Debug, Clone, Deserialize)]
 struct GitHubTreeEntry {
@@ -38,7 +39,15 @@ struct CachedGitHubTree {
     tree: Vec<GitHubTreeEntry>,
 }
 
+#[derive(Debug, Clone)]
+struct CachedSkillDescription {
+    fetched_at: SystemTime,
+    description: Option<String>,
+}
+
 static GITHUB_TREE_CACHE: OnceLock<Mutex<HashMap<String, CachedGitHubTree>>> = OnceLock::new();
+static SKILL_DESCRIPTION_CACHE: OnceLock<Mutex<HashMap<String, CachedSkillDescription>>> =
+    OnceLock::new();
 
 pub struct MarketplaceCache {
     state: Mutex<Option<CachedMarketplaceState>>,
@@ -281,6 +290,60 @@ impl MarketplaceService {
             .map_err(|e| format!("文件读取失败: {}", e))
     }
 
+    pub async fn fetch_skill_description(
+        repo_url: &str,
+        skill_path: &str,
+        github_token: Option<&str>,
+    ) -> Option<String> {
+        let normalized_repo_url = repo_url.trim();
+        let normalized_skill_path = skill_path.trim_matches('/');
+        if normalized_repo_url.is_empty() {
+            return None;
+        }
+
+        let cache_key =
+            make_skill_description_cache_key(normalized_repo_url, normalized_skill_path);
+        if let Some(cached) = get_cached_skill_description(&cache_key) {
+            return cached;
+        }
+
+        let description = Self::fetch_skill_description_uncached(
+            normalized_repo_url,
+            normalized_skill_path,
+            github_token,
+        )
+        .await;
+
+        set_cached_skill_description(&cache_key, description.clone());
+        description
+    }
+
+    async fn fetch_skill_description_uncached(
+        repo_url: &str,
+        skill_path: &str,
+        github_token: Option<&str>,
+    ) -> Option<String> {
+        let (owner, repo) = parse_github_repo_url(repo_url).ok()?;
+        let client = github_client().ok()?;
+
+        let mut download_url = None;
+        if let Ok(Some(tree)) =
+            fetch_skill_files_from_tree_api(&client, &owner, &repo, skill_path, github_token).await
+        {
+            download_url = find_manifest_download_url_in_tree(&tree);
+        }
+
+        if download_url.is_none() {
+            download_url =
+                find_manifest_download_url_from_raw(&client, &owner, &repo, skill_path).await;
+        }
+
+        let markdown = Self::fetch_skill_file_content(download_url.as_deref()?)
+            .await
+            .ok()?;
+        extract_skill_description_from_markdown(&markdown)
+    }
+
     pub async fn install_skill(
         skill: &MarketplaceSkill,
         skills_dir: &Path,
@@ -391,6 +454,36 @@ fn set_cached_github_tree(owner: &str, repo: &str, branch: &str, tree: &[GitHubT
                 fetched_at: SystemTime::now(),
                 branch: branch.to_string(),
                 tree: tree.to_vec(),
+            },
+        );
+    }
+}
+
+fn skill_description_cache() -> &'static Mutex<HashMap<String, CachedSkillDescription>> {
+    SKILL_DESCRIPTION_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn make_skill_description_cache_key(repo_url: &str, skill_path: &str) -> String {
+    format!("{}::{}", repo_url.trim(), skill_path.trim_matches('/'))
+}
+
+fn get_cached_skill_description(cache_key: &str) -> Option<Option<String>> {
+    let mut guard = skill_description_cache().lock().ok()?;
+    let cached = guard.get(cache_key).cloned()?;
+    if cached.fetched_at.elapsed().ok()? > SKILL_DESCRIPTION_CACHE_TTL {
+        guard.remove(cache_key);
+        return None;
+    }
+    Some(cached.description)
+}
+
+fn set_cached_skill_description(cache_key: &str, description: Option<String>) {
+    if let Ok(mut guard) = skill_description_cache().lock() {
+        guard.insert(
+            cache_key.to_string(),
+            CachedSkillDescription {
+                fetched_at: SystemTime::now(),
+                description,
             },
         );
     }
@@ -891,6 +984,189 @@ async fn find_raw_file_url(
     Ok(None)
 }
 
+async fn find_manifest_download_url_from_raw(
+    client: &Client,
+    owner: &str,
+    repo: &str,
+    skill_path: &str,
+) -> Option<String> {
+    let branches = ["main", "master"];
+    let candidates = ["SKILL.md", "README.md", "skill.md", "readme.md"];
+
+    for candidate in candidates {
+        if let Ok(Some(url)) =
+            find_raw_file_url(client, owner, repo, skill_path, candidate, &branches).await
+        {
+            return Some(url);
+        }
+    }
+
+    None
+}
+
+fn find_manifest_download_url_in_tree(node: &SkillFileNode) -> Option<String> {
+    if !node.is_dir {
+        let lower_name = node.name.to_ascii_lowercase();
+        if matches!(lower_name.as_str(), "skill.md" | "readme.md") {
+            return node.download_url.clone();
+        }
+        return None;
+    }
+
+    let children = node.children.as_ref()?;
+    for candidate in ["skill.md", "readme.md"] {
+        if let Some(url) = children.iter().find_map(|child| {
+            if child.is_dir {
+                return None;
+            }
+            if child.name.eq_ignore_ascii_case(candidate) {
+                return child.download_url.clone();
+            }
+            None
+        }) {
+            return Some(url);
+        }
+    }
+
+    for child in children {
+        if let Some(url) = find_manifest_download_url_in_tree(child) {
+            return Some(url);
+        }
+    }
+
+    None
+}
+
+fn extract_skill_description_from_markdown(raw: &str) -> Option<String> {
+    let normalized = raw.replace("\r\n", "\n");
+    let (frontmatter, body) = split_frontmatter(&normalized);
+    if let Some(frontmatter_block) = frontmatter {
+        if let Some(description) = extract_description_from_frontmatter(frontmatter_block) {
+            return Some(description);
+        }
+    }
+
+    extract_first_markdown_paragraph(body)
+}
+
+fn split_frontmatter(content: &str) -> (Option<&str>, &str) {
+    let Some(rest) = content.strip_prefix("---\n") else {
+        return (None, content);
+    };
+
+    if let Some(index) = rest.find("\n---\n") {
+        let frontmatter = &rest[..index];
+        let body = &rest[index + "\n---\n".len()..];
+        return (Some(frontmatter), body);
+    }
+
+    if let Some(index) = rest.find("\n---") {
+        let frontmatter = &rest[..index];
+        let body = &rest[index + "\n---".len()..];
+        return (Some(frontmatter), body.strip_prefix('\n').unwrap_or(body));
+    }
+
+    (None, content)
+}
+
+fn extract_description_from_frontmatter(frontmatter: &str) -> Option<String> {
+    for raw_line in frontmatter.lines() {
+        let line = raw_line.trim_end();
+        if line.is_empty() {
+            continue;
+        }
+        if raw_line.starts_with(' ') || raw_line.starts_with('\t') {
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("description:") {
+            let description = strip_yaml_value(value.trim());
+            if let Some(normalized) = normalize_description(description) {
+                return Some(normalized);
+            }
+        }
+    }
+    None
+}
+
+fn extract_first_markdown_paragraph(body: &str) -> Option<String> {
+    let mut lines: Vec<&str> = Vec::new();
+    let mut in_code_block = false;
+
+    for raw_line in body.lines() {
+        let line = raw_line.trim();
+        if line.starts_with("```") {
+            in_code_block = !in_code_block;
+            continue;
+        }
+        if in_code_block {
+            continue;
+        }
+
+        if line.is_empty() {
+            if !lines.is_empty() {
+                break;
+            }
+            continue;
+        }
+
+        if should_skip_markdown_line(line) {
+            if !lines.is_empty() {
+                break;
+            }
+            continue;
+        }
+
+        lines.push(line);
+    }
+
+    if lines.is_empty() {
+        return None;
+    }
+
+    normalize_description(lines.join(" "))
+}
+
+fn should_skip_markdown_line(line: &str) -> bool {
+    line.starts_with('#')
+        || line.starts_with('>')
+        || line.starts_with("- ")
+        || line.starts_with("* ")
+        || line.starts_with("+ ")
+        || line.starts_with("|")
+        || line.starts_with("![")
+        || (line.starts_with('[') && line.contains("]:"))
+}
+
+fn strip_yaml_value(value: &str) -> String {
+    let trimmed = value.trim();
+    if (trimmed.starts_with('"') && trimmed.ends_with('"'))
+        || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+    {
+        return trimmed[1..trimmed.len().saturating_sub(1)]
+            .trim()
+            .to_string();
+    }
+    trimmed.to_string()
+}
+
+fn normalize_description(raw: String) -> Option<String> {
+    let collapsed = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        return None;
+    }
+    Some(truncate_with_ellipsis(&collapsed, 180))
+}
+
+fn truncate_with_ellipsis(text: &str, max_chars: usize) -> String {
+    let mut chars = text.chars();
+    let truncated: String = chars.by_ref().take(max_chars).collect();
+    if chars.next().is_some() {
+        format!("{}...", truncated.trim_end())
+    } else {
+        text.to_string()
+    }
+}
+
 fn join_repo_path(base: &str, name: &str) -> String {
     if base.is_empty() {
         name.to_string()
@@ -1078,10 +1354,10 @@ fn is_same_marketplace_skill(dir: &PathBuf, source_id: &str) -> Result<bool, Str
 mod tests {
     use super::{
         build_marketplace_external_url, build_skill_tree_from_tree_entries, collect_file_nodes,
-        extract_root_skill_dirs_from_tree_entries, get_cached_github_tree, github_tree_cache,
-        github_tree_cache_key, normalize_github_token, set_cached_github_tree,
-        should_include_github_root_dir, CachedGitHubTree, GitHubContent, GitHubTreeEntry,
-        GITHUB_TREE_CACHE_TTL,
+        extract_root_skill_dirs_from_tree_entries, extract_skill_description_from_markdown,
+        get_cached_github_tree, github_tree_cache, github_tree_cache_key, normalize_github_token,
+        set_cached_github_tree, should_include_github_root_dir, CachedGitHubTree, GitHubContent,
+        GitHubTreeEntry, GITHUB_TREE_CACHE_TTL,
     };
     use std::collections::HashSet;
     use std::time::{Duration, SystemTime};
@@ -1244,6 +1520,40 @@ mod tests {
         }
 
         assert!(get_cached_github_tree(owner, repo).is_none());
+    }
+
+    #[test]
+    fn extract_skill_description_from_markdown_prefers_frontmatter_description() {
+        let markdown = r#"---
+name: test-skill
+description: "来自 frontmatter 的描述"
+---
+
+# Test Skill
+
+这是正文第一段。
+"#;
+
+        let description = extract_skill_description_from_markdown(markdown);
+        assert_eq!(description, Some("来自 frontmatter 的描述".to_string()));
+    }
+
+    #[test]
+    fn extract_skill_description_from_markdown_falls_back_to_first_paragraph() {
+        let markdown = r#"# Test Skill
+
+这是第一段描述，会被提取出来。
+
+## 使用方式
+
+- 步骤 1
+"#;
+
+        let description = extract_skill_description_from_markdown(markdown);
+        assert_eq!(
+            description,
+            Some("这是第一段描述，会被提取出来。".to_string())
+        );
     }
 
     fn count_files(node: &super::SkillFileNode) -> usize {

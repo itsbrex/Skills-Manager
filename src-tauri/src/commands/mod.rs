@@ -13,8 +13,9 @@ pub use editors::{
 };
 pub use files::{read_directory_tree, read_file, write_file};
 pub use marketplace::{
-    fetch_marketplace_skills, fetch_skill_file_content, fetch_skill_files, get_marketplace_sources,
-    install_marketplace_skill, toggle_marketplace_source,
+    fetch_marketplace_skill_descriptions, fetch_marketplace_skills, fetch_skill_file_content,
+    fetch_skill_files, get_marketplace_sources, install_marketplace_skill,
+    toggle_marketplace_source,
 };
 pub use skills::{
     create_skill, delete_skill, disable_skill, enable_skill, import_skills_to_hub, list_skills,

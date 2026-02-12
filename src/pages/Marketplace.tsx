@@ -15,6 +15,15 @@ import {
 import { useTranslation } from "@/i18n";
 import { SkillDetailModal } from "@/components/marketplace/SkillDetailModal";
 
+const DESCRIPTION_BATCH_SIZE = 12;
+const marketplaceDescriptionCache = new Map<string, string | null>();
+
+interface MarketplaceDescriptionRequest {
+  id: string;
+  repo_url: string;
+  skill_path: string;
+}
+
 // Generate consistent colors based on skill name
 function getSkillColor(name: string): { bg: string; icon: string } {
   const colors = [
@@ -29,6 +38,23 @@ function getSkillColor(name: string): { bg: string; icon: string } {
   ];
   const index = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
   return colors[index];
+}
+
+function primeDescriptionCache(skills: MarketplaceSkill[]) {
+  skills.forEach((skill) => {
+    const description = skill.description?.trim();
+    if (description) {
+      marketplaceDescriptionCache.set(skill.id, description);
+    }
+  });
+}
+
+function withCachedDescription(skill: MarketplaceSkill): MarketplaceSkill {
+  const cached = marketplaceDescriptionCache.get(skill.id);
+  if (!cached || cached === skill.description) {
+    return skill;
+  }
+  return { ...skill, description: cached };
 }
 
 export function Marketplace() {
@@ -47,8 +73,12 @@ export function Marketplace() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [descriptionHydrationTick, setDescriptionHydrationTick] = useState(0);
   const isFirstSearch = useRef(true);
   const isFirstSourceFilter = useRef(true);
+  const descriptionInFlightRef = useRef<Set<string>>(new Set());
+  const descriptionFetchedRef = useRef<Set<string>>(new Set());
+  const descriptionRequestSeqRef = useRef(0);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const loadSkills = useCallback(async (options?: {
@@ -72,14 +102,16 @@ export function Marketplace() {
         page,
         sourceIds: sourceIds && sourceIds.length > 0 ? sourceIds : undefined,
       });
+      primeDescriptionCache(result.skills);
+      const incoming = result.skills.map(withCachedDescription);
 
       setSkills((prev) => {
         if (!append || page === 1) {
-          return result.skills;
+          return incoming;
         }
         const merged = [...prev];
         const existingIds = new Set(prev.map((skill) => skill.id));
-        for (const skill of result.skills) {
+        for (const skill of incoming) {
           if (!existingIds.has(skill.id)) {
             merged.push(skill);
           }
@@ -156,7 +188,111 @@ export function Marketplace() {
     });
   }, [selectedSourceIds, loadSkills, searchQuery]);
 
+  useEffect(() => {
+    const candidates = skills
+      .filter((skill) => {
+        if (skill.description) {
+          return false;
+        }
+        if (!skill.repo_url || !skill.skill_path) {
+          return false;
+        }
+        if (descriptionFetchedRef.current.has(skill.id) || descriptionInFlightRef.current.has(skill.id)) {
+          return false;
+        }
+        return true;
+      })
+      .slice(0, DESCRIPTION_BATCH_SIZE);
+
+    if (candidates.length === 0) {
+      return;
+    }
+
+    const requestId = descriptionRequestSeqRef.current + 1;
+    descriptionRequestSeqRef.current = requestId;
+    candidates.forEach((skill) => descriptionInFlightRef.current.add(skill.id));
+    let cancelled = false;
+    let continueHydration = false;
+
+    async function hydrateDescriptions() {
+      try {
+        const payload: MarketplaceDescriptionRequest[] = candidates
+          .filter((skill) => Boolean(skill.repo_url && skill.skill_path))
+          .map((skill) => ({
+            id: skill.id,
+            repo_url: skill.repo_url as string,
+            skill_path: skill.skill_path as string,
+          }));
+
+        if (payload.length === 0) {
+          continueHydration = true;
+          return;
+        }
+
+        const descriptions = await invoke<Record<string, string | null>>(
+          "fetch_marketplace_skill_descriptions",
+          { skills: payload },
+        );
+
+        if (cancelled || requestId !== descriptionRequestSeqRef.current) {
+          return;
+        }
+
+        Object.entries(descriptions).forEach(([skillId, description]) => {
+          const normalized = description?.trim() || null;
+          marketplaceDescriptionCache.set(skillId, normalized);
+        });
+
+        setSkills((prev) => {
+          let changed = false;
+          const next = prev.map((skill) => {
+            const cached = marketplaceDescriptionCache.get(skill.id);
+            if (!cached || cached === skill.description) {
+              return skill;
+            }
+            changed = true;
+            return { ...skill, description: cached };
+          });
+          return changed ? next : prev;
+        });
+
+        setSelectedSkill((current) => {
+          if (!current) {
+            return current;
+          }
+          const cached = marketplaceDescriptionCache.get(current.id);
+          if (!cached || cached === current.description) {
+            return current;
+          }
+          return { ...current, description: cached };
+        });
+
+        continueHydration = true;
+      } catch (_err) {
+        // ignore hydration errors and keep list responsive
+      } finally {
+        candidates.forEach((skill) => {
+          descriptionInFlightRef.current.delete(skill.id);
+          if (continueHydration) {
+            descriptionFetchedRef.current.add(skill.id);
+          }
+        });
+        if (!cancelled && continueHydration) {
+          setDescriptionHydrationTick((value) => value + 1);
+        }
+      }
+    }
+
+    void hydrateDescriptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [skills, descriptionHydrationTick]);
+
   const handleRefresh = useCallback(async () => {
+    descriptionFetchedRef.current.clear();
+    descriptionInFlightRef.current.clear();
     setRefreshing(true);
     try {
       const query = searchQuery.trim();

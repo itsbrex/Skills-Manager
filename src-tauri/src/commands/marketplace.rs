@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use serde::Deserialize;
 use tauri::State;
 
 use crate::models::{
@@ -5,6 +8,13 @@ use crate::models::{
     SkillFileNode,
 };
 use crate::services::{AppCache, ConfigManager, MarketplaceCache, MarketplaceService};
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MarketplaceSkillDescriptionRequest {
+    pub id: String,
+    pub repo_url: String,
+    pub skill_path: String,
+}
 
 fn github_token_from_config(config: &AppConfig) -> Option<String> {
     config
@@ -147,6 +157,36 @@ pub async fn fetch_skill_files(
 #[tauri::command]
 pub async fn fetch_skill_file_content(download_url: String) -> Result<String, String> {
     MarketplaceService::fetch_skill_file_content(&download_url).await
+}
+
+#[tauri::command]
+pub async fn fetch_marketplace_skill_descriptions(
+    skills: Vec<MarketplaceSkillDescriptionRequest>,
+) -> Result<HashMap<String, Option<String>>, String> {
+    if skills.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let manager = ConfigManager::new();
+    let config = manager.load()?;
+    let github_token = github_token_from_config(&config);
+
+    let mut descriptions = HashMap::with_capacity(skills.len());
+    for skill in skills {
+        if skill.repo_url.trim().is_empty() || skill.skill_path.trim().is_empty() {
+            descriptions.insert(skill.id, None);
+            continue;
+        }
+        let description = MarketplaceService::fetch_skill_description(
+            &skill.repo_url,
+            &skill.skill_path,
+            github_token.as_deref(),
+        )
+        .await;
+        descriptions.insert(skill.id, description);
+    }
+
+    Ok(descriptions)
 }
 
 #[tauri::command]
