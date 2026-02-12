@@ -41,6 +41,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
   const [error, setError] = useState<string | null>(null);
   const previewRequestId = useRef(0);
   const canShowFiles = Boolean(skill.repo_url && skill.skill_path);
+  const externalUrl = skill.external_url || skill.repo_url;
 
   const markdownComponents = useMemo(() => ({
     h1: (props: any) => (
@@ -357,7 +358,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
               <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--foreground)" }}>
                 {skill.name}
               </div>
-              {skill.repo_url && (
+              {externalUrl && (
                 <span
                   style={{
                     color: "var(--muted-foreground)",
@@ -366,7 +367,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
                     alignItems: "center",
                     flexShrink: 0,
                   }}
-                  onClick={(e) => handleOpenExternalLink(e, skill.repo_url!)}
+                  onClick={(e) => handleOpenExternalLink(e, externalUrl)}
                   title={t("marketplace.openInBrowser")}
                 >
                   <ExternalLink size={15} />

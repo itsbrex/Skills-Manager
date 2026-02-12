@@ -118,6 +118,7 @@ export interface MarketplaceSkill {
   source_name: string;
   repo_url: string | null;
   skill_path: string | null;
+  external_url: string | null;
   tags: string[];
   install_status: "not_installed" | "installed";
 }

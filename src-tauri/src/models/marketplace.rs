@@ -29,6 +29,7 @@ pub struct MarketplaceSkill {
     pub source_name: String,
     pub repo_url: Option<String>,
     pub skill_path: Option<String>,
+    pub external_url: Option<String>,
     pub tags: Vec<String>,
     pub install_status: InstallStatus,
 }

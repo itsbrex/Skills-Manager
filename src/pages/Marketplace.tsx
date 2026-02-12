@@ -558,6 +558,7 @@ export function Marketplace() {
                 const color = getSkillColor(skill.name);
                 const isInstalled = skill.install_status === "installed";
                 const isInstalling = installingSkill === skill.id;
+                const externalUrl = skill.external_url || skill.repo_url;
                 return (
                   <div
                     key={skill.id}
@@ -617,7 +618,7 @@ export function Marketplace() {
                           }}>
                             {skill.name}
                           </span>
-                          {skill.repo_url && (
+                          {externalUrl && (
                             <span
                               style={{
                                 color: 'var(--muted-foreground)',
@@ -626,7 +627,7 @@ export function Marketplace() {
                                 display: 'flex',
                                 alignItems: 'center',
                               }}
-                              onClick={(e) => handleOpenExternalLink(e, skill.repo_url!)}
+                              onClick={(e) => handleOpenExternalLink(e, externalUrl)}
                               title={t("marketplace.openInBrowser")}
                             >
                               <ExternalLink size={14} style={{ marginTop: '1px' }} />

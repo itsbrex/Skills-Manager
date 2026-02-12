@@ -227,6 +227,8 @@ impl MarketplaceService {
             .filter(|item| should_include_github_root_dir(item, hinted_skill_dirs.as_ref()))
         {
             let skill_path = item.path.clone();
+            let repo_url = Some(source.url.clone());
+            let skill_path_opt = Some(skill_path.clone());
             skills.push(MarketplaceSkill {
                 id: make_marketplace_skill_id(&source.id, &skill_path),
                 name: item.name.clone(),
@@ -234,8 +236,13 @@ impl MarketplaceService {
                 author: Some(owner.clone()),
                 source_id: source.id.clone(),
                 source_name: source.name.clone(),
-                repo_url: Some(source.url.clone()),
-                skill_path: Some(skill_path),
+                repo_url: repo_url.clone(),
+                skill_path: skill_path_opt.clone(),
+                external_url: build_marketplace_external_url(
+                    None,
+                    repo_url.as_deref(),
+                    skill_path_opt.as_deref(),
+                ),
                 tags: Vec::new(),
                 install_status: InstallStatus::NotInstalled,
             });
@@ -306,6 +313,11 @@ impl MarketplaceService {
                 .unwrap_or_else(|| extract_tag_list(&item));
             let (repo_url, skill_path) =
                 normalize_skillsmp_github_location(parsed.repo_url.as_deref());
+            let external_url = build_marketplace_external_url(
+                parsed.repo_url.as_deref(),
+                repo_url.as_deref(),
+                skill_path.as_deref(),
+            );
 
             skills.push(MarketplaceSkill {
                 id: make_marketplace_skill_id(&source.id, &raw_id),
@@ -316,6 +328,7 @@ impl MarketplaceService {
                 source_name: source.name.clone(),
                 repo_url,
                 skill_path,
+                external_url,
                 tags,
                 install_status: InstallStatus::NotInstalled,
             });
@@ -1063,6 +1076,34 @@ fn with_github_auth(
     }
 }
 
+fn build_marketplace_external_url(
+    raw_url: Option<&str>,
+    repo_url: Option<&str>,
+    skill_path: Option<&str>,
+) -> Option<String> {
+    if let Some(raw) = raw_url.map(str::trim).filter(|url| !url.is_empty()) {
+        return Some(raw.to_string());
+    }
+
+    let repo = repo_url.map(str::trim).filter(|url| !url.is_empty())?;
+
+    if !repo.contains("github.com") {
+        return Some(repo.to_string());
+    }
+
+    let (owner, repository) = match parse_github_repo_url(repo) {
+        Ok(tuple) => tuple,
+        Err(_) => return Some(repo.to_string()),
+    };
+    let base = format!("https://github.com/{}/{}", owner, repository);
+
+    if let Some(path) = skill_path.map(str::trim).filter(|path| !path.is_empty()) {
+        return Some(format!("{}/tree/HEAD/{}", base, path.trim_matches('/')));
+    }
+
+    Some(base)
+}
+
 fn normalize_skillsmp_github_location(raw_url: Option<&str>) -> (Option<String>, Option<String>) {
     let Some(raw) = raw_url.map(|url| url.trim()).filter(|url| !url.is_empty()) else {
         return (None, None);
@@ -1277,7 +1318,7 @@ fn is_same_marketplace_skill(dir: &PathBuf, source_id: &str) -> Result<bool, Str
 #[cfg(test)]
 mod tests {
     use super::{
-        build_skill_tree_from_tree_entries, collect_file_nodes,
+        build_marketplace_external_url, build_skill_tree_from_tree_entries, collect_file_nodes,
         extract_root_skill_dirs_from_tree_entries, extract_skillsmp_has_more,
         extract_skillsmp_items, get_cached_github_tree, github_tree_cache, github_tree_cache_key,
         normalize_github_token, normalize_skillsmp_github_location, set_cached_github_tree,
@@ -1325,6 +1366,45 @@ mod tests {
         let (repo_url, skill_path) = normalize_skillsmp_github_location(Some(url));
         assert_eq!(repo_url, Some("https://github.com/foo/bar".to_string()));
         assert_eq!(skill_path, Some(".claude/skills/my-skill".to_string()));
+    }
+
+    #[test]
+    fn build_marketplace_external_url_uses_skill_path_for_github_repo() {
+        let link = build_marketplace_external_url(
+            None,
+            Some("https://github.com/foo/bar"),
+            Some(".claude/skills/my-skill"),
+        );
+        assert_eq!(
+            link,
+            Some("https://github.com/foo/bar/tree/HEAD/.claude/skills/my-skill".to_string())
+        );
+    }
+
+    #[test]
+    fn build_marketplace_external_url_prefers_raw_link_when_available() {
+        let link = build_marketplace_external_url(
+            Some("https://github.com/foo/bar/tree/main/.claude/skills/my-skill"),
+            Some("https://github.com/foo/bar"),
+            Some(".claude/skills/my-skill"),
+        );
+        assert_eq!(
+            link,
+            Some("https://github.com/foo/bar/tree/main/.claude/skills/my-skill".to_string())
+        );
+    }
+
+    #[test]
+    fn build_marketplace_external_url_returns_repo_for_non_github() {
+        let link = build_marketplace_external_url(
+            None,
+            Some("https://skillsmp.com/skills/my-skill"),
+            Some(".claude/skills/my-skill"),
+        );
+        assert_eq!(
+            link,
+            Some("https://skillsmp.com/skills/my-skill".to_string())
+        );
     }
 
     #[test]
