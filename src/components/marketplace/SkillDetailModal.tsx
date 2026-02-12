@@ -419,7 +419,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
                   />
                 )}
               </div>
-              <div style={{ backgroundColor: "var(--border)" }} />
+              <div style={{ width: "1px", backgroundColor: "var(--border)" }} />
               <div style={{ minWidth: 0, minHeight: 0, padding: "18px 20px", overflow: "hidden" }}>
                 {filesLoading && !treeForDisplay ? (
                   <div style={{ color: "var(--muted-foreground)" }}>{t("marketplace.loadingFiles")}</div>

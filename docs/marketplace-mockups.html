@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>技能市场 - 详情展示方案对比</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+
+  :root {
+    --background: #1a1a2e;
+    --foreground: #eaeaea;
+    --sidebar: #16213e;
+    --sidebar-border: #1e2d4a;
+    --sidebar-accent: #1e2d4a;
+    --border: #2a2a4a;
+    --muted: #2a2a4a;
+    --muted-foreground: #8888a8;
+    --primary: #6366f1;
+    --primary-foreground: #fff;
+    --card: #1e1e38;
+    --card-hover: #24243f;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --radius: 10px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+    background: #0e0e1a;
+    color: var(--foreground);
+    line-height: 1.6;
+  }
+
+  /* === Section Wrapper === */
+  .mockup-section {
+    max-width: 1200px;
+    margin: 40px auto;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--background);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  .section-label {
+    padding: 16px 24px;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.02em;
+  }
+  .section-label span {
+    opacity: 0.8;
+    font-weight: 400;
+    font-size: 14px;
+    margin-left: 12px;
+  }
+
+  /* === App Shell === */
+  .app-shell {
+    display: flex;
+    height: 620px;
+    overflow: hidden;
+  }
+
+  /* === Sidebar === */
+  .sidebar {
+    width: 220px;
+    min-width: 220px;
+    background: var(--sidebar);
+    border-right: 1px solid var(--sidebar-border);
+    display: flex;
+    flex-direction: column;
+    padding-top: 48px;
+  }
+  .sidebar-brand {
+    padding: 0 20px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted-foreground);
+    letter-spacing: 0.01em;
+  }
+  .sidebar-nav {
+    padding: 8px;
+    list-style: none;
+  }
+  .sidebar-nav li {
+    margin-bottom: 2px;
+  }
+  .sidebar-nav a {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 400;
+    text-decoration: none;
+    color: var(--muted-foreground);
+    transition: all 0.15s;
+  }
+  .sidebar-nav a:hover {
+    background: rgba(255,255,255,0.04);
+  }
+  .sidebar-nav a.active {
+    background: var(--sidebar-accent);
+    color: var(--foreground);
+    font-weight: 500;
+  }
+  .sidebar-nav svg {
+    opacity: 0.7;
+    flex-shrink: 0;
+  }
+  .sidebar-bottom {
+    margin-top: auto;
+    padding: 12px;
+    border-top: 1px solid var(--sidebar-border);
+  }
+  .sidebar-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--muted-foreground);
+  }
+  .sidebar-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* === Main Content === */
+  .main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* === Page Header === */
+  .page-header {
+    padding: 24px 32px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .page-title {
+    font-size: 20px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .search-box {
+    flex: 1;
+    max-width: 320px;
+    position: relative;
+  }
+  .search-box input {
+    width: 100%;
+    padding: 8px 12px 8px 36px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--muted);
+    color: var(--foreground);
+    font-size: 13px;
+    outline: none;
+    font-family: inherit;
+  }
+  .search-box input::placeholder { color: var(--muted-foreground); }
+  .search-box input:focus { border-color: var(--primary); }
+  .search-box svg {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted-foreground);
+  }
+  .btn-refresh {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--foreground);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .btn-refresh:hover { background: var(--muted); }
+
+  /* === Tag Filter === */
+  .tag-filter {
+    padding: 12px 32px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .tag-chip {
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted-foreground);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .tag-chip:hover { border-color: var(--primary); color: var(--primary); }
+  .tag-chip.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+  }
+
+  /* === Card Grid === */
+  .card-grid {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 32px 32px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+    align-content: start;
+  }
+
+  /* === Skill Card === */
+  .skill-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+  }
+  .skill-card:hover {
+    background: var(--card-hover);
+    border-color: #3a3a5a;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .skill-card.installed {
+    border-color: rgba(34, 197, 94, 0.3);
+  }
+
+  .card-top {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 12px;
+  }
+  .card-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+  }
+  .card-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .card-name {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card-desc {
+    font-size: 13px;
+    color: var(--muted-foreground);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.5;
+  }
+
+  .card-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .card-author {
+    font-size: 12px;
+    color: var(--muted-foreground);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .card-author svg { opacity: 0.6; }
+  .card-tags {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    flex: 1;
+  }
+  .card-tag {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(99, 102, 241, 0.15);
+    color: #a5a8fc;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .card-actions {
+    margin-top: 16px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  /* === Buttons === */
+  .btn-install {
+    padding: 6px 20px;
+    border-radius: 6px;
+    border: none;
+    background: var(--primary);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .btn-install:hover { background: #5558e6; }
+
+  .btn-installed {
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--success);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: default;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .btn-update {
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warning);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .btn-update:hover { background: rgba(245, 158, 11, 0.25); }
+
+  /* === Modal Overlay (方案一) === */
+  .modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    backdrop-filter: blur(4px);
+  }
+  .modal-dialog {
+    width: 560px;
+    max-height: 80%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .modal-header {
+    padding: 24px 28px 20px;
+    display: flex;
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-header .card-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    font-size: 26px;
+  }
+  .modal-header-info {
+    flex: 1;
+  }
+  .modal-header-info .card-name {
+    font-size: 18px;
+    margin-bottom: 6px;
+  }
+  .modal-close {
+    position: absolute;
+    right: 16px;
+    top: 16px;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+  .modal-close:hover { background: var(--muted); }
+  .modal-body {
+    padding: 24px 28px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .modal-body h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--foreground);
+  }
+  .modal-readme {
+    font-size: 13px;
+    color: var(--muted-foreground);
+    line-height: 1.7;
+    background: rgba(0,0,0,0.2);
+    padding: 16px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+  }
+  .modal-readme code {
+    background: rgba(99,102,241,0.15);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #a5a8fc;
+    font-size: 12px;
+  }
+  .modal-footer {
+    padding: 16px 28px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal-footer .card-tags { flex: 1; }
+  .modal-footer .btn-install {
+    padding: 10px 32px;
+    font-size: 14px;
+  }
+
+  /* === Expanded Card (方案二) === */
+  .skill-card.expanded {
+    grid-column: 1 / -1;
+    background: var(--card-hover);
+    border-color: var(--primary);
+    cursor: default;
+    transform: none;
+    box-shadow: 0 4px 24px rgba(99,102,241,0.15);
+  }
+  .expanded-content {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .expanded-content .modal-readme {
+    margin-bottom: 16px;
+  }
+  .expanded-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* === Source Badge === */
+  .source-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    color: var(--muted-foreground);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* === Scrollbar === */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a3a5a; }
+
+  /* Relative positioning for modal */
+  .app-shell.has-modal { position: relative; }
+</style>
+</head>
+<body>
+
+<!-- ===================== 方案一: 弹窗 Modal ===================== -->
+<div class="mockup-section">
+  <div class="section-label">方案一: 弹窗 Modal <span>点击卡片后弹出详情弹窗，背景变暗</span></div>
+  <div class="app-shell has-modal">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-brand">Skills Manager</div>
+      <ul class="sidebar-nav">
+        <li><a href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3L13.5 8.5L19 10L13.5 11.5L12 17L10.5 11.5L5 10L10.5 8.5L12 3Z"/></svg>
+          Skills
+        </a></li>
+        <li><a href="#" class="active">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          技能市场
+        </a></li>
+        <li><a href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          工具
+        </a></li>
+        <li><a href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          设置
+        </a></li>
+      </ul>
+      <div class="sidebar-bottom">
+        <div class="sidebar-user">
+          <div class="sidebar-avatar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <span>Personal</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main -->
+    <div class="main-content">
+      <div class="page-header">
+        <div class="page-title">技能市场</div>
+        <div class="search-box">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input type="text" placeholder="搜索市场中的 Skills...">
+        </div>
+        <button class="btn-refresh">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          刷新
+        </button>
+      </div>
+      <div class="tag-filter">
+        <button class="tag-chip active">全部</button>
+        <button class="tag-chip">开发流程</button>
+        <button class="tag-chip">代码质量</button>
+        <button class="tag-chip">API 设计</button>
+        <button class="tag-chip">测试</button>
+        <button class="tag-chip">安全</button>
+        <button class="tag-chip">文档</button>
+      </div>
+      <div class="card-grid">
+        <!-- Card 1 -->
+        <div class="skill-card" style="opacity: 0.4;">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #f093fb, #f5576c);">🧪</div>
+            <div class="card-info">
+              <div class="card-name">TDD Workflow</div>
+              <div class="card-desc">测试驱动开发工作流，强制先写测试再实现，确保 80%+ 覆盖率</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> daymade</span>
+            <div class="card-tags">
+              <span class="card-tag">测试</span>
+              <span class="card-tag">开发流程</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-install">安装</button>
+          </div>
+        </div>
+        <!-- Card 2 (the one being viewed in modal) -->
+        <div class="skill-card" style="opacity: 0.4; border-color: var(--primary);">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #4facfe, #00f2fe);">🔍</div>
+            <div class="card-info">
+              <div class="card-name">Code Review Expert</div>
+              <div class="card-desc">专业代码审查，覆盖安全、性能、可维护性等多个维度</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> anthropic</span>
+            <div class="card-tags">
+              <span class="card-tag">代码质量</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-install">安装</button>
+          </div>
+        </div>
+        <!-- Card 3 -->
+        <div class="skill-card installed" style="opacity: 0.4;">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #43e97b, #38f9d7);">📐</div>
+            <div class="card-info">
+              <div class="card-name">API Design Patterns</div>
+              <div class="card-desc">RESTful API 设计模式，包含请求/响应格式、错误处理、分页等最佳实践</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> composio</span>
+            <div class="card-tags">
+              <span class="card-tag">API 设计</span>
+              <span class="card-tag">后端</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <span class="btn-installed">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              已安装
+            </span>
+          </div>
+        </div>
+        <!-- Card 4 -->
+        <div class="skill-card" style="opacity: 0.4;">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #fa709a, #fee140);">🛡️</div>
+            <div class="card-info">
+              <div class="card-name">Security Reviewer</div>
+              <div class="card-desc">安全漏洞检测与修复建议，覆盖 OWASP Top 10</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> daymade</span>
+            <div class="card-tags">
+              <span class="card-tag">安全</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-install">安装</button>
+          </div>
+        </div>
+        <!-- Card 5 -->
+        <div class="skill-card" style="opacity: 0.4;">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #a18cd1, #fbc2eb);">📝</div>
+            <div class="card-info">
+              <div class="card-name">Django Patterns</div>
+              <div class="card-desc">Django 架构模式、DRF API 设计、ORM 最佳实践</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> terrylica</span>
+            <div class="card-tags">
+              <span class="card-tag">Python</span>
+              <span class="card-tag">Django</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-update">有更新</button>
+          </div>
+        </div>
+        <!-- Card 6 -->
+        <div class="skill-card" style="opacity: 0.4;">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #667eea, #764ba2);">⚡</div>
+            <div class="card-info">
+              <div class="card-name">Performance Optimizer</div>
+              <div class="card-desc">性能优化专家，数据库查询、前端渲染、API 响应时间优化</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> skillsmp</span>
+            <div class="card-tags">
+              <span class="card-tag">性能</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-install">安装</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div class="modal-overlay">
+      <div class="modal-dialog" style="position: relative;">
+        <div class="modal-header">
+          <div class="card-icon" style="background: linear-gradient(135deg, #4facfe, #00f2fe); width:56px; height:56px; border-radius:14px; font-size:26px;">🔍</div>
+          <div class="modal-header-info">
+            <div class="card-name" style="font-size:18px; margin-bottom:6px;">Code Review Expert</div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> anthropic</span>
+              <span class="source-badge">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+                Anthropic Official
+              </span>
+            </div>
+          </div>
+        </div>
+        <button class="modal-close" style="position:absolute; right:16px; top:16px;">✕</button>
+        <div class="modal-body">
+          <h3>描述</h3>
+          <p style="font-size:13px; color:var(--muted-foreground); margin-bottom:20px; line-height:1.7;">
+            专业级代码审查技能，从安全性、性能、可维护性、代码风格等多个维度全面审查代码。支持自动识别常见反模式，给出修改建议和最佳实践参考。
+          </p>
+          <h3>README</h3>
+          <div class="modal-readme">
+            <p><strong>Code Review Expert</strong></p>
+            <p style="margin-top:8px;">这个 Skill 会让 AI 助手以专业代码审查员的角色审查你的代码变更。</p>
+            <p style="margin-top:12px;"><strong>功能特性：</strong></p>
+            <ul style="margin-top:8px; padding-left:20px;">
+              <li>安全漏洞检测（SQL 注入、XSS、CSRF 等）</li>
+              <li>性能瓶颈识别</li>
+              <li>代码风格一致性检查</li>
+              <li>复杂度分析与重构建议</li>
+            </ul>
+            <p style="margin-top:12px;"><strong>使用方式：</strong></p>
+            <p style="margin-top:8px;">安装后，使用 <code>/review</code> 命令触发代码审查。</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <div class="card-tags">
+            <span class="card-tag">代码质量</span>
+            <span class="card-tag">安全</span>
+            <span class="card-tag">最佳实践</span>
+          </div>
+          <button class="btn-install" style="padding:10px 32px; font-size:14px;">安装</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 方案二: 展开卡片 ===================== -->
+<div class="mockup-section">
+  <div class="section-label">方案二: 展开卡片 <span>点击卡片后原位展开显示详情，类似手风琴效果</span></div>
+  <div class="app-shell">
+    <!-- Sidebar (same) -->
+    <div class="sidebar">
+      <div class="sidebar-brand">Skills Manager</div>
+      <ul class="sidebar-nav">
+        <li><a href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3L13.5 8.5L19 10L13.5 11.5L12 17L10.5 11.5L5 10L10.5 8.5L12 3Z"/></svg>
+          Skills
+        </a></li>
+        <li><a href="#" class="active">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          技能市场
+        </a></li>
+        <li><a href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          工具
+        </a></li>
+        <li><a href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          设置
+        </a></li>
+      </ul>
+      <div class="sidebar-bottom">
+        <div class="sidebar-user">
+          <div class="sidebar-avatar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <span>Personal</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <div class="page-header">
+        <div class="page-title">技能市场</div>
+        <div class="search-box">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input type="text" placeholder="搜索市场中的 Skills...">
+        </div>
+        <button class="btn-refresh">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          刷新
+        </button>
+      </div>
+      <div class="tag-filter">
+        <button class="tag-chip active">全部</button>
+        <button class="tag-chip">开发流程</button>
+        <button class="tag-chip">代码质量</button>
+        <button class="tag-chip">API 设计</button>
+        <button class="tag-chip">测试</button>
+        <button class="tag-chip">安全</button>
+        <button class="tag-chip">文档</button>
+      </div>
+      <div class="card-grid">
+        <!-- Card 1 - normal -->
+        <div class="skill-card">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #f093fb, #f5576c);">🧪</div>
+            <div class="card-info">
+              <div class="card-name">TDD Workflow</div>
+              <div class="card-desc">测试驱动开发工作流，强制先写测试再实现，确保 80%+ 覆盖率</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> daymade</span>
+            <div class="card-tags">
+              <span class="card-tag">测试</span>
+              <span class="card-tag">开发流程</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-install">安装</button>
+          </div>
+        </div>
+        <!-- Card 2 - EXPANDED -->
+        <div class="skill-card expanded">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #4facfe, #00f2fe);">🔍</div>
+            <div class="card-info">
+              <div class="card-name">Code Review Expert</div>
+              <div class="card-desc">专业代码审查，覆盖安全、性能、可维护性等多个维度</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> anthropic</span>
+            <span class="source-badge">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+              Anthropic Official
+            </span>
+            <div class="card-tags">
+              <span class="card-tag">代码质量</span>
+              <span class="card-tag">安全</span>
+              <span class="card-tag">最佳实践</span>
+            </div>
+          </div>
+          <!-- Expanded Content -->
+          <div class="expanded-content">
+            <div class="modal-readme">
+              <p><strong>Code Review Expert</strong></p>
+              <p style="margin-top:8px;">这个 Skill 会让 AI 助手以专业代码审查员的角色审查你的代码变更。</p>
+              <p style="margin-top:12px;"><strong>功能特性：</strong></p>
+              <ul style="margin-top:8px; padding-left:20px;">
+                <li>安全漏洞检测（SQL 注入、XSS、CSRF 等）</li>
+                <li>性能瓶颈识别</li>
+                <li>代码风格一致性检查</li>
+                <li>复杂度分析与重构建议</li>
+              </ul>
+              <p style="margin-top:12px;">安装后，使用 <code>/review</code> 命令触发。</p>
+            </div>
+            <div class="expanded-actions">
+              <span style="font-size:12px; color:var(--muted-foreground);">点击卡片外区域收起</span>
+              <button class="btn-install" style="padding:8px 28px;">安装</button>
+            </div>
+          </div>
+        </div>
+        <!-- Card 3 -->
+        <div class="skill-card installed">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #43e97b, #38f9d7);">📐</div>
+            <div class="card-info">
+              <div class="card-name">API Design Patterns</div>
+              <div class="card-desc">RESTful API 设计模式，包含请求/响应格式、错误处理、分页等最佳实践</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> composio</span>
+            <div class="card-tags">
+              <span class="card-tag">API 设计</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <span class="btn-installed">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              已安装
+            </span>
+          </div>
+        </div>
+        <!-- Card 4 -->
+        <div class="skill-card">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #fa709a, #fee140);">🛡️</div>
+            <div class="card-info">
+              <div class="card-name">Security Reviewer</div>
+              <div class="card-desc">安全漏洞检测与修复建议，覆盖 OWASP Top 10</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> daymade</span>
+            <div class="card-tags">
+              <span class="card-tag">安全</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-install">安装</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 方案三: 简洁卡片 ===================== -->
+<div class="mockup-section">
+  <div class="section-label">方案三: 简洁卡片 <span>无详情展开，卡片上直接显示所有关键信息和安装按钮</span></div>
+  <div class="app-shell">
+    <!-- Sidebar (same) -->
+    <div class="sidebar">
+      <div class="sidebar-brand">Skills Manager</div>
+      <ul class="sidebar-nav">
+        <li><a href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3L13.5 8.5L19 10L13.5 11.5L12 17L10.5 11.5L5 10L10.5 8.5L12 3Z"/></svg>
+          Skills
+        </a></li>
+        <li><a href="#" class="active">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          技能市场
+        </a></li>
+        <li><a href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          工具
+        </a></li>
+        <li><a href="#">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          设置
+        </a></li>
+      </ul>
+      <div class="sidebar-bottom">
+        <div class="sidebar-user">
+          <div class="sidebar-avatar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <span>Personal</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <div class="page-header">
+        <div class="page-title">技能市场</div>
+        <div class="search-box">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input type="text" placeholder="搜索市场中的 Skills...">
+        </div>
+        <button class="btn-refresh">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          刷新
+        </button>
+      </div>
+      <div class="tag-filter">
+        <button class="tag-chip active">全部</button>
+        <button class="tag-chip">开发流程</button>
+        <button class="tag-chip">代码质量</button>
+        <button class="tag-chip">API 设计</button>
+        <button class="tag-chip">测试</button>
+        <button class="tag-chip">安全</button>
+        <button class="tag-chip">文档</button>
+      </div>
+      <div class="card-grid">
+        <!-- Card 1 -->
+        <div class="skill-card">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #f093fb, #f5576c);">🧪</div>
+            <div class="card-info">
+              <div class="card-name">TDD Workflow</div>
+              <div class="card-desc">测试驱动开发工作流，强制先写测试再实现，确保 80%+ 覆盖率</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> daymade</span>
+            <div class="card-tags">
+              <span class="card-tag">测试</span>
+              <span class="card-tag">开发流程</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-install">安装</button>
+          </div>
+        </div>
+        <!-- Card 2 -->
+        <div class="skill-card">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #4facfe, #00f2fe);">🔍</div>
+            <div class="card-info">
+              <div class="card-name">Code Review Expert</div>
+              <div class="card-desc">专业代码审查，覆盖安全、性能、可维护性等多个维度</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> anthropic</span>
+            <div class="card-tags">
+              <span class="card-tag">代码质量</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-install">安装</button>
+          </div>
+        </div>
+        <!-- Card 3 - installed -->
+        <div class="skill-card installed">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #43e97b, #38f9d7);">📐</div>
+            <div class="card-info">
+              <div class="card-name">API Design Patterns</div>
+              <div class="card-desc">RESTful API 设计模式，包含请求/响应格式、错误处理、分页等最佳实践</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> composio</span>
+            <div class="card-tags">
+              <span class="card-tag">API 设计</span>
+              <span class="card-tag">后端</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <span class="btn-installed">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              已安装
+            </span>
+          </div>
+        </div>
+        <!-- Card 4 -->
+        <div class="skill-card">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #fa709a, #fee140);">🛡️</div>
+            <div class="card-info">
+              <div class="card-name">Security Reviewer</div>
+              <div class="card-desc">安全漏洞检测与修复建议，覆盖 OWASP Top 10</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> daymade</span>
+            <div class="card-tags">
+              <span class="card-tag">安全</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-install">安装</button>
+          </div>
+        </div>
+        <!-- Card 5 - has update -->
+        <div class="skill-card">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #a18cd1, #fbc2eb);">📝</div>
+            <div class="card-info">
+              <div class="card-name">Django Patterns</div>
+              <div class="card-desc">Django 架构模式、DRF API 设计、ORM 最佳实践</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> terrylica</span>
+            <div class="card-tags">
+              <span class="card-tag">Python</span>
+              <span class="card-tag">Django</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-update">有更新</button>
+          </div>
+        </div>
+        <!-- Card 6 -->
+        <div class="skill-card">
+          <div class="card-top">
+            <div class="card-icon" style="background: linear-gradient(135deg, #667eea, #764ba2);">⚡</div>
+            <div class="card-info">
+              <div class="card-name">Performance Optimizer</div>
+              <div class="card-desc">性能优化专家，数据库查询、前端渲染、API 响应时间优化</div>
+            </div>
+          </div>
+          <div class="card-meta">
+            <span class="card-author"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> skillsmp</span>
+            <div class="card-tags">
+              <span class="card-tag">性能</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-install">安装</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Summary -->
+<div style="max-width: 1200px; margin: 40px auto 60px; padding: 0 20px;">
+  <div style="background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 28px 32px;">
+    <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 20px;">方案对比</h2>
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--border);">
+          <th style="text-align: left; padding: 12px 16px; color: var(--muted-foreground); font-weight: 500;">维度</th>
+          <th style="text-align: center; padding: 12px 16px; color: var(--primary); font-weight: 600;">方案一: 弹窗</th>
+          <th style="text-align: center; padding: 12px 16px; color: var(--primary); font-weight: 600;">方案二: 展开</th>
+          <th style="text-align: center; padding: 12px 16px; color: var(--primary); font-weight: 600;">方案三: 简洁</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom: 1px solid rgba(42,42,74,0.5);">
+          <td style="padding: 12px 16px; color: var(--muted-foreground);">信息量</td>
+          <td style="text-align: center; padding: 12px 16px;">丰富 (README 全文)</td>
+          <td style="text-align: center; padding: 12px 16px;">较丰富</td>
+          <td style="text-align: center; padding: 12px 16px;">精简</td>
+        </tr>
+        <tr style="border-bottom: 1px solid rgba(42,42,74,0.5);">
+          <td style="padding: 12px 16px; color: var(--muted-foreground);">交互复杂度</td>
+          <td style="text-align: center; padding: 12px 16px;">中等</td>
+          <td style="text-align: center; padding: 12px 16px;">较高</td>
+          <td style="text-align: center; padding: 12px 16px;">最低</td>
+        </tr>
+        <tr style="border-bottom: 1px solid rgba(42,42,74,0.5);">
+          <td style="padding: 12px 16px; color: var(--muted-foreground);">开发量</td>
+          <td style="text-align: center; padding: 12px 16px;">中等</td>
+          <td style="text-align: center; padding: 12px 16px;">较高</td>
+          <td style="text-align: center; padding: 12px 16px;">最低</td>
+        </tr>
+        <tr style="border-bottom: 1px solid rgba(42,42,74,0.5);">
+          <td style="padding: 12px 16px; color: var(--muted-foreground);">用户体验</td>
+          <td style="text-align: center; padding: 12px 16px;">清晰聚焦</td>
+          <td style="text-align: center; padding: 12px 16px;">上下文保持</td>
+          <td style="text-align: center; padding: 12px 16px;">快速决策</td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 16px; color: var(--muted-foreground);">适合场景</td>
+          <td style="text-align: center; padding: 12px 16px;">需要仔细阅读</td>
+          <td style="text-align: center; padding: 12px 16px;">快速对比多个</td>
+          <td style="text-align: center; padding: 12px 16px;">已知想装什么</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</body>
+</html>

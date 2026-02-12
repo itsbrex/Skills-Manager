@@ -11,7 +11,6 @@ export function FileTree({ root, selectedPath, onSelectFile }: FileTreeProps) {
   return (
     <div style={{
       width: 200,
-      borderRight: "1px solid var(--border)",
       overflow: "auto",
       flexShrink: 0,
     }}>
