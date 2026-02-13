@@ -185,7 +185,7 @@ export const zh = {
     marketplaceSourceTypeGithub: "GitHub 仓库",
     githubToken: "GitHub Token",
     githubTokenDesc:
-      "可选：用于提升 GitHub API 限额，缓解市场刷新与详情预览失败",
+      "可选：提高 GitHub API 限额，减少刷新与预览失败",
     githubTokenPlaceholder: "粘贴你的 GitHub Personal Access Token",
     marketplaceKeySaved: "已配置",
     marketplaceKeyMissing: "未配置",

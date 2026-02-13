@@ -182,7 +182,7 @@ export const en = {
     marketplaceEmpty: "No marketplace sources configured",
     marketplaceSourceTypeGithub: "GitHub Repository",
     githubToken: "GitHub Token",
-    githubTokenDesc: "Optional: increases GitHub API rate limits for marketplace refresh and details",
+    githubTokenDesc: "Optional: higher GitHub API limit, fewer refresh/preview failures",
     githubTokenPlaceholder: "Paste your GitHub personal access token",
     marketplaceKeySaved: "Saved",
     marketplaceKeyMissing: "Not set",
