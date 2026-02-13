@@ -110,23 +110,31 @@ export function Tools() {
     }
   }, []);
 
-  const toggleToolEnabled = useCallback(async (toolId: string, enabled: boolean) => {
+  const toggleToolEnabled = useCallback(async (tool: Tool, enabled: boolean) => {
+    // Undetected tools cannot be enabled, but still allow disabling if already enabled.
+    if (enabled && !tool.detected) {
+      setError(t("skills.toolNotDetected"));
+      return;
+    }
+
+    const previousEnabled = tool.config.enabled;
+
     // Optimistic update
     setTools(prev => prev.map(t =>
-      t.id === toolId ? { ...t, config: { ...t.config, enabled } } : t
+      t.id === tool.id ? { ...t, config: { ...t.config, enabled } } : t
     ));
     setError(null);
 
     try {
-      await invoke("set_tool_enabled", { toolId, enabled });
+      await invoke("set_tool_enabled", { toolId: tool.id, enabled });
     } catch (err) {
       // Rollback on error
       setTools(prev => prev.map(t =>
-        t.id === toolId ? { ...t, config: { ...t.config, enabled: !enabled } } : t
+        t.id === tool.id ? { ...t, config: { ...t.config, enabled: previousEnabled } } : t
       ));
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, []);
+  }, [t]);
 
   const handleEditConfigPath = useCallback(async (toolId: string) => {
     const selected = await open({
@@ -551,10 +559,12 @@ export function Tools() {
           <div
             onClick={(e) => e.stopPropagation()}
             style={{ marginTop: '2px' }}
+            title={!tool.detected && !tool.config.enabled ? t("skills.toolNotDetected") : undefined}
           >
             <Toggle
               checked={tool.config.enabled}
-              onChange={(enabled) => toggleToolEnabled(tool.id, enabled)}
+              disabled={!tool.detected && !tool.config.enabled}
+              onChange={(enabled) => toggleToolEnabled(tool, enabled)}
             />
           </div>
         </div>
