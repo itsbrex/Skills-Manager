@@ -30,6 +30,8 @@ pub struct MarketplaceSkill {
     pub repo_url: Option<String>,
     pub skill_path: Option<String>,
     pub external_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote_revision: Option<String>,
     pub tags: Vec<String>,
     pub install_status: InstallStatus,
 }
@@ -45,6 +47,7 @@ pub struct MarketplaceSkillsResponse {
 pub enum InstallStatus {
     NotInstalled,
     Installed,
+    UpdateAvailable,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,6 +56,8 @@ pub struct SkillFileNode {
     pub path: String,
     pub is_dir: bool,
     pub download_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sha: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<SkillFileNode>>,
 }
@@ -63,6 +68,20 @@ pub struct InstallResult {
     pub skill_id: String,
     pub message: Option<String>,
     pub installed_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketplaceSyncResult {
+    pub checked: usize,
+    pub updated: usize,
+    pub failed: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketplaceUpdateCheckResult {
+    pub performed: bool,
+    pub checked: usize,
+    pub update_available: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

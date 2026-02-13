@@ -27,6 +27,7 @@ struct GitHubTreeEntry {
     path: String,
     #[serde(rename = "type")]
     kind: String,
+    sha: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -352,9 +353,7 @@ impl MarketplaceService {
         }
 
         for skill in skills.iter_mut() {
-            if Self::check_install_status(&skill.id, &skill.source_id, skills_dir) {
-                skill.install_status = InstallStatus::Installed;
-            }
+            skill.install_status = Self::check_install_status(skill, skills_dir);
         }
 
         if skills.is_empty() && !errors.is_empty() {
@@ -374,6 +373,7 @@ impl MarketplaceService {
         let client = github_client()?;
         let hinted_skill_dirs =
             fetch_github_root_skill_dirs_from_tree(&client, &owner, &repo, github_token).await;
+        let cached_tree = get_cached_github_tree(&owner, &repo);
         let contents = match fetch_github_contents(&client, &owner, &repo, "", github_token).await {
             Ok(contents) => contents,
             Err(err) => {
@@ -403,6 +403,9 @@ impl MarketplaceService {
             let skill_path = item.path.clone();
             let repo_url = Some(source.url.clone());
             let skill_path_opt = Some(skill_path.clone());
+            let remote_revision = cached_tree
+                .as_ref()
+                .and_then(|tree| compute_skill_revision_from_tree_entries(&tree.tree, &skill_path));
             skills.push(MarketplaceSkill {
                 id: make_marketplace_skill_id(&source.id, &skill_path),
                 name: item.name.clone(),
@@ -417,6 +420,7 @@ impl MarketplaceService {
                     repo_url.as_deref(),
                     skill_path_opt.as_deref(),
                 ),
+                remote_revision,
                 tags: Vec::new(),
                 install_status: InstallStatus::NotInstalled,
             });
@@ -552,6 +556,7 @@ impl MarketplaceService {
         let tree = Self::fetch_skill_files(repo_url, &skill_path, github_token).await?;
         let mut files = Vec::new();
         collect_file_nodes(&tree, &mut files);
+        let remote_revision = compute_skill_revision_from_file_nodes(&files);
 
         let client = Client::new();
         for file in files {
@@ -582,7 +587,7 @@ impl MarketplaceService {
             fs::write(&target_path, &bytes).map_err(|e| format!("写入文件失败: {}", e))?;
         }
 
-        write_marketplace_meta(&install_dir, skill)?;
+        write_marketplace_meta(&install_dir, skill, remote_revision.as_deref())?;
 
         Ok(InstallResult {
             success: true,
@@ -592,12 +597,39 @@ impl MarketplaceService {
         })
     }
 
-    pub fn check_install_status(skill_id: &str, source_id: &str, skills_dir: &Path) -> bool {
-        let dir = skills_dir.join(skill_id);
+    pub fn check_install_status(skill: &MarketplaceSkill, skills_dir: &Path) -> InstallStatus {
+        let dir = skills_dir.join(&skill.id);
         if !dir.exists() {
-            return false;
+            return InstallStatus::NotInstalled;
         }
-        is_same_marketplace_skill(&dir, source_id).unwrap_or(false)
+
+        let meta = match read_marketplace_meta(&dir) {
+            Ok(meta) => meta,
+            Err(_) => return InstallStatus::NotInstalled,
+        };
+
+        let is_marketplace_skill = meta.source.as_deref() == Some("marketplace")
+            && meta.marketplace_source_id.as_deref() == Some(skill.source_id.as_str());
+        if !is_marketplace_skill {
+            return InstallStatus::NotInstalled;
+        }
+
+        let remote_revision = skill
+            .remote_revision
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        let local_revision = meta
+            .remote_revision
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+
+        match (remote_revision, local_revision) {
+            (Some(remote), Some(local)) if remote != local => InstallStatus::UpdateAvailable,
+            (Some(_), None) => InstallStatus::UpdateAvailable,
+            _ => InstallStatus::Installed,
+        }
     }
 }
 
@@ -771,6 +803,13 @@ async fn fetch_github_root_skill_dirs_from_tree(
     repo: &str,
     github_token: Option<&str>,
 ) -> Option<HashSet<String>> {
+    if let Some(cached) = get_cached_github_tree(owner, repo) {
+        let dirs = extract_root_skill_dirs_from_tree_entries(&cached.tree);
+        if !dirs.is_empty() {
+            return Some(dirs);
+        }
+    }
+
     let branches = ["main", "master"];
 
     for branch in branches {
@@ -794,6 +833,7 @@ async fn fetch_github_root_skill_dirs_from_tree(
             Ok(value) => value,
             Err(_) => continue,
         };
+        set_cached_github_tree(owner, repo, branch, &payload.tree);
         let dirs = extract_root_skill_dirs_from_tree_entries(&payload.tree);
         if !dirs.is_empty() {
             return Some(dirs);
@@ -879,25 +919,25 @@ fn build_skill_tree_from_tree_entries(
         format!("{}/", normalized_skill_path)
     };
 
-    let mut files: Vec<(String, String)> = entries
+    let mut files: Vec<(String, String, Option<String>)> = entries
         .iter()
         .filter(|entry| entry.kind == "blob")
         .filter_map(|entry| {
             let normalized_path = entry.path.trim_matches('/').to_string();
             if normalized_skill_path.is_empty() {
-                return Some(normalized_path);
+                return Some((normalized_path, entry.sha.clone()));
             }
             if normalized_path.starts_with(&prefix) {
-                return Some(normalized_path);
+                return Some((normalized_path, entry.sha.clone()));
             }
             None
         })
-        .map(|path| {
+        .map(|(path, sha)| {
             let url = format!(
                 "https://raw.githubusercontent.com/{}/{}/{}/{}",
                 owner, repo, branch, path
             );
-            (path, url)
+            (path, url, sha)
         })
         .collect();
 
@@ -917,11 +957,18 @@ fn build_skill_tree_from_tree_entries(
         path: normalized_skill_path.to_string(),
         is_dir: true,
         download_url: None,
+        sha: None,
         children: Some(Vec::new()),
     };
 
-    for (full_path, download_url) in files {
-        insert_file_into_skill_tree(&mut root, normalized_skill_path, &full_path, download_url);
+    for (full_path, download_url, sha) in files {
+        insert_file_into_skill_tree(
+            &mut root,
+            normalized_skill_path,
+            &full_path,
+            download_url,
+            sha,
+        );
     }
 
     sort_skill_tree_children(&mut root);
@@ -933,6 +980,7 @@ fn insert_file_into_skill_tree(
     root_path: &str,
     full_path: &str,
     download_url: String,
+    sha: Option<String>,
 ) {
     let relative_path = if root_path.is_empty() {
         full_path.to_string()
@@ -947,7 +995,7 @@ fn insert_file_into_skill_tree(
         return;
     }
 
-    insert_segments(root, root_path, &segments, full_path, download_url);
+    insert_segments(root, root_path, &segments, full_path, download_url, sha);
 }
 
 fn insert_segments(
@@ -956,6 +1004,7 @@ fn insert_segments(
     segments: &[&str],
     full_path: &str,
     download_url: String,
+    sha: Option<String>,
 ) {
     let Some((first, rest)) = segments.split_first() else {
         return;
@@ -969,6 +1018,7 @@ fn insert_segments(
                 path: full_path.to_string(),
                 is_dir: false,
                 download_url: Some(download_url),
+                sha,
                 children: None,
             });
         }
@@ -990,6 +1040,7 @@ fn insert_segments(
                 path: dir_path.clone(),
                 is_dir: true,
                 download_url: None,
+                sha: None,
                 children: Some(Vec::new()),
             });
             children.len() - 1
@@ -1001,12 +1052,13 @@ fn insert_segments(
             path: dir_path.clone(),
             is_dir: true,
             download_url: None,
+            sha: None,
             children: Some(Vec::new()),
         };
     }
 
     let child = children.get_mut(index).expect("child index should exist");
-    insert_segments(child, &dir_path, rest, full_path, download_url);
+    insert_segments(child, &dir_path, rest, full_path, download_url, sha);
 }
 
 fn sort_skill_tree_children(node: &mut SkillFileNode) {
@@ -1204,6 +1256,7 @@ async fn fetch_skill_files_from_raw(
                 path: join_repo_path(skill_path, candidate),
                 is_dir: false,
                 download_url: Some(raw_url),
+                sha: None,
                 children: None,
             });
         }
@@ -1219,6 +1272,7 @@ async fn fetch_skill_files_from_raw(
         path: skill_path.to_string(),
         is_dir: true,
         download_url: None,
+        sha: None,
         children: Some(files),
     }))
 }
@@ -1470,6 +1524,7 @@ fn build_github_tree<'a>(
                     path: item.path,
                     is_dir: false,
                     download_url: item.download_url,
+                    sha: None,
                     children: None,
                 });
             }
@@ -1493,6 +1548,7 @@ fn build_github_tree<'a>(
             path: path.to_string(),
             is_dir: true,
             download_url: None,
+            sha: None,
             children: Some(children),
         })
     })
@@ -1566,6 +1622,76 @@ fn collect_file_nodes(node: &SkillFileNode, files: &mut Vec<SkillFileNode>) {
     }
 }
 
+fn compute_skill_revision_from_tree_entries(
+    entries: &[GitHubTreeEntry],
+    skill_path: &str,
+) -> Option<String> {
+    let normalized_skill_path = skill_path.trim_matches('/');
+    let prefix = if normalized_skill_path.is_empty() {
+        String::new()
+    } else {
+        format!("{}/", normalized_skill_path)
+    };
+
+    let mut fingerprints: Vec<(String, String)> = entries
+        .iter()
+        .filter(|entry| entry.kind == "blob")
+        .filter_map(|entry| {
+            let normalized_path = entry.path.trim_matches('/').to_string();
+            if !normalized_skill_path.is_empty() && !normalized_path.starts_with(&prefix) {
+                return None;
+            }
+            let sha = entry.sha.as_ref()?.trim().to_string();
+            if sha.is_empty() {
+                return None;
+            }
+            Some((normalized_path, sha))
+        })
+        .collect();
+
+    compute_revision_from_pairs(&mut fingerprints)
+}
+
+fn compute_skill_revision_from_file_nodes(files: &[SkillFileNode]) -> Option<String> {
+    let mut fingerprints: Vec<(String, String)> = files
+        .iter()
+        .filter_map(|file| {
+            let sha = file.sha.as_ref()?.trim().to_string();
+            if sha.is_empty() {
+                return None;
+            }
+            Some((file.path.trim_matches('/').to_string(), sha))
+        })
+        .collect();
+
+    compute_revision_from_pairs(&mut fingerprints)
+}
+
+fn compute_revision_from_pairs(pairs: &mut Vec<(String, String)>) -> Option<String> {
+    if pairs.is_empty() {
+        return None;
+    }
+
+    pairs.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for (path, sha) in pairs.iter() {
+        for byte in path.as_bytes() {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        hash ^= u64::from(b':');
+        hash = hash.wrapping_mul(0x100000001b3);
+        for byte in sha.as_bytes() {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        hash ^= u64::from(b'\n');
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+
+    Some(format!("gh-tree-fnv64:{hash:016x}"))
+}
+
 fn normalize_local_path(path: &str, skill_path: &str) -> String {
     if skill_path.is_empty() {
         return path.to_string();
@@ -1580,7 +1706,11 @@ fn normalize_local_path(path: &str, skill_path: &str) -> String {
     path.to_string()
 }
 
-fn write_marketplace_meta(dir: &Path, skill: &MarketplaceSkill) -> Result<(), String> {
+fn write_marketplace_meta(
+    dir: &Path,
+    skill: &MarketplaceSkill,
+    remote_revision: Option<&str>,
+) -> Result<(), String> {
     let meta = serde_json::json!({
         "name": skill.name,
         "description": skill.description,
@@ -1592,6 +1722,7 @@ fn write_marketplace_meta(dir: &Path, skill: &MarketplaceSkill) -> Result<(), St
         "skill_path": skill.skill_path,
         "author": skill.author,
         "tags": skill.tags,
+        "remote_revision": remote_revision,
     });
 
     let content =
@@ -1600,19 +1731,48 @@ fn write_marketplace_meta(dir: &Path, skill: &MarketplaceSkill) -> Result<(), St
     Ok(())
 }
 
-fn is_same_marketplace_skill(dir: &PathBuf, source_id: &str) -> Result<bool, String> {
+#[derive(Debug, Clone)]
+struct LocalMarketplaceMeta {
+    source: Option<String>,
+    marketplace_source_id: Option<String>,
+    remote_revision: Option<String>,
+}
+
+fn read_marketplace_meta(dir: &Path) -> Result<LocalMarketplaceMeta, String> {
     let meta_path = dir.join("meta.json");
     if !meta_path.exists() {
-        return Ok(false);
+        return Ok(LocalMarketplaceMeta {
+            source: None,
+            marketplace_source_id: None,
+            remote_revision: None,
+        });
     }
+
     let content =
         fs::read_to_string(&meta_path).map_err(|e| format!("读取 meta.json 失败: {}", e))?;
     let value: Value =
         serde_json::from_str(&content).map_err(|e| format!("解析 meta.json 失败: {}", e))?;
 
-    let source = value.get("source").and_then(|v| v.as_str());
-    let stored_source_id = value.get("marketplace_source_id").and_then(|v| v.as_str());
-    Ok(source == Some("marketplace") && stored_source_id == Some(source_id))
+    Ok(LocalMarketplaceMeta {
+        source: value
+            .get("source")
+            .and_then(|v| v.as_str())
+            .map(ToOwned::to_owned),
+        marketplace_source_id: value
+            .get("marketplace_source_id")
+            .and_then(|v| v.as_str())
+            .map(ToOwned::to_owned),
+        remote_revision: value
+            .get("remote_revision")
+            .and_then(|v| v.as_str())
+            .map(ToOwned::to_owned),
+    })
+}
+
+fn is_same_marketplace_skill(dir: &PathBuf, source_id: &str) -> Result<bool, String> {
+    let meta = read_marketplace_meta(dir)?;
+    Ok(meta.source.as_deref() == Some("marketplace")
+        && meta.marketplace_source_id.as_deref() == Some(source_id))
 }
 
 #[cfg(test)]
@@ -1705,14 +1865,17 @@ mod tests {
             GitHubTreeEntry {
                 path: "activecampaign-automation/SKILL.md".to_string(),
                 kind: "blob".to_string(),
+                sha: None,
             },
             GitHubTreeEntry {
                 path: ".claude-plugin/README.md".to_string(),
                 kind: "blob".to_string(),
+                sha: None,
             },
             GitHubTreeEntry {
                 path: "nested/path/SKILL.md".to_string(),
                 kind: "blob".to_string(),
+                sha: None,
             },
         ];
         let dirs = extract_root_skill_dirs_from_tree_entries(&entries);
@@ -1728,10 +1891,12 @@ mod tests {
             GitHubTreeEntry {
                 path: "my-skill/SKILL.md".to_string(),
                 kind: "blob".to_string(),
+                sha: Some("sha-skill".to_string()),
             },
             GitHubTreeEntry {
                 path: "my-skill/docs/guide.md".to_string(),
                 kind: "blob".to_string(),
+                sha: Some("sha-guide".to_string()),
             },
         ];
         let tree = build_skill_tree_from_tree_entries(&entries, "my-skill", "foo", "bar", "main")
@@ -1754,10 +1919,75 @@ mod tests {
     }
 
     #[test]
+    fn compute_skill_revision_from_tree_entries_changes_when_blob_sha_changes() {
+        let entries_v1 = vec![
+            GitHubTreeEntry {
+                path: "alpha/SKILL.md".to_string(),
+                kind: "blob".to_string(),
+                sha: Some("sha-a1".to_string()),
+            },
+            GitHubTreeEntry {
+                path: "alpha/docs.md".to_string(),
+                kind: "blob".to_string(),
+                sha: Some("sha-a2".to_string()),
+            },
+        ];
+        let entries_v2 = vec![
+            GitHubTreeEntry {
+                path: "alpha/SKILL.md".to_string(),
+                kind: "blob".to_string(),
+                sha: Some("sha-a1".to_string()),
+            },
+            GitHubTreeEntry {
+                path: "alpha/docs.md".to_string(),
+                kind: "blob".to_string(),
+                sha: Some("sha-a2-updated".to_string()),
+            },
+        ];
+
+        let rev1 = super::compute_skill_revision_from_tree_entries(&entries_v1, "alpha")
+            .expect("revision should exist");
+        let rev2 = super::compute_skill_revision_from_tree_entries(&entries_v2, "alpha")
+            .expect("revision should exist");
+        assert_ne!(rev1, rev2, "revision should change when blob sha changes");
+    }
+
+    #[test]
+    fn check_install_status_returns_update_available_when_revision_mismatch() {
+        with_temp_home(|home| {
+            let skills_dir = home.join(".skills-manager").join("skills");
+            let skill = sample_marketplace_skill("source-a", "alpha");
+            let install_dir = skills_dir.join(&skill.id);
+            fs::create_dir_all(&install_dir).expect("create install dir");
+
+            let meta = serde_json::json!({
+                "name": skill.name,
+                "source": "marketplace",
+                "marketplace_source_id": skill.source_id,
+                "marketplace_skill_id": skill.id,
+                "remote_revision": "rev-local",
+            });
+            fs::write(
+                install_dir.join("meta.json"),
+                serde_json::to_string_pretty(&meta).expect("serialize meta"),
+            )
+            .expect("write meta");
+
+            let mut remote_skill = skill.clone();
+            remote_skill.remote_revision = Some("rev-remote".to_string());
+
+            let status =
+                super::MarketplaceService::check_install_status(&remote_skill, &skills_dir);
+            assert_eq!(status, InstallStatus::UpdateAvailable);
+        });
+    }
+
+    #[test]
     fn github_tree_cache_round_trip() {
         let entries = vec![GitHubTreeEntry {
             path: "skill/SKILL.md".to_string(),
             kind: "blob".to_string(),
+            sha: None,
         }];
         let owner = "cache-owner-round-trip";
         let repo = "cache-repo-round-trip";
@@ -1784,6 +2014,7 @@ mod tests {
                     tree: vec![GitHubTreeEntry {
                         path: "skill/SKILL.md".to_string(),
                         kind: "blob".to_string(),
+                        sha: None,
                     }],
                 },
             );
@@ -2018,6 +2249,7 @@ description: "来自 frontmatter 的描述"
             repo_url: Some("https://github.com/example/repo".to_string()),
             skill_path: Some(slug.to_string()),
             external_url: None,
+            remote_revision: None,
             tags: vec!["test".to_string()],
             install_status: InstallStatus::NotInstalled,
         }

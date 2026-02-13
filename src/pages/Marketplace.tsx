@@ -19,6 +19,7 @@ import {
   MarketplaceSkill,
   MarketplaceSkillsResponse,
   MarketplaceSource,
+  MarketplaceSyncResult,
 } from "@/types";
 import { useTranslation } from "@/i18n";
 import { SkillDetailModal } from "@/components/marketplace/SkillDetailModal";
@@ -80,6 +81,7 @@ export function Marketplace() {
   const [installingSkill, setInstallingSkill] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [updatingAll, setUpdatingAll] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [descriptionHydrationTick, setDescriptionHydrationTick] = useState(0);
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -295,6 +297,60 @@ export function Marketplace() {
     }
   }, [addToast, loadSkills, selectedSourceIds, t]);
 
+  const updateAvailableCount = useMemo(
+    () => skills.filter((skill) => skill.install_status === "update_available").length,
+    [skills],
+  );
+
+  const handleUpdateAll = useCallback(async () => {
+    if (updatingAll || updateAvailableCount === 0 || installingSkill) {
+      return;
+    }
+
+    setUpdatingAll(true);
+    try {
+      const syncResult = await invoke<MarketplaceSyncResult>(
+        "sync_marketplace_installed_skills",
+        {
+          sourceIds: selectedSourceIds.length > 0 ? selectedSourceIds : undefined,
+        },
+      );
+      if (syncResult.updated > 0) {
+        addToast(
+          t("marketplace.syncUpdated").replace("{count}", String(syncResult.updated)),
+          "success",
+        );
+      }
+      if (syncResult.failed.length > 0) {
+        addToast(
+          t("marketplace.syncPartialFailed").replace(
+            "{count}",
+            String(syncResult.failed.length),
+          ),
+          "error",
+        );
+      }
+
+      await loadSkills({
+        forceRefresh: true,
+        page: 1,
+        sourceIds: selectedSourceIds,
+      });
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setUpdatingAll(false);
+    }
+  }, [
+    addToast,
+    installingSkill,
+    loadSkills,
+    selectedSourceIds,
+    t,
+    updateAvailableCount,
+    updatingAll,
+  ]);
+
   const handleLoadMore = useCallback(async () => {
     if (loadingMore || refreshing || initialLoading || !hasMore) {
       return;
@@ -323,11 +379,18 @@ export function Marketplace() {
     event?.stopPropagation();
     if (skill.install_status === "installed") return;
 
+    const isUpdateAction = skill.install_status === "update_available";
     setInstallingSkill(skill.id);
     try {
       const result = await invoke<InstallResult>("install_marketplace_skill", { skillId: skill.id });
       if (result.success) {
-        addToast(t("marketplace.installSuccess").replace("{name}", skill.name), "success");
+        addToast(
+          t(isUpdateAction ? "marketplace.updateSuccess" : "marketplace.installSuccess").replace(
+            "{name}",
+            skill.name,
+          ),
+          "success",
+        );
         setSelectedSkill((current) => (
           current && current.id === skill.id
             ? { ...current, install_status: "installed" }
@@ -339,7 +402,10 @@ export function Marketplace() {
           sourceIds: selectedSourceIds,
         });
       } else {
-        addToast(result.message || t("marketplace.installFailed"), "error");
+        addToast(
+          result.message || t(isUpdateAction ? "marketplace.updateFailed" : "marketplace.installFailed"),
+          "error",
+        );
       }
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
@@ -475,7 +541,32 @@ export function Marketplace() {
         title={t("marketplace.title")}
         actions={
           <>
-            <RefreshButton onClick={handleRefresh} loading={refreshing} />
+            {updateAvailableCount > 0 && (
+              <button
+                type="button"
+                onClick={handleUpdateAll}
+                disabled={updatingAll || refreshing || installingSkill !== null}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  border: '1px solid rgba(9, 105, 218, 0.35)',
+                  color: 'var(--primary)',
+                  backgroundColor: 'rgba(9, 105, 218, 0.10)',
+                  cursor: updatingAll || refreshing || installingSkill !== null ? 'not-allowed' : 'pointer',
+                  opacity: updatingAll || refreshing || installingSkill !== null ? 0.7 : 1,
+                }}
+              >
+                {updatingAll
+                  ? t("marketplace.updatingAll")
+                  : t("marketplace.updateAll").replace("{count}", String(updateAvailableCount))}
+              </button>
+            )}
+            <RefreshButton onClick={handleRefresh} loading={refreshing || updatingAll} />
             {showSourceFilter && (
               <div style={{ position: 'relative' }}>
                 <button
@@ -682,7 +773,9 @@ export function Marketplace() {
               {filteredSkills.map((skill) => {
                 const color = getSkillColor(skill.name);
                 const isInstalled = skill.install_status === "installed";
+                const isUpdateAvailable = skill.install_status === "update_available";
                 const isInstalling = installingSkill === skill.id;
+                const actionBusy = isInstalling || updatingAll;
                 const externalUrl = skill.external_url || skill.repo_url;
                 return (
                     <div
@@ -795,7 +888,7 @@ export function Marketplace() {
                           <button
                             type="button"
                             onClick={(e) => handleInstall(skill, e)}
-                            disabled={isInstalling}
+                            disabled={actionBusy}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
@@ -804,15 +897,17 @@ export function Marketplace() {
                               fontSize: '10px',
                               fontWeight: 500,
                               color: 'var(--primary-foreground)',
-                              backgroundColor: 'var(--foreground)',
+                              backgroundColor: isUpdateAvailable ? 'var(--primary)' : 'var(--foreground)',
                               border: 'none',
                               borderRadius: '6px',
-                              cursor: isInstalling ? 'wait' : 'pointer',
-                              opacity: isInstalling ? 0.7 : 1,
+                              cursor: actionBusy ? 'wait' : 'pointer',
+                              opacity: actionBusy ? 0.7 : 1,
                               flexShrink: 0,
                             }}
                           >
-                            {isInstalling ? t("marketplace.installing") : t("marketplace.install")}
+                            {isInstalling
+                              ? t(isUpdateAvailable ? "marketplace.updating" : "marketplace.installing")
+                              : t(isUpdateAvailable ? "marketplace.update" : "marketplace.install")}
                           </button>
                         )}
                       </div>
@@ -898,7 +993,7 @@ export function Marketplace() {
           skill={selectedSkill}
           onClose={() => setSelectedSkill(null)}
           onInstall={handleInstall}
-          installing={installingSkill === selectedSkill.id}
+          installing={updatingAll || installingSkill === selectedSkill.id}
         />
       )}
     </div>

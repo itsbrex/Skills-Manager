@@ -7,7 +7,7 @@ import { ToastContainer, useToast } from "@/components/ui/toast";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoader } from "@/components/ui/loading";
-import { Skill, Tool, AppConfig } from "@/types";
+import { AppConfig, Skill, Tool } from "@/types";
 import { useTranslation, TranslationPath } from "@/i18n";
 
 function getToolDisplayName(toolId: string, tools: Tool[]): string {

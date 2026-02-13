@@ -119,8 +119,9 @@ export interface MarketplaceSkill {
   repo_url: string | null;
   skill_path: string | null;
   external_url: string | null;
+  remote_revision?: string | null;
   tags: string[];
-  install_status: "not_installed" | "installed";
+  install_status: "not_installed" | "installed" | "update_available";
 }
 
 export interface MarketplaceSkillsResponse {
@@ -133,6 +134,7 @@ export interface SkillFileNode {
   path: string;
   is_dir: boolean;
   download_url: string | null;
+  sha?: string | null;
   children?: SkillFileNode[];
 }
 
@@ -141,6 +143,18 @@ export interface InstallResult {
   skill_id: string;
   message: string | null;
   installed_path: string | null;
+}
+
+export interface MarketplaceSyncResult {
+  checked: number;
+  updated: number;
+  failed: string[];
+}
+
+export interface MarketplaceUpdateCheckResult {
+  performed: boolean;
+  checked: number;
+  update_available: number;
 }
 
 export interface UpdateInfo {

@@ -11,7 +11,7 @@ import { Welcome } from "@/pages/Welcome";
 import { useInitialization } from "@/hooks/useInitialization";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { I18nProvider, Language } from "@/i18n";
-import { AppConfig } from "@/types";
+import { AppConfig, MarketplaceUpdateCheckResult } from "@/types";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 
 type Theme = "light" | "dark" | "system";
@@ -49,6 +49,24 @@ function App() {
   const handleThemeChange = useCallback((newTheme: Theme) => {
     setTheme(newTheme);
   }, []);
+
+  useEffect(() => {
+    if (!isInitialized || !configLoaded) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void invoke<MarketplaceUpdateCheckResult>("check_marketplace_updates_if_stale").catch(
+        () => {
+          // keep startup check silent on failures
+        },
+      );
+    }, 20_000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [configLoaded, isInitialized]);
 
   // Wait for both initialization check and config to load
   if (initLoading || !configLoaded) {

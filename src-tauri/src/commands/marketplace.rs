@@ -1,11 +1,14 @@
 use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::models::{
-    AppConfig, InstallResult, MarketplaceSkill, MarketplaceSkillsResponse, MarketplaceSource,
-    SkillFileNode,
+    AppConfig, InstallResult, InstallStatus, MarketplaceSkill, MarketplaceSkillsResponse,
+    MarketplaceSource, MarketplaceSyncResult, MarketplaceUpdateCheckResult, SkillFileNode,
 };
 use crate::services::{AppCache, ConfigManager, MarketplaceCache, MarketplaceService};
 
@@ -15,6 +18,13 @@ pub struct MarketplaceSkillDescriptionRequest {
     pub repo_url: String,
     pub skill_path: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedMarketplaceUpdateCheckState {
+    last_checked_at_unix_secs: u64,
+}
+
+const MARKETPLACE_UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(12 * 60 * 60);
 
 fn github_token_from_config(config: &AppConfig) -> Option<String> {
     config
@@ -38,6 +48,55 @@ fn normalize_source_filter(source_ids: Option<Vec<String>>) -> Option<Vec<String
         None
     } else {
         Some(ids)
+    }
+}
+
+fn marketplace_update_check_state_path() -> Option<PathBuf> {
+    Some(
+        dirs::home_dir()?
+            .join(".skills-manager")
+            .join("cache")
+            .join("marketplace-update-check.json"),
+    )
+}
+
+fn load_last_update_check_time() -> Option<SystemTime> {
+    let path = marketplace_update_check_state_path()?;
+    let content = fs::read_to_string(path).ok()?;
+    let state: PersistedMarketplaceUpdateCheckState = serde_json::from_str(&content).ok()?;
+    Some(UNIX_EPOCH + Duration::from_secs(state.last_checked_at_unix_secs))
+}
+
+fn persist_update_check_time(checked_at: SystemTime) {
+    let Some(path) = marketplace_update_check_state_path() else {
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        if fs::create_dir_all(parent).is_err() {
+            return;
+        }
+    }
+
+    let state = PersistedMarketplaceUpdateCheckState {
+        last_checked_at_unix_secs: checked_at
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .map(|duration| duration.as_secs())
+            .unwrap_or_default(),
+    };
+
+    if let Ok(content) = serde_json::to_string(&state) {
+        let _ = fs::write(path, content);
+    }
+}
+
+fn should_run_marketplace_update_check(last_checked: Option<SystemTime>, now: SystemTime) -> bool {
+    match last_checked {
+        None => true,
+        Some(last) => now
+            .duration_since(last)
+            .map(|elapsed| elapsed >= MARKETPLACE_UPDATE_CHECK_INTERVAL)
+            .unwrap_or(true),
     }
 }
 
@@ -212,6 +271,117 @@ pub async fn install_marketplace_skill(
 }
 
 #[tauri::command]
+pub async fn sync_marketplace_installed_skills(
+    source_ids: Option<Vec<String>>,
+    marketplace_cache: State<'_, MarketplaceCache>,
+    app_cache: State<'_, AppCache>,
+) -> Result<MarketplaceSyncResult, String> {
+    let manager = ConfigManager::new();
+    let config = manager.load()?;
+    let github_token = github_token_from_config(&config);
+    let normalized_source_filter = normalize_source_filter(source_ids);
+    let mut sources = config
+        .marketplace_sources
+        .clone()
+        .unwrap_or_else(|| AppConfig::default().marketplace_sources.unwrap_or_default());
+    if let Some(ids) = &normalized_source_filter {
+        sources.retain(|source| ids.contains(&source.id));
+    }
+
+    let listing = MarketplaceService::fetch_marketplace_skills_page(
+        &sources,
+        &config.skills_dir,
+        None,
+        github_token.as_deref(),
+        1,
+    )
+    .await?;
+
+    let mut result = MarketplaceSyncResult {
+        checked: 0,
+        updated: 0,
+        failed: Vec::new(),
+    };
+
+    for skill in listing
+        .skills
+        .into_iter()
+        .filter(|skill| skill.install_status == InstallStatus::UpdateAvailable)
+    {
+        result.checked += 1;
+        match MarketplaceService::install_skill(&skill, &config.skills_dir, github_token.as_deref())
+            .await
+        {
+            Ok(_) => {
+                result.updated += 1;
+            }
+            Err(err) => {
+                result.failed.push(format!("{}: {}", skill.name, err));
+            }
+        }
+    }
+
+    if result.updated > 0 {
+        app_cache.invalidate_skills();
+        marketplace_cache.invalidate();
+    }
+
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn check_marketplace_updates_if_stale(
+    marketplace_cache: State<'_, MarketplaceCache>,
+) -> Result<MarketplaceUpdateCheckResult, String> {
+    let now = SystemTime::now();
+    let last_checked = load_last_update_check_time();
+    if !should_run_marketplace_update_check(last_checked, now) {
+        return Ok(MarketplaceUpdateCheckResult {
+            performed: false,
+            checked: 0,
+            update_available: 0,
+        });
+    }
+
+    let manager = ConfigManager::new();
+    let config = manager.load()?;
+    let github_token = github_token_from_config(&config);
+    let sources = config
+        .marketplace_sources
+        .clone()
+        .unwrap_or_else(|| AppConfig::default().marketplace_sources.unwrap_or_default());
+
+    let listing = MarketplaceService::fetch_marketplace_skills_page(
+        &sources,
+        &config.skills_dir,
+        None,
+        github_token.as_deref(),
+        1,
+    )
+    .await?;
+
+    marketplace_cache.set(listing.skills.clone(), None, listing.has_more, None);
+    persist_update_check_time(now);
+
+    let checked = listing
+        .skills
+        .iter()
+        .filter(|skill| skill.install_status != InstallStatus::NotInstalled)
+        .count();
+    let update_available = listing
+        .skills
+        .iter()
+        .filter(|skill| skill.install_status == InstallStatus::UpdateAvailable)
+        .count();
+
+    Ok(MarketplaceUpdateCheckResult {
+        performed: true,
+        checked,
+        update_available,
+    })
+}
+
+#[tauri::command]
 pub fn get_marketplace_sources() -> Result<Vec<MarketplaceSource>, String> {
     let manager = ConfigManager::new();
     let config = manager.load()?;
@@ -244,4 +414,50 @@ pub fn toggle_marketplace_source(source_id: String, enabled: bool) -> Result<(),
     }
 
     manager.save(&config)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, SystemTime};
+
+    use crate::test_support::with_temp_home;
+
+    use super::{
+        load_last_update_check_time, persist_update_check_time, should_run_marketplace_update_check,
+        MARKETPLACE_UPDATE_CHECK_INTERVAL,
+    };
+
+    #[test]
+    fn should_run_marketplace_update_check_respects_interval() {
+        let now = SystemTime::now();
+        let just_checked = now
+            .checked_sub(Duration::from_secs(60))
+            .expect("time should be valid");
+        let stale_checked = now
+            .checked_sub(MARKETPLACE_UPDATE_CHECK_INTERVAL + Duration::from_secs(1))
+            .expect("time should be valid");
+
+        assert!(
+            !should_run_marketplace_update_check(Some(just_checked), now),
+            "recent check should be skipped"
+        );
+        assert!(
+            should_run_marketplace_update_check(Some(stale_checked), now),
+            "stale check should run"
+        );
+        assert!(
+            should_run_marketplace_update_check(None, now),
+            "missing check timestamp should run"
+        );
+    }
+
+    #[test]
+    fn update_check_time_round_trip_persists() {
+        with_temp_home(|_| {
+            let now = SystemTime::now();
+            persist_update_check_time(now);
+            let loaded = load_last_update_check_time();
+            assert!(loaded.is_some(), "expected persisted timestamp");
+        });
+    }
 }

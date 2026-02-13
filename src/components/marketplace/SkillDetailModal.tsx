@@ -42,6 +42,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
   const previewRequestId = useRef(0);
   const canShowFiles = Boolean(skill.repo_url && skill.skill_path);
   const externalUrl = skill.external_url || skill.repo_url;
+  const isUpdateAvailable = skill.install_status === "update_available";
 
   const markdownComponents = useMemo(() => ({
     h1: (props: any) => (
@@ -635,14 +636,16 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
                 fontSize: "12px",
                 fontWeight: 500,
                 color: "var(--primary-foreground)",
-                backgroundColor: "var(--foreground)",
+                backgroundColor: isUpdateAvailable ? "var(--primary)" : "var(--foreground)",
                 border: "none",
                 borderRadius: "8px",
                 cursor: installing ? "wait" : "pointer",
                 opacity: installing ? 0.7 : 1,
               }}
             >
-              {installing ? t("marketplace.installing") : t("marketplace.install")}
+              {installing
+                ? t(isUpdateAvailable ? "marketplace.updating" : "marketplace.installing")
+                : t(isUpdateAvailable ? "marketplace.update" : "marketplace.install")}
             </button>
           )}
         </div>
