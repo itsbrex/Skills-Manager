@@ -1,9 +1,8 @@
 use crate::models::{DetectedEditor, EDITOR_DEFINITIONS};
-use rayon::prelude::*;
 use std::env;
 use std::fs;
 use std::path::Path;
-use std::process::Command; // Parallel iterator
+use std::process::Command;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;

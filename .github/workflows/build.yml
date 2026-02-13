@@ -16,7 +16,7 @@ jobs:
             rust_target: "aarch64-apple-darwin"
             bundle_path: "src-tauri/target/aarch64-apple-darwin/release/bundle/"
             artifact_name: "skills-manager-macos-aarch64"
-          - platform: "macos-latest" # Intel Mac (Cross-compile from M1)
+          - platform: "macos-13" # Intel Mac (Native x64 runner)
             args: "--target x86_64-apple-darwin"
             rust_target: "x86_64-apple-darwin"
             bundle_path: "src-tauri/target/x86_64-apple-darwin/release/bundle/"
@@ -47,7 +47,7 @@ jobs:
           targets: ${{ matrix.rust_target }}
 
       - name: install create-dmg
-        if: matrix.platform == 'macos-latest'
+        if: startsWith(matrix.platform, 'macos-')
         run: brew install create-dmg
 
       - name: Rust cache
@@ -67,6 +67,8 @@ jobs:
       - name: build tauri app
         uses: tauri-apps/tauri-action@v0
         env:
+          CI: "true"
+          RUST_LOG: "tauri_bundler=debug"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
@@ -77,7 +79,7 @@ jobs:
           args: ${{ matrix.args }}
 
       - name: Rename .app with architecture
-        if: matrix.platform == 'macos-latest'
+        if: startsWith(matrix.platform, 'macos-')
         run: |
           cd "${{ matrix.bundle_path }}macos"
           if [[ "${{ matrix.rust_target }}" == *"aarch64"* ]]; then

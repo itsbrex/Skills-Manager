@@ -2,6 +2,8 @@ use crate::services::config_manager::ConfigManager;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
+
+#[cfg(windows)]
 use std::process::Command;
 
 /// Normalize path separators to the platform's native separator.
