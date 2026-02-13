@@ -16,7 +16,7 @@ jobs:
             rust_target: "aarch64-apple-darwin"
             bundle_path: "src-tauri/target/aarch64-apple-darwin/release/bundle/"
             artifact_name: "skills-manager-macos-aarch64"
-          - platform: "macos-13" # Intel Mac (Native x64 runner)
+          - platform: "macos-15-intel" # Intel Mac (Native x64 runner)
             args: "--target x86_64-apple-darwin"
             rust_target: "x86_64-apple-darwin"
             bundle_path: "src-tauri/target/x86_64-apple-darwin/release/bundle/"
@@ -67,8 +67,6 @@ jobs:
       - name: build tauri app
         uses: tauri-apps/tauri-action@v0
         env:
-          CI: "true"
-          RUST_LOG: "tauri_bundler=debug"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
