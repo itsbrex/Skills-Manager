@@ -272,7 +272,7 @@ export const zh = {
     issueOpenFailed: "打开 GitHub Issues 失败",
     form: {
       userInfoLabel: "用户信息",
-      userInfoPlaceholder: "姓名 / 邮箱 / 微信号",
+      userInfoPlaceholder: "邮箱 / 微信号 / 其他",
       userInfoRequired: "请填写用户信息",
       contentLabel: "反馈内容",
       contentPlaceholder: "请详细描述你遇到的问题或需求",

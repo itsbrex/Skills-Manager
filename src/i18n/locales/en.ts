@@ -269,7 +269,7 @@ export const en = {
     issueOpenFailed: "Failed to open GitHub Issues",
     form: {
       userInfoLabel: "Your info",
-      userInfoPlaceholder: "Name / Email / WeChat ID",
+      userInfoPlaceholder: "Email / WeChat ID / Other",
       userInfoRequired: "Please provide your contact information",
       contentLabel: "Feedback content",
       contentPlaceholder: "Describe the issue or feature request in detail",
