@@ -69,8 +69,8 @@ export function Sidebar() {
   return (
     <aside
       style={{
-        width: '260px',
-        minWidth: '260px',
+        width: '200px',
+        minWidth: '200px',
         height: '100%',
         backgroundColor: 'var(--sidebar)',
         display: 'flex',
