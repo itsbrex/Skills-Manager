@@ -1,15 +1,36 @@
-// Tool icons - place SVG files in this directory with the tool ID as filename
-// e.g., claude-code.svg, codex.svg, codebuddy.svg
+// Tool icons - place image files in this directory with the tool ID as filename
+// Supported formats: .svg, .png, .jpg, .jpeg
+// e.g., claude-code.svg, crush.png, some-tool.jpg
+const iconModules = import.meta.glob('./*.{svg,png,jpg,jpeg}', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>;
 
-// Import all SVG files from this directory
-const svgModules = import.meta.glob('./*.svg', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const extensionPriority: Record<string, number> = {
+  svg: 4,
+  png: 3,
+  jpg: 2,
+  jpeg: 1,
+};
 
-// Build a map of tool ID -> SVG URL
+// Build a map of tool ID -> icon URL
 const toolIconUrls: Record<string, string> = {};
-for (const path in svgModules) {
+
+const selectedPriority: Record<string, number> = {};
+for (const path in iconModules) {
   // Extract filename without extension: ./claude-code.svg -> claude-code
-  const id = path.replace('./', '').replace('.svg', '');
-  toolIconUrls[id] = svgModules[path];
+  const filename = path.replace('./', '');
+  const id = filename.replace(/\.[^.]+$/, '');
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  const priority = extensionPriority[ext] ?? 0;
+
+  if (toolIconUrls[id] && (selectedPriority[id] ?? 0) >= priority) {
+    continue;
+  }
+
+  toolIconUrls[id] = iconModules[path];
+  selectedPriority[id] = priority;
 }
 
 export const getToolIconUrl = (id: string): string | null => {

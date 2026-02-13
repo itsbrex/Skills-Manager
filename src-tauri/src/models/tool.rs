@@ -144,6 +144,41 @@ pub const SUPPORTED_TOOLS: &[ToolDefinition] = &[
         alt_config_dirs: &[".vercel", ".vercel-skills"],
         cli_command: "vercel",
     },
+    ToolDefinition {
+        id: "commandcode",
+        name: "CommandCode",
+        config_dir: ".commandcode",
+        alt_config_dirs: &[],
+        cli_command: "commandcode",
+    },
+    ToolDefinition {
+        id: "continue",
+        name: "Continue",
+        config_dir: ".continue",
+        alt_config_dirs: &[],
+        cli_command: "continue",
+    },
+    ToolDefinition {
+        id: "crush",
+        name: "Crush",
+        config_dir: ".config/crush",
+        alt_config_dirs: &[".crush"],
+        cli_command: "crush",
+    },
+    ToolDefinition {
+        id: "goose",
+        name: "Goose",
+        config_dir: ".config/goose",
+        alt_config_dirs: &[".goose"],
+        cli_command: "goose",
+    },
+    ToolDefinition {
+        id: "iflow",
+        name: "iFlow",
+        config_dir: ".iflow",
+        alt_config_dirs: &[],
+        cli_command: "iflow",
+    },
 ];
 
 #[cfg(test)]
@@ -159,6 +194,11 @@ mod tests {
         assert!(ids.contains(&"openclaw"));
         assert!(ids.contains(&"cline"));
         assert!(ids.contains(&"vercel-skills"));
+        assert!(ids.contains(&"commandcode"));
+        assert!(ids.contains(&"continue"));
+        assert!(ids.contains(&"crush"));
+        assert!(ids.contains(&"goose"));
+        assert!(ids.contains(&"iflow"));
     }
 
     #[test]
@@ -174,5 +214,35 @@ mod tests {
 
         assert_eq!(droid.config_dir, ".factory");
         assert_eq!(vercel_skills.config_dir, ".agents");
+    }
+
+    #[test]
+    fn newly_added_tools_use_expected_base_directories() {
+        let commandcode = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "commandcode")
+            .expect("commandcode should exist in supported tools");
+        let continue_tool = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "continue")
+            .expect("continue should exist in supported tools");
+        let crush = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "crush")
+            .expect("crush should exist in supported tools");
+        let goose = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "goose")
+            .expect("goose should exist in supported tools");
+        let iflow = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "iflow")
+            .expect("iflow should exist in supported tools");
+
+        assert_eq!(commandcode.config_dir, ".commandcode");
+        assert_eq!(continue_tool.config_dir, ".continue");
+        assert_eq!(crush.config_dir, ".config/crush");
+        assert_eq!(goose.config_dir, ".config/goose");
+        assert_eq!(iflow.config_dir, ".iflow");
     }
 }
