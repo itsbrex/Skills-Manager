@@ -179,6 +179,62 @@ pub const SUPPORTED_TOOLS: &[ToolDefinition] = &[
         alt_config_dirs: &[],
         cli_command: "iflow",
     },
+    ToolDefinition {
+        id: "junie",
+        name: "Junie",
+        config_dir: ".junie",
+        alt_config_dirs: &[],
+        cli_command: "junie",
+    },
+    ToolDefinition {
+        id: "kilo-code",
+        name: "Kilo Code",
+        config_dir: ".kilocode",
+        alt_config_dirs: &[],
+        cli_command: "kilo",
+    },
+    ToolDefinition {
+        id: "kiro",
+        name: "Kiro",
+        config_dir: ".kiro",
+        alt_config_dirs: &[],
+        cli_command: "kiro",
+    },
+    ToolDefinition {
+        id: "qoder",
+        name: "Qoder",
+        config_dir: ".qoder",
+        alt_config_dirs: &[],
+        cli_command: "qoder",
+    },
+    ToolDefinition {
+        id: "qwen-code",
+        name: "Qwen Code",
+        config_dir: ".qwen",
+        alt_config_dirs: &[],
+        cli_command: "qwen",
+    },
+    ToolDefinition {
+        id: "roo-code",
+        name: "Roo Code",
+        config_dir: ".roo",
+        alt_config_dirs: &[],
+        cli_command: "roo",
+    },
+    ToolDefinition {
+        id: "zencoder",
+        name: "Zencoder",
+        config_dir: ".zencoder",
+        alt_config_dirs: &[],
+        cli_command: "zencoder",
+    },
+    ToolDefinition {
+        id: "pi",
+        name: "Pi",
+        config_dir: ".pi/agent",
+        alt_config_dirs: &[],
+        cli_command: "pi",
+    },
 ];
 
 #[cfg(test)]
@@ -199,6 +255,14 @@ mod tests {
         assert!(ids.contains(&"crush"));
         assert!(ids.contains(&"goose"));
         assert!(ids.contains(&"iflow"));
+        assert!(ids.contains(&"junie"));
+        assert!(ids.contains(&"kilo-code"));
+        assert!(ids.contains(&"kiro"));
+        assert!(ids.contains(&"qoder"));
+        assert!(ids.contains(&"qwen-code"));
+        assert!(ids.contains(&"roo-code"));
+        assert!(ids.contains(&"zencoder"));
+        assert!(ids.contains(&"pi"));
     }
 
     #[test]
@@ -244,5 +308,50 @@ mod tests {
         assert_eq!(crush.config_dir, ".config/crush");
         assert_eq!(goose.config_dir, ".config/goose");
         assert_eq!(iflow.config_dir, ".iflow");
+    }
+
+    #[test]
+    fn newly_added_tools_batch_two_use_expected_base_directories() {
+        let junie = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "junie")
+            .expect("junie should exist in supported tools");
+        let kilo_code = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "kilo-code")
+            .expect("kilo-code should exist in supported tools");
+        let kiro = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "kiro")
+            .expect("kiro should exist in supported tools");
+        let qoder = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "qoder")
+            .expect("qoder should exist in supported tools");
+        let qwen_code = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "qwen-code")
+            .expect("qwen-code should exist in supported tools");
+        let roo_code = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "roo-code")
+            .expect("roo-code should exist in supported tools");
+        let zencoder = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "zencoder")
+            .expect("zencoder should exist in supported tools");
+        let pi = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "pi")
+            .expect("pi should exist in supported tools");
+
+        assert_eq!(junie.config_dir, ".junie");
+        assert_eq!(kilo_code.config_dir, ".kilocode");
+        assert_eq!(kiro.config_dir, ".kiro");
+        assert_eq!(qoder.config_dir, ".qoder");
+        assert_eq!(qwen_code.config_dir, ".qwen");
+        assert_eq!(roo_code.config_dir, ".roo");
+        assert_eq!(zencoder.config_dir, ".zencoder");
+        assert_eq!(pi.config_dir, ".pi/agent");
     }
 }
