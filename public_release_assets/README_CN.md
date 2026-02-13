@@ -3,7 +3,7 @@
 > **一款用于管理 AI 编程助手技能（Skills）的统一桌面应用。**
 > 无缝组织、同步和共享 **Claude Code、Codex、Opencode** 及其他 AI 工具的技能。
 
-![Version](https://img.shields.io/badge/version-1.0.1-blue) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
+![Version](https://img.shields.io/badge/version-1.1.1-blue) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
 
 [English README](./README.md)
 
@@ -27,9 +27,11 @@
 ## 📸 应用截图
 
 <p align="center">
-  <img src="https://image.freeourdays.com/1.png" alt="应用截图 1" ">
-  <img src="https://image.freeourdays.com/2.png" alt="应用截图 2" ">
-  <img src="https://image.freeourdays.com/3.png" alt="应用截图 3" ">
+  <img src="https://image.freeourdays.com/141.png" alt="应用截图 1" ">
+  <img src="https://image.freeourdays.com/142.png" alt="应用截图 2" ">
+  <img src="https://image.freeourdays.com/143.png" alt="应用截图 3" ">
+  <img src="https://image.freeourdays.com/144.png" alt="应用截图 4" ">
+  <img src="https://image.freeourdays.com/145.png" alt="应用截图 5" ">
 </p>
 
 ## 📥 下载安装
@@ -88,6 +90,16 @@ WEBKIT_DISABLE_COMPOSITING_MODE=1 ./Skills-Manager_1.0.1_amd64.AppImage
 
 - **发现 Bug？** 请在我们的 [Issues](../../issues) 页面提交。
 - **有新功能建议？** 欢迎提交 Issue 告诉我们您的想法，我们非常乐意听取社区的声音。
+
+## 💝 赞赏
+
+如果这个项目对你有帮助，欢迎扫码赞赏支持。
+
+| 微信赞赏码 | 支付宝赞赏码 |
+|---|---|
+| <img src="https://image.freeourdays.com/2024/WechatIMG276.jpg" alt="微信赞赏码" height="300" /> | <img src="https://image.freeourdays.com/zfb.jpg" alt="支付宝赞赏码" height="300" /> |
+
+或通过 Ko-fi 支持：[ko-fi.com/yeheboo](https://ko-fi.com/yeheboo)
 
 ## 📈 Star 趋势图
 
