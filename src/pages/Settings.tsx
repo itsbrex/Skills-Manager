@@ -7,6 +7,8 @@ import { checkUpdate } from "@/services/updater";
 import { useTranslation, Language } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
 import { getEditorIcon } from "@/assets/editors";
+import wechatRewardCode from "@/assets/donation/wechat-reward-code.jpg";
+import alipayRewardCode from "@/assets/donation/alipay-reward-code.jpg";
 import { Toggle } from "@/components/ui/toggle";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
@@ -633,6 +635,58 @@ export function Settings() {
               </span>
             </div>
           </SettingsCard>
+
+          <SectionTitle>{t("settings.support")}</SectionTitle>
+          <SettingsCard>
+            <div style={{ padding: '20px 0' }}>
+              <div style={{
+                fontSize: '13px',
+                color: 'var(--muted-foreground)',
+                marginBottom: '16px',
+              }}>
+                {t("settings.supportDesc")}
+              </div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                gap: '12px',
+              }}>
+                <RewardCodeCard
+                  title={t("settings.wechatRewardCode")}
+                  imageSrc={wechatRewardCode}
+                />
+                <RewardCodeCard
+                  title={t("settings.alipayRewardCode")}
+                  imageSrc={alipayRewardCode}
+                />
+              </div>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+                marginTop: '16px',
+                fontSize: '13px',
+              }}>
+                <span style={{ color: 'var(--muted-foreground)' }}>
+                  {t("settings.kofiSupport")}
+                </span>
+                <a
+                  href="https://ko-fi.com/yeheboo"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    color: 'var(--primary)',
+                    textDecoration: 'none',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                  onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                >
+                  ko-fi.com/yeheboo
+                </a>
+              </div>
+            </div>
+          </SettingsCard>
         </div>
       </main>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
@@ -665,6 +719,47 @@ function SettingsCard({ children }: { children: React.ReactNode }) {
       marginBottom: '32px',
     }}>
       {children}
+    </div>
+  );
+}
+
+interface RewardCodeCardProps {
+  title: string;
+  imageSrc: string;
+}
+
+function RewardCodeCard({ title, imageSrc }: RewardCodeCardProps) {
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '16px',
+      borderRadius: '10px',
+      border: '1px solid var(--border)',
+      backgroundColor: 'var(--background)',
+    }}>
+      <img
+        src={imageSrc}
+        alt={title}
+        style={{
+          width: '100%',
+          maxWidth: '140px',
+          aspectRatio: '1 / 1',
+          borderRadius: '6px',
+          border: '1px solid var(--border)',
+          backgroundColor: '#ffffff',
+          objectFit: 'cover',
+        }}
+      />
+      <div style={{
+        fontSize: '12px',
+        fontWeight: 500,
+        color: 'var(--foreground)',
+      }}>
+        {title}
+      </div>
     </div>
   );
 }

@@ -13,7 +13,7 @@ use commands::{
     install_marketplace_skill, is_initialized, list_skills, mark_initialized, open_in_editor,
     read_directory_tree, read_file, refresh_editors, refresh_skills, refresh_tools, save_config,
     scan_existing_skills, set_tool_enabled, sync_marketplace_installed_skills,
-    toggle_marketplace_source, update_custom_tool, update_tool_paths, write_file,
+    submit_feedback, toggle_marketplace_source, update_custom_tool, update_tool_paths, write_file,
 };
 use services::{AppCache, MarketplaceCache};
 
@@ -64,6 +64,7 @@ pub fn run() {
             get_marketplace_sources,
             toggle_marketplace_source,
             check_update,
+            submit_feedback,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

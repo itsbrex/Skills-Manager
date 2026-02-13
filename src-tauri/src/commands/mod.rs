@@ -1,5 +1,6 @@
 pub mod config;
 pub mod editors;
+pub mod feedback;
 pub mod files;
 pub mod marketplace;
 pub mod skills;
@@ -11,6 +12,7 @@ pub use config::{get_config, is_initialized, mark_initialized, save_config};
 pub use editors::{
     detect_available_editors, get_available_editors, open_in_editor, refresh_editors,
 };
+pub use feedback::submit_feedback;
 pub use files::{read_directory_tree, read_file, write_file};
 pub use marketplace::{
     check_marketplace_updates_if_stale, fetch_marketplace_skill_descriptions,

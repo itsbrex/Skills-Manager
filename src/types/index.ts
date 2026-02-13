@@ -163,3 +163,10 @@ export interface UpdateInfo {
   download_url: string;
   release_notes?: string;
 }
+
+export interface FeedbackRequest {
+  user_info: string;
+  content: string;
+  source?: string | null;
+  language?: string | null;
+}
