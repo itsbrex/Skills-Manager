@@ -109,4 +109,70 @@ pub const SUPPORTED_TOOLS: &[ToolDefinition] = &[
         alt_config_dirs: &[],
         cli_command: "trae",
     },
+    ToolDefinition {
+        id: "droid",
+        name: "Droid",
+        config_dir: ".factory",
+        alt_config_dirs: &[".droid"],
+        cli_command: "droid",
+    },
+    ToolDefinition {
+        id: "augment",
+        name: "Augment",
+        config_dir: ".augment",
+        alt_config_dirs: &[],
+        cli_command: "augment",
+    },
+    ToolDefinition {
+        id: "openclaw",
+        name: "OpenClaw",
+        config_dir: ".openclaw",
+        alt_config_dirs: &[],
+        cli_command: "openclaw",
+    },
+    ToolDefinition {
+        id: "cline",
+        name: "Cline",
+        config_dir: ".cline",
+        alt_config_dirs: &[],
+        cli_command: "cline",
+    },
+    ToolDefinition {
+        id: "vercel-skills",
+        name: "Vercel Skills",
+        config_dir: ".agents",
+        alt_config_dirs: &[".vercel", ".vercel-skills"],
+        cli_command: "vercel",
+    },
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::SUPPORTED_TOOLS;
+
+    #[test]
+    fn supported_tools_include_recent_builtins() {
+        let ids: Vec<&str> = SUPPORTED_TOOLS.iter().map(|tool| tool.id).collect();
+
+        assert!(ids.contains(&"droid"));
+        assert!(ids.contains(&"augment"));
+        assert!(ids.contains(&"openclaw"));
+        assert!(ids.contains(&"cline"));
+        assert!(ids.contains(&"vercel-skills"));
+    }
+
+    #[test]
+    fn droid_and_vercel_skills_use_expected_base_directories() {
+        let droid = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "droid")
+            .expect("droid should exist in supported tools");
+        let vercel_skills = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "vercel-skills")
+            .expect("vercel-skills should exist in supported tools");
+
+        assert_eq!(droid.config_dir, ".factory");
+        assert_eq!(vercel_skills.config_dir, ".agents");
+    }
+}

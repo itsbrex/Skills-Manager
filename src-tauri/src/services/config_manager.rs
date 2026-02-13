@@ -257,8 +257,29 @@ impl ConfigManager {
             }
         }
 
-        // Auto-add newly supported tools that aren't in the config yet
+        // Migrate legacy default directories for newly supported tools.
+        // Only rewrite when paths still match the old defaults we generated earlier.
         let home_dir = dirs::home_dir().unwrap_or_default();
+        for (tool_id, old_dir, new_dir) in [
+            ("droid", ".droid", ".factory"),
+            ("vercel-skills", ".vercel", ".agents"),
+        ] {
+            if let Some(tool_config) = config.tools.get_mut(tool_id) {
+                let old_config_path = normalize_path(&home_dir.join(old_dir));
+                let old_skills_path = old_config_path.join("skills");
+                if tool_config.config_path == old_config_path
+                    && tool_config.skills_path == old_skills_path
+                {
+                    let new_config_path = normalize_path(&home_dir.join(new_dir));
+                    tool_config.config_path = new_config_path.clone();
+                    tool_config.skills_path = new_config_path.join("skills");
+                    tool_config.detected = tool_config.config_path.exists();
+                    updated = true;
+                }
+            }
+        }
+
+        // Auto-add newly supported tools that aren't in the config yet
         for tool_def in SUPPORTED_TOOLS {
             if !config.tools.contains_key(tool_def.id) {
                 let tool_dir = normalize_path(&home_dir.join(tool_def.config_dir));
@@ -325,5 +346,62 @@ impl ConfigManager {
 impl Default for ConfigManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ConfigManager;
+    use crate::test_support::with_temp_home;
+    use serde_json::json;
+    use std::fs;
+
+    #[test]
+    fn load_migrates_legacy_droid_and_vercel_default_paths() {
+        with_temp_home(|home_dir| {
+            let config_dir = home_dir.join(".skills-manager");
+            fs::create_dir_all(&config_dir).expect("create config dir");
+            let config_path = config_dir.join("config.json");
+
+            let config_json = json!({
+                "version": "1.1.0",
+                "skills_dir": config_dir.join("skills").to_string_lossy(),
+                "tools": {
+                    "droid": {
+                        "enabled": false,
+                        "detected": false,
+                        "skills_path": home_dir.join(".droid").join("skills").to_string_lossy(),
+                        "config_path": home_dir.join(".droid").to_string_lossy()
+                    },
+                    "vercel-skills": {
+                        "enabled": false,
+                        "detected": false,
+                        "skills_path": home_dir.join(".vercel").join("skills").to_string_lossy(),
+                        "config_path": home_dir.join(".vercel").to_string_lossy()
+                    }
+                },
+                "custom_tools": {},
+                "initialized": true
+            });
+            fs::write(
+                &config_path,
+                serde_json::to_string_pretty(&config_json).expect("serialize config"),
+            )
+            .expect("write config");
+
+            let manager = ConfigManager::new();
+            let loaded = manager.load().expect("load config");
+
+            let droid = loaded.tools.get("droid").expect("droid config");
+            assert_eq!(droid.config_path, home_dir.join(".factory"));
+            assert_eq!(droid.skills_path, home_dir.join(".factory").join("skills"));
+
+            let vercel_skills = loaded.tools.get("vercel-skills").expect("vercel config");
+            assert_eq!(vercel_skills.config_path, home_dir.join(".agents"));
+            assert_eq!(
+                vercel_skills.skills_path,
+                home_dir.join(".agents").join("skills")
+            );
+        });
     }
 }
