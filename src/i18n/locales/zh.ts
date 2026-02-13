@@ -27,7 +27,7 @@ export const zh = {
   nav: {
     skills: "Skills",
     tools: "工 具",
-    marketplace: "市场",
+    marketplace: "市 场",
     settings: "设 置",
     privacyPolicy: "隐私政策",
   },
@@ -100,7 +100,7 @@ export const zh = {
     nameConflict: '名称 "{name}" 已存在',
   },
   marketplace: {
-    title: "市场",
+    title: "市 场",
     searchPlaceholder: "搜索市场中的 Skills...",
     install: "安装",
     installed: "已安装",
@@ -124,7 +124,7 @@ export const zh = {
     openInBrowser: "在浏览器中打开",
   },
   tools: {
-    title: "工具",
+    title: "工 具",
     detected: "已检测",
     detectedStatus: "已检测",
     notDetected: "未检测到",
@@ -167,7 +167,7 @@ export const zh = {
     customDelete: "删除",
   },
   settings: {
-    title: "设置",
+    title: "设 置",
     saveSettings: "保存设置",
     // General
     general: "通用",
