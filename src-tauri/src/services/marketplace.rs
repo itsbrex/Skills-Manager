@@ -15,9 +15,12 @@ use crate::models::{
     MarketplaceSource, SkillFileNode, SourceType,
 };
 
-const CACHE_TTL: Duration = Duration::from_secs(15 * 60);
+const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 const PERSISTED_CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 const GITHUB_API_BASE: &str = "https://api.github.com";
+const MARKETPLACE_API_BASE: &str = "https://skills-market-api.guardssl.info/api/v1";
+const MARKETPLACE_API_PAGE_SIZE: u32 = 20;
+const MAX_MARKETPLACE_CACHED_PAGES: usize = 200;
 const GITHUB_TREE_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
 const SKILL_DESCRIPTION_CACHE_TTL: Duration = Duration::from_secs(30 * 60);
 const PERSISTED_SKILL_DESCRIPTION_CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -59,11 +62,21 @@ static SKILL_DESCRIPTION_CACHE: OnceLock<Mutex<HashMap<String, CachedSkillDescri
     OnceLock::new();
 
 pub struct MarketplaceCache {
-    state: Mutex<Option<CachedMarketplaceState>>,
+    pages: Mutex<HashMap<MarketplacePageCacheKey, CachedMarketplaceState>>,
+    skills_index: Mutex<HashMap<String, MarketplaceSkill>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct PersistedMarketplaceState {
+struct PersistedMarketplaceCacheEntry {
+    page: u32,
+    query: Option<String>,
+    source_filter: Option<Vec<String>>,
+    fetched_at_unix_secs: u64,
+    response: MarketplaceSkillsResponse,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LegacyPersistedMarketplaceState {
     fetched_at_unix_secs: u64,
     skills: Vec<MarketplaceSkill>,
     query: Option<String>,
@@ -71,103 +84,148 @@ struct PersistedMarketplaceState {
     source_filter: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone)]
-struct CachedMarketplaceState {
-    fetched_at: SystemTime,
-    skills: Vec<MarketplaceSkill>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PersistedMarketplaceState {
+    pages: Vec<PersistedMarketplaceCacheEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct MarketplacePageCacheKey {
+    page: u32,
     query: Option<String>,
-    has_more: bool,
     source_filter: Option<Vec<String>>,
 }
 
-impl PersistedMarketplaceState {
-    fn from_cached(state: &CachedMarketplaceState) -> Self {
-        let fetched_at_unix_secs = state
-            .fetched_at
-            .duration_since(UNIX_EPOCH)
-            .ok()
-            .map(|duration| duration.as_secs())
-            .unwrap_or_default();
-        Self {
-            fetched_at_unix_secs,
-            skills: state.skills.clone(),
-            query: state.query.clone(),
-            has_more: state.has_more,
-            source_filter: state.source_filter.clone(),
-        }
-    }
+#[derive(Debug, Clone)]
+struct CachedMarketplaceState {
+    fetched_at: SystemTime,
+    response: MarketplaceSkillsResponse,
+}
 
-    fn into_cached(self) -> CachedMarketplaceState {
-        CachedMarketplaceState {
-            fetched_at: UNIX_EPOCH + Duration::from_secs(self.fetched_at_unix_secs),
-            skills: self.skills,
-            query: self.query,
-            has_more: self.has_more,
-            source_filter: self.source_filter,
+fn build_page_cache_key(
+    page: u32,
+    query: &Option<String>,
+    source_filter: &Option<Vec<String>>,
+) -> MarketplacePageCacheKey {
+    MarketplacePageCacheKey {
+        page: page.max(1),
+        query: query.clone(),
+        source_filter: source_filter.clone(),
+    }
+}
+
+fn build_marketplace_skill_index(
+    pages: &HashMap<MarketplacePageCacheKey, CachedMarketplaceState>,
+) -> HashMap<String, MarketplaceSkill> {
+    let mut index = HashMap::new();
+    for state in pages.values() {
+        for skill in &state.response.skills {
+            index.insert(skill.id.clone(), skill.clone());
         }
     }
+    index
+}
+
+fn sorted_marketplace_page_snapshot(
+    pages: &HashMap<MarketplacePageCacheKey, CachedMarketplaceState>,
+) -> Vec<(MarketplacePageCacheKey, CachedMarketplaceState)> {
+    let mut snapshot: Vec<(MarketplacePageCacheKey, CachedMarketplaceState)> = pages
+        .iter()
+        .map(|(key, state)| (key.clone(), state.clone()))
+        .collect();
+    snapshot.sort_by(|a, b| b.1.fetched_at.cmp(&a.1.fetched_at));
+    snapshot
 }
 
 impl Default for MarketplaceCache {
     fn default() -> Self {
+        let pages = load_persisted_marketplace_cache_state();
+        let skills_index = build_marketplace_skill_index(&pages);
         Self {
-            state: Mutex::new(None),
+            pages: Mutex::new(pages),
+            skills_index: Mutex::new(skills_index),
         }
     }
 }
 
 impl MarketplaceCache {
-    fn get_fresh_from_memory(
+    fn rebuild_skill_index_and_persist(
         &self,
-        query: &Option<String>,
-        source_filter: &Option<Vec<String>>,
-    ) -> Option<MarketplaceSkillsResponse> {
-        let guard = self.state.lock().ok()?;
-        let cached = guard.as_ref()?;
-        if cached.query != *query {
-            return None;
+        pages: &HashMap<MarketplacePageCacheKey, CachedMarketplaceState>,
+    ) {
+        if let Ok(mut guard) = self.skills_index.lock() {
+            *guard = build_marketplace_skill_index(pages);
         }
-        if cached.source_filter != *source_filter {
-            return None;
+        persist_marketplace_cache_state(pages);
+    }
+
+    fn prune_expired_pages(pages: &mut HashMap<MarketplacePageCacheKey, CachedMarketplaceState>) {
+        let expired: Vec<MarketplacePageCacheKey> = pages
+            .iter()
+            .filter_map(|(key, state)| {
+                state
+                    .fetched_at
+                    .elapsed()
+                    .ok()
+                    .filter(|elapsed| *elapsed > CACHE_TTL)
+                    .map(|_| key.clone())
+            })
+            .collect();
+        for key in expired {
+            pages.remove(&key);
         }
-        if cached.fetched_at.elapsed().ok()? > CACHE_TTL {
-            return None;
-        }
-        Some(MarketplaceSkillsResponse {
-            skills: cached.skills.clone(),
-            has_more: cached.has_more,
-        })
     }
 
     pub fn get_fresh_with_meta(
         &self,
+        page: u32,
         query: &Option<String>,
         source_filter: &Option<Vec<String>>,
     ) -> Option<MarketplaceSkillsResponse> {
-        if let Some(cached) = self.get_fresh_from_memory(query, source_filter) {
-            return Some(cached);
-        }
+        let cache_key = build_page_cache_key(page, query, source_filter);
+        let mut guard = self.pages.lock().ok()?;
+        Self::prune_expired_pages(&mut guard);
+        let response = guard.get(&cache_key).map(|state| state.response.clone());
+        let snapshot = guard.clone();
+        drop(guard);
+        self.rebuild_skill_index_and_persist(&snapshot);
+        response
+    }
 
-        if query.is_some() || source_filter.is_some() {
-            return None;
-        }
+    pub fn set_page(
+        &self,
+        page: u32,
+        query: Option<String>,
+        source_filter: Option<Vec<String>>,
+        response: MarketplaceSkillsResponse,
+    ) {
+        let cache_key = build_page_cache_key(page, &query, &source_filter);
+        let snapshot = {
+            let mut guard = match self.pages.lock() {
+                Ok(guard) => guard,
+                Err(_) => return,
+            };
+            Self::prune_expired_pages(&mut guard);
+            guard.insert(
+                cache_key,
+                CachedMarketplaceState {
+                    fetched_at: SystemTime::now(),
+                    response,
+                },
+            );
 
-        let persisted = load_persisted_marketplace_cache_state()?;
-        if persisted.query != *query || persisted.source_filter != *source_filter {
-            return None;
-        }
-        if persisted.fetched_at.elapsed().ok()? > PERSISTED_CACHE_TTL {
-            return None;
-        }
-
-        let response = MarketplaceSkillsResponse {
-            skills: persisted.skills.clone(),
-            has_more: persisted.has_more,
+            let mut ordered = sorted_marketplace_page_snapshot(&guard);
+            if ordered.len() > MAX_MARKETPLACE_CACHED_PAGES {
+                ordered.truncate(MAX_MARKETPLACE_CACHED_PAGES);
+                guard.clear();
+                for (key, state) in ordered {
+                    guard.insert(key, state);
+                }
+            }
+            guard.clone()
         };
-        if let Ok(mut guard) = self.state.lock() {
-            *guard = Some(persisted);
-        }
-        Some(response)
+
+        self.rebuild_skill_index_and_persist(&snapshot);
     }
 
     pub fn set(
@@ -177,52 +235,36 @@ impl MarketplaceCache {
         has_more: bool,
         source_filter: Option<Vec<String>>,
     ) {
-        let state = CachedMarketplaceState {
-            fetched_at: SystemTime::now(),
-            skills,
+        self.set_page(
+            1,
             query,
-            has_more,
             source_filter,
-        };
-
-        if let Ok(mut guard) = self.state.lock() {
-            *guard = Some(state.clone());
-        }
-
-        if state.query.is_none() && state.source_filter.is_none() {
-            persist_marketplace_cache_state(&state);
-        }
+            MarketplaceSkillsResponse { skills, has_more },
+        );
     }
 
     pub fn invalidate(&self) {
-        if let Ok(mut guard) = self.state.lock() {
-            *guard = None;
+        if let Ok(mut guard) = self.pages.lock() {
+            guard.clear();
+        }
+        if let Ok(mut guard) = self.skills_index.lock() {
+            guard.clear();
         }
         remove_persisted_marketplace_cache_state();
     }
 
     pub fn get_cached_skill(&self, skill_id: &str) -> Option<MarketplaceSkill> {
-        let guard = self.state.lock().ok()?;
-        let cached = guard.as_ref()?;
-        cached.skills.iter().find(|s| s.id == skill_id).cloned()
+        let guard = self.skills_index.lock().ok()?;
+        guard.get(skill_id).cloned()
     }
 
     pub fn get_any(&self) -> Option<Vec<MarketplaceSkill>> {
-        if let Some(skills) = self
-            .state
-            .lock()
-            .ok()
-            .and_then(|guard| guard.as_ref().map(|cached| cached.skills.clone()))
-        {
-            return Some(skills);
+        let guard = self.skills_index.lock().ok()?;
+        if guard.is_empty() {
+            None
+        } else {
+            Some(guard.values().cloned().collect())
         }
-
-        let persisted = load_persisted_marketplace_cache_state()?;
-        let skills = persisted.skills.clone();
-        if let Ok(mut guard) = self.state.lock() {
-            *guard = Some(persisted);
-        }
-        Some(skills)
     }
 }
 
@@ -235,14 +277,76 @@ fn persisted_marketplace_cache_path() -> Option<PathBuf> {
     )
 }
 
-fn load_persisted_marketplace_cache_state() -> Option<CachedMarketplaceState> {
-    let path = persisted_marketplace_cache_path()?;
-    let content = fs::read_to_string(path).ok()?;
-    let persisted: PersistedMarketplaceState = serde_json::from_str(&content).ok()?;
-    Some(persisted.into_cached())
+fn load_persisted_marketplace_cache_state(
+) -> HashMap<MarketplacePageCacheKey, CachedMarketplaceState> {
+    let Some(path) = persisted_marketplace_cache_path() else {
+        return HashMap::new();
+    };
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(_) => return HashMap::new(),
+    };
+    let (persisted, migrated_from_legacy): (PersistedMarketplaceState, bool) =
+        match serde_json::from_str(&content) {
+            Ok(persisted) => (persisted, false),
+            Err(_) => {
+                let legacy: LegacyPersistedMarketplaceState = match serde_json::from_str(&content) {
+                    Ok(legacy) => legacy,
+                    Err(_) => return HashMap::new(),
+                };
+                (
+                    PersistedMarketplaceState {
+                        pages: vec![PersistedMarketplaceCacheEntry {
+                            page: 1,
+                            query: legacy.query,
+                            source_filter: legacy.source_filter,
+                            fetched_at_unix_secs: legacy.fetched_at_unix_secs,
+                            response: MarketplaceSkillsResponse {
+                                skills: legacy.skills,
+                                has_more: legacy.has_more,
+                            },
+                        }],
+                    },
+                    true,
+                )
+            }
+        };
+
+    let now = SystemTime::now();
+    let pages: HashMap<MarketplacePageCacheKey, CachedMarketplaceState> = persisted
+        .pages
+        .into_iter()
+        .filter_map(|entry| {
+            let fetched_at = UNIX_EPOCH + Duration::from_secs(entry.fetched_at_unix_secs);
+            let elapsed = now.duration_since(fetched_at).ok()?;
+            if elapsed > PERSISTED_CACHE_TTL {
+                return None;
+            }
+
+            Some((
+                MarketplacePageCacheKey {
+                    page: entry.page.max(1),
+                    query: entry.query,
+                    source_filter: entry.source_filter,
+                },
+                CachedMarketplaceState {
+                    fetched_at,
+                    response: entry.response,
+                },
+            ))
+        })
+        .collect();
+
+    if migrated_from_legacy && !pages.is_empty() {
+        persist_marketplace_cache_state(&pages);
+    }
+
+    pages
 }
 
-fn persist_marketplace_cache_state(state: &CachedMarketplaceState) {
+fn persist_marketplace_cache_state(
+    pages: &HashMap<MarketplacePageCacheKey, CachedMarketplaceState>,
+) {
     let Some(path) = persisted_marketplace_cache_path() else {
         return;
     };
@@ -251,7 +355,24 @@ fn persist_marketplace_cache_state(state: &CachedMarketplaceState) {
             return;
         }
     }
-    let persisted = PersistedMarketplaceState::from_cached(state);
+    let persisted = PersistedMarketplaceState {
+        pages: sorted_marketplace_page_snapshot(pages)
+            .into_iter()
+            .take(MAX_MARKETPLACE_CACHED_PAGES)
+            .map(|(key, state)| PersistedMarketplaceCacheEntry {
+                page: key.page,
+                query: key.query,
+                source_filter: key.source_filter,
+                fetched_at_unix_secs: state
+                    .fetched_at
+                    .duration_since(UNIX_EPOCH)
+                    .ok()
+                    .map(|duration| duration.as_secs())
+                    .unwrap_or_default(),
+                response: state.response,
+            })
+            .collect(),
+    };
     if let Ok(content) = serde_json::to_string(&persisted) {
         let _ = fs::write(path, content);
     }
@@ -266,6 +387,51 @@ fn remove_persisted_marketplace_cache_state() {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct MarketplaceApiEnvelope<T> {
+    data: T,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MarketplaceApiSourceRecord {
+    id: String,
+    name: String,
+    #[serde(rename = "type")]
+    source_type: String,
+    base_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MarketplaceApiSkillSource {
+    id: String,
+    name: String,
+    #[serde(rename = "type")]
+    source_type: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MarketplaceApiSkillRecord {
+    id: String,
+    source_id: String,
+    slug: String,
+    name: String,
+    summary: String,
+    install_url: Option<String>,
+    created_at: u64,
+    source: MarketplaceApiSkillSource,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MarketplaceApiSkillsPage {
+    items: Vec<MarketplaceApiSkillRecord>,
+    page: u32,
+    total_pages: u32,
+}
+
 pub struct MarketplaceService;
 
 fn normalize_marketplace_query(query: Option<&str>) -> Option<String> {
@@ -277,6 +443,11 @@ fn normalize_marketplace_query(query: Option<&str>) -> Option<String> {
 
 fn marketplace_skill_matches_query(skill: &MarketplaceSkill, query: &str) -> bool {
     skill.name.to_lowercase().contains(query)
+        || skill
+            .slug
+            .as_ref()
+            .map(|slug| slug.to_lowercase().contains(query))
+            .unwrap_or(false)
         || skill
             .description
             .as_ref()
@@ -312,59 +483,214 @@ impl MarketplaceService {
         filter_marketplace_skills_by_query(skills, query)
     }
 
+    #[allow(dead_code)]
     pub async fn fetch_marketplace_skills(
         sources: &[MarketplaceSource],
         skills_dir: &Path,
         query: Option<String>,
-        github_token: Option<&str>,
+        _github_token: Option<&str>,
     ) -> Result<Vec<MarketplaceSkill>, String> {
         let result =
-            Self::fetch_marketplace_skills_page(sources, skills_dir, query, github_token, 1)
-                .await?;
+            Self::fetch_marketplace_skills_page(sources, skills_dir, query, None, 1, None).await?;
         Ok(result.skills)
+    }
+
+    pub async fn fetch_marketplace_sources() -> Result<Vec<MarketplaceSource>, String> {
+        let client = Client::new();
+        let response = client
+            .get(format!("{}/sources", MARKETPLACE_API_BASE))
+            .send()
+            .await
+            .map_err(|e| format!("技能市场来源请求失败: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(format!("技能市场来源请求失败: HTTP {}", response.status()));
+        }
+
+        let payload = response
+            .json::<MarketplaceApiEnvelope<Vec<MarketplaceApiSourceRecord>>>()
+            .await
+            .map_err(|e| format!("技能市场来源响应解析失败: {}", e))?;
+
+        Ok(payload
+            .data
+            .into_iter()
+            .map(|source| MarketplaceSource {
+                id: source.id,
+                name: source.name,
+                url: source
+                    .base_url
+                    .unwrap_or_else(|| "https://skills-market-api.guardssl.info".to_string()),
+                source_type: parse_marketplace_source_type(&source.source_type),
+                enabled: true,
+                builtin: true,
+                api_key: None,
+            })
+            .collect())
     }
 
     pub async fn fetch_marketplace_skills_page(
         sources: &[MarketplaceSource],
         skills_dir: &Path,
         query: Option<String>,
-        github_token: Option<&str>,
+        _github_token: Option<&str>,
         page: u32,
+        source_filter: Option<Vec<String>>,
     ) -> Result<MarketplaceSkillsResponse, String> {
         let page = page.max(1);
-        let mut skills = Vec::new();
-        let mut errors: Vec<String> = Vec::new();
-        let has_more = false;
+        let enabled_source_ids: HashSet<String> = sources
+            .iter()
+            .filter(|source| source.enabled)
+            .map(|source| source.id.clone())
+            .collect();
 
-        for source in sources.iter().filter(|s| s.enabled) {
-            if source.source_type != SourceType::GithubRepo {
-                continue;
-            }
-            if page > 1 {
-                continue;
-            }
-
-            match Self::fetch_github_repo(source, github_token).await {
-                Ok(mut fetched) => skills.append(&mut fetched),
-                Err(err) => {
-                    errors.push(format!("{}: {}", source.name, err));
-                }
-            }
+        if enabled_source_ids.is_empty() {
+            return Ok(MarketplaceSkillsResponse {
+                skills: Vec::new(),
+                has_more: false,
+            });
         }
 
-        for skill in skills.iter_mut() {
+        let requested_source_ids = source_filter.unwrap_or_default();
+        let has_explicit_source_filter = !requested_source_ids.is_empty();
+        let mut allowed_source_ids: Vec<String> = if has_explicit_source_filter {
+            requested_source_ids
+                .into_iter()
+                .filter(|source_id| enabled_source_ids.contains(source_id))
+                .collect()
+        } else {
+            enabled_source_ids.iter().cloned().collect()
+        };
+        allowed_source_ids.sort();
+        allowed_source_ids.dedup();
+
+        if allowed_source_ids.is_empty() {
+            return Ok(MarketplaceSkillsResponse {
+                skills: Vec::new(),
+                has_more: false,
+            });
+        }
+
+        let all_sources_enabled = sources.iter().all(|source| source.enabled);
+        let mut response = if allowed_source_ids.len() == 1 {
+            Self::fetch_marketplace_api_skills_page(
+                query.as_deref(),
+                Some(allowed_source_ids[0].as_str()),
+                page,
+            )
+            .await?
+        } else if !has_explicit_source_filter && all_sources_enabled {
+            Self::fetch_marketplace_api_skills_page(query.as_deref(), None, page).await?
+        } else {
+            let allowed_source_set: HashSet<String> = allowed_source_ids.into_iter().collect();
+            Self::fetch_marketplace_api_skills_page_for_sources(
+                query.as_deref(),
+                &allowed_source_set,
+                page,
+            )
+            .await?
+        };
+
+        for skill in response.skills.iter_mut() {
             skill.install_status = Self::check_install_status(skill, skills_dir);
         }
 
-        if skills.is_empty() && !errors.is_empty() {
-            return Err(errors.join("; "));
+        Ok(response)
+    }
+
+    async fn fetch_marketplace_api_skills_page(
+        query: Option<&str>,
+        source_id: Option<&str>,
+        page: u32,
+    ) -> Result<MarketplaceSkillsResponse, String> {
+        let mut params: Vec<(&str, String)> = vec![
+            ("page", page.max(1).to_string()),
+            ("pageSize", MARKETPLACE_API_PAGE_SIZE.to_string()),
+        ];
+
+        if let Some(value) = query.map(str::trim).filter(|value| !value.is_empty()) {
+            params.push(("search", value.to_string()));
+        }
+        if let Some(value) = source_id.map(str::trim).filter(|value| !value.is_empty()) {
+            params.push(("sourceId", value.to_string()));
         }
 
-        let skills = Self::filter_marketplace_skills_by_query(skills, query.as_deref());
+        let client = Client::new();
+        let response = client
+            .get(format!("{}/skills", MARKETPLACE_API_BASE))
+            .query(&params)
+            .send()
+            .await
+            .map_err(|e| format!("技能市场请求失败: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(format!("技能市场请求失败: HTTP {}", response.status()));
+        }
+
+        let payload = response
+            .json::<MarketplaceApiEnvelope<MarketplaceApiSkillsPage>>()
+            .await
+            .map_err(|e| format!("技能市场响应解析失败: {}", e))?;
+
+        let has_more = payload.data.page < payload.data.total_pages;
+        let skills = payload
+            .data
+            .items
+            .into_iter()
+            .map(map_marketplace_api_skill_record)
+            .collect();
 
         Ok(MarketplaceSkillsResponse { skills, has_more })
     }
 
+    async fn fetch_marketplace_api_skills_page_for_sources(
+        query: Option<&str>,
+        allowed_source_ids: &HashSet<String>,
+        page: u32,
+    ) -> Result<MarketplaceSkillsResponse, String> {
+        let page_size = MARKETPLACE_API_PAGE_SIZE as usize;
+        let target_page = page.max(1) as usize;
+        let target_start = (target_page - 1) * page_size;
+        let target_end = target_start + page_size;
+
+        let mut filtered_seen: usize = 0;
+        let mut logical_page_items: Vec<MarketplaceSkill> = Vec::with_capacity(page_size);
+        let mut remote_page = 1u32;
+        let mut has_more = false;
+
+        loop {
+            let remote_response =
+                Self::fetch_marketplace_api_skills_page(query, None, remote_page).await?;
+            remote_page += 1;
+
+            for skill in remote_response
+                .skills
+                .into_iter()
+                .filter(|skill| allowed_source_ids.contains(&skill.source_id))
+            {
+                if filtered_seen >= target_start && logical_page_items.len() < page_size {
+                    logical_page_items.push(skill);
+                }
+
+                filtered_seen += 1;
+                if filtered_seen > target_end {
+                    has_more = true;
+                    break;
+                }
+            }
+
+            if has_more || !remote_response.has_more {
+                break;
+            }
+        }
+
+        Ok(MarketplaceSkillsResponse {
+            skills: logical_page_items,
+            has_more,
+        })
+    }
+
+    #[allow(dead_code)]
     pub async fn fetch_github_repo(
         source: &MarketplaceSource,
         github_token: Option<&str>,
@@ -408,11 +734,14 @@ impl MarketplaceService {
                 .and_then(|tree| compute_skill_revision_from_tree_entries(&tree.tree, &skill_path));
             skills.push(MarketplaceSkill {
                 id: make_marketplace_skill_id(&source.id, &skill_path),
+                slug: Some(skill_path.clone()),
                 name: item.name.clone(),
                 description: None,
                 author: Some(owner.clone()),
                 source_id: source.id.clone(),
                 source_name: source.name.clone(),
+                install_url: None,
+                created_at: None,
                 repo_url: repo_url.clone(),
                 skill_path: skill_path_opt.clone(),
                 external_url: build_marketplace_external_url(
@@ -436,25 +765,38 @@ impl MarketplaceService {
     ) -> Result<SkillFileNode, String> {
         let (owner, repo) = parse_github_repo_url(repo_url)?;
         let client = github_client()?;
-        if let Some(tree) =
-            fetch_skill_files_from_tree_api(&client, &owner, &repo, skill_path, github_token)
-                .await?
-        {
-            return Ok(tree);
-        }
-        match build_github_tree(&client, &owner, &repo, skill_path, github_token).await {
-            Ok(tree) => Ok(tree),
-            Err(err) => {
-                if err.contains("GitHub API 请求受限") {
-                    if let Some(tree) =
-                        fetch_skill_files_from_raw(&owner, &repo, skill_path).await?
-                    {
-                        return Ok(tree);
+        let candidates = build_skill_path_candidates(skill_path);
+        let mut last_not_found_error: Option<String> = None;
+
+        for candidate in candidates {
+            if let Some(tree) =
+                fetch_skill_files_from_tree_api(&client, &owner, &repo, &candidate, github_token)
+                    .await?
+            {
+                return Ok(tree);
+            }
+
+            match build_github_tree(&client, &owner, &repo, &candidate, github_token).await {
+                Ok(tree) => return Ok(tree),
+                Err(err) => {
+                    if err.contains("GitHub API 请求受限") {
+                        if let Some(tree) =
+                            fetch_skill_files_from_raw(&owner, &repo, &candidate).await?
+                        {
+                            return Ok(tree);
+                        }
+                        continue;
                     }
+                    if is_github_not_found_error(&err) {
+                        last_not_found_error = Some(err);
+                        continue;
+                    }
+                    return Err(err);
                 }
-                Err(err)
             }
         }
+
+        Err(last_not_found_error.unwrap_or_else(|| "Skill 文件不存在或路径无效".to_string()))
     }
 
     pub async fn fetch_skill_file_content(download_url: &str) -> Result<String, String> {
@@ -510,23 +852,29 @@ impl MarketplaceService {
     ) -> Option<String> {
         let (owner, repo) = parse_github_repo_url(repo_url).ok()?;
         let client = github_client().ok()?;
+        for candidate in build_skill_path_candidates(skill_path) {
+            let mut download_url = None;
+            if let Ok(Some(tree)) =
+                fetch_skill_files_from_tree_api(&client, &owner, &repo, &candidate, github_token)
+                    .await
+            {
+                download_url = find_manifest_download_url_in_tree(&tree);
+            }
 
-        let mut download_url = None;
-        if let Ok(Some(tree)) =
-            fetch_skill_files_from_tree_api(&client, &owner, &repo, skill_path, github_token).await
-        {
-            download_url = find_manifest_download_url_in_tree(&tree);
+            if download_url.is_none() {
+                download_url =
+                    find_manifest_download_url_from_raw(&client, &owner, &repo, &candidate).await;
+            }
+
+            if let Some(url) = download_url {
+                let markdown = Self::fetch_skill_file_content(url.as_str()).await.ok()?;
+                if let Some(description) = extract_skill_description_from_markdown(&markdown) {
+                    return Some(description);
+                }
+            }
         }
 
-        if download_url.is_none() {
-            download_url =
-                find_manifest_download_url_from_raw(&client, &owner, &repo, skill_path).await;
-        }
-
-        let markdown = Self::fetch_skill_file_content(download_url.as_deref()?)
-            .await
-            .ok()?;
-        extract_skill_description_from_markdown(&markdown)
+        None
     }
 
     pub async fn install_skill(
@@ -534,19 +882,34 @@ impl MarketplaceService {
         skills_dir: &Path,
         github_token: Option<&str>,
     ) -> Result<InstallResult, String> {
-        let repo_url = skill
-            .repo_url
-            .as_deref()
-            .ok_or_else(|| "Skill 缺少仓库地址，暂不支持安装".to_string())?;
+        let repo_url = skill.repo_url.as_deref().ok_or_else(|| {
+            skill
+                .install_url
+                .as_ref()
+                .map(|url| {
+                    format!(
+                        "当前 Skill 暂不支持自动安装，请通过安装链接手动安装：{}",
+                        url
+                    )
+                })
+                .unwrap_or_else(|| "Skill 缺少仓库地址，暂不支持安装".to_string())
+        })?;
 
         let skill_path = skill.skill_path.clone().unwrap_or_default();
-        let install_dir = skills_dir.join(&skill.id);
+        let install_dir = preferred_marketplace_install_dir(skills_dir, skill);
+        let legacy_install_dir = legacy_marketplace_install_dir(skills_dir, skill);
 
         if install_dir.exists() {
-            if !is_same_marketplace_skill(&install_dir, &skill.source_id)? {
+            if !is_same_marketplace_skill(&install_dir, skill)? {
                 return Err("本地已存在同名 Skill（非市场来源），请重命名".to_string());
             }
             fs::remove_dir_all(&install_dir).map_err(|e| format!("无法覆盖已有 Skill: {}", e))?;
+        }
+        if let Some(legacy_dir) = legacy_install_dir {
+            if legacy_dir.exists() && is_same_marketplace_skill(&legacy_dir, skill)? {
+                fs::remove_dir_all(&legacy_dir)
+                    .map_err(|e| format!("无法迁移旧版 Skill 目录: {}", e))?;
+            }
         }
 
         if !skills_dir.exists() {
@@ -556,7 +919,13 @@ impl MarketplaceService {
         let tree = Self::fetch_skill_files(repo_url, &skill_path, github_token).await?;
         let mut files = Vec::new();
         collect_file_nodes(&tree, &mut files);
-        let remote_revision = compute_skill_revision_from_file_nodes(&files);
+        let remote_revision = skill
+            .remote_revision
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_string())
+            .or_else(|| compute_skill_revision_from_file_nodes(&files));
 
         let client = Client::new();
         for file in files {
@@ -598,21 +967,9 @@ impl MarketplaceService {
     }
 
     pub fn check_install_status(skill: &MarketplaceSkill, skills_dir: &Path) -> InstallStatus {
-        let dir = skills_dir.join(&skill.id);
-        if !dir.exists() {
+        let Some((_, meta)) = find_installed_marketplace_skill(skills_dir, skill) else {
             return InstallStatus::NotInstalled;
-        }
-
-        let meta = match read_marketplace_meta(&dir) {
-            Ok(meta) => meta,
-            Err(_) => return InstallStatus::NotInstalled,
         };
-
-        let is_marketplace_skill = meta.source.as_deref() == Some("marketplace")
-            && meta.marketplace_source_id.as_deref() == Some(skill.source_id.as_str());
-        if !is_marketplace_skill {
-            return InstallStatus::NotInstalled;
-        }
 
         let remote_revision = skill
             .remote_revision
@@ -797,6 +1154,7 @@ fn parse_github_repo_url(url: &str) -> Result<(String, String), String> {
     Ok((owner, repo))
 }
 
+#[allow(dead_code)]
 async fn fetch_github_root_skill_dirs_from_tree(
     client: &Client,
     owner: &str,
@@ -1074,6 +1432,7 @@ fn sort_skill_tree_children(node: &mut SkillFileNode) {
     }
 }
 
+#[allow(dead_code)]
 fn should_include_github_root_dir(
     item: &GitHubContent,
     hinted_skill_dirs: Option<&HashSet<String>>,
@@ -1090,6 +1449,7 @@ fn should_include_github_root_dir(
     true
 }
 
+#[allow(dead_code)]
 fn extract_root_skill_dirs_from_tree_entries(entries: &[GitHubTreeEntry]) -> HashSet<String> {
     let mut dirs = HashSet::new();
     for entry in entries {
@@ -1119,6 +1479,7 @@ fn extract_root_skill_dirs_from_tree_entries(entries: &[GitHubTreeEntry]) -> Has
     dirs
 }
 
+#[allow(dead_code)]
 fn is_skill_manifest_file(file_name: &str) -> bool {
     matches!(
         file_name.to_ascii_lowercase().as_str(),
@@ -1126,6 +1487,7 @@ fn is_skill_manifest_file(file_name: &str) -> bool {
     )
 }
 
+#[allow(dead_code)]
 async fn fetch_github_root_dirs_from_html(
     client: &Client,
     owner: &str,
@@ -1163,6 +1525,7 @@ async fn fetch_github_root_dirs_from_html(
     Ok(dirs)
 }
 
+#[allow(dead_code)]
 fn extract_root_dirs_from_html(
     html: &str,
     owner: &str,
@@ -1502,6 +1865,30 @@ fn repo_path_name(path: &str) -> String {
         .to_string()
 }
 
+fn build_skill_path_candidates(skill_path: &str) -> Vec<String> {
+    let normalized = skill_path.trim_matches('/');
+    if normalized.is_empty() {
+        return vec![String::new()];
+    }
+
+    let mut candidates = vec![normalized.to_string()];
+    if !normalized.contains('/') {
+        for candidate in [
+            format!("skills/{}", normalized),
+            format!(".claude/skills/{}", normalized),
+        ] {
+            if !candidates.contains(&candidate) {
+                candidates.push(candidate);
+            }
+        }
+    }
+    candidates
+}
+
+fn is_github_not_found_error(error_message: &str) -> bool {
+    error_message.contains("HTTP 404")
+}
+
 fn build_github_tree<'a>(
     client: &'a Client,
     owner: &'a str,
@@ -1571,6 +1958,216 @@ fn with_github_auth(
     }
 }
 
+fn parse_marketplace_source_type(value: &str) -> SourceType {
+    match value.trim().to_lowercase().as_str() {
+        "github_repo" => SourceType::GithubRepo,
+        "api" => SourceType::Api,
+        "crawler" => SourceType::Crawler,
+        "manual" => SourceType::Manual,
+        _ => SourceType::Unknown,
+    }
+}
+
+fn map_marketplace_api_skill_record(record: MarketplaceApiSkillRecord) -> MarketplaceSkill {
+    let install_url = record
+        .install_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string());
+
+    let (repo_url, skill_path) =
+        derive_github_repo_and_skill_path(install_url.as_deref(), &record.slug);
+    let external_url = build_marketplace_external_url(
+        install_url.as_deref(),
+        repo_url.as_deref(),
+        skill_path.as_deref(),
+    );
+    let source_id = if record.source.id.trim().is_empty() {
+        record.source_id.clone()
+    } else {
+        record.source.id.clone()
+    };
+    let source_name = if record.source.name.trim().is_empty() {
+        source_id.clone()
+    } else {
+        record.source.name.clone()
+    };
+    let description = record.summary.trim();
+    let author = record
+        .slug
+        .split('/')
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string());
+    let _source_type = parse_marketplace_source_type(&record.source.source_type);
+
+    MarketplaceSkill {
+        id: record.id,
+        slug: Some(record.slug.clone()),
+        name: record.name,
+        description: if description.is_empty() {
+            None
+        } else {
+            Some(description.to_string())
+        },
+        author,
+        source_id,
+        source_name,
+        install_url: install_url.clone(),
+        created_at: Some(record.created_at),
+        repo_url,
+        skill_path,
+        external_url,
+        remote_revision: Some(build_marketplace_api_revision(
+            record.created_at,
+            install_url.as_deref(),
+            &record.slug,
+        )),
+        tags: Vec::new(),
+        install_status: InstallStatus::NotInstalled,
+    }
+}
+
+fn build_marketplace_api_revision(
+    created_at: u64,
+    install_url: Option<&str>,
+    slug: &str,
+) -> String {
+    let fingerprint = format!(
+        "{}|{}|{}",
+        created_at,
+        slug.trim(),
+        install_url.map(str::trim).unwrap_or_default()
+    );
+
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in fingerprint.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("market-api-fnv64:{hash:016x}")
+}
+
+fn derive_github_repo_and_skill_path(
+    install_url: Option<&str>,
+    slug: &str,
+) -> (Option<String>, Option<String>) {
+    let slug_derived = parse_github_repo_and_path_from_slug(slug);
+
+    if let Some(url) = install_url {
+        if let Some((repo_url, path)) = parse_github_repo_and_path_from_url(url) {
+            if path.is_none() {
+                if let Some((slug_repo_url, slug_path)) = slug_derived.as_ref() {
+                    if slug_path.is_some() && same_github_repo(repo_url.as_str(), slug_repo_url) {
+                        return (Some(repo_url), slug_path.clone());
+                    }
+                }
+            }
+            return (Some(repo_url), path);
+        }
+    }
+
+    slug_derived
+        .map(|(repo_url, path)| (Some(repo_url), path))
+        .unwrap_or((None, None))
+}
+
+fn same_github_repo(left: &str, right: &str) -> bool {
+    let left = match parse_github_repo_url(left) {
+        Ok((owner, repo)) => format!(
+            "{}/{}",
+            owner.trim().to_lowercase(),
+            repo.trim().to_lowercase()
+        ),
+        Err(_) => return false,
+    };
+    let right = match parse_github_repo_url(right) {
+        Ok((owner, repo)) => format!(
+            "{}/{}",
+            owner.trim().to_lowercase(),
+            repo.trim().to_lowercase()
+        ),
+        Err(_) => return false,
+    };
+    left == right
+}
+
+fn parse_github_repo_and_path_from_url(url: &str) -> Option<(String, Option<String>)> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() || !trimmed.contains("github.com/") {
+        return None;
+    }
+
+    let without_query = trimmed
+        .split('#')
+        .next()?
+        .split('?')
+        .next()?
+        .trim_end_matches('/');
+    let marker = "github.com/";
+    let start = without_query.find(marker)? + marker.len();
+    let remainder = &without_query[start..];
+    let segments: Vec<&str> = remainder
+        .split('/')
+        .filter(|value| !value.is_empty())
+        .collect();
+    if segments.len() < 2 {
+        return None;
+    }
+
+    let owner = segments[0];
+    let repo = segments[1].trim_end_matches(".git");
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+
+    let repo_url = format!("https://github.com/{}/{}", owner, repo);
+    let path = if segments.len() > 4 && matches!(segments[2], "tree" | "blob") {
+        let path_value = segments[4..].join("/");
+        if path_value.trim().is_empty() {
+            None
+        } else {
+            Some(path_value)
+        }
+    } else {
+        None
+    };
+
+    Some((repo_url, path))
+}
+
+fn parse_github_repo_and_path_from_slug(slug: &str) -> Option<(String, Option<String>)> {
+    let segments: Vec<&str> = slug
+        .split('/')
+        .filter(|value| !value.trim().is_empty())
+        .collect();
+    if segments.len() < 2 {
+        return None;
+    }
+
+    let owner = segments[0].trim();
+    let repo = segments[1].trim();
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+
+    let repo_url = format!("https://github.com/{}/{}", owner, repo);
+    let path = if segments.len() > 2 {
+        let value = segments[2..].join("/");
+        if value.trim().is_empty() {
+            None
+        } else {
+            Some(value)
+        }
+    } else {
+        None
+    };
+
+    Some((repo_url, path))
+}
+
 fn build_marketplace_external_url(
     raw_url: Option<&str>,
     repo_url: Option<&str>,
@@ -1599,6 +2196,7 @@ fn build_marketplace_external_url(
     Some(base)
 }
 
+#[allow(dead_code)]
 fn make_marketplace_skill_id(source_id: &str, raw: &str) -> String {
     let combined = format!("{}-{}", source_id, raw);
     combined
@@ -1622,6 +2220,7 @@ fn collect_file_nodes(node: &SkillFileNode, files: &mut Vec<SkillFileNode>) {
     }
 }
 
+#[allow(dead_code)]
 fn compute_skill_revision_from_tree_entries(
     entries: &[GitHubTreeEntry],
     skill_path: &str,
@@ -1718,8 +2317,11 @@ fn write_marketplace_meta(
         "source": "marketplace",
         "marketplace_source_id": skill.source_id,
         "marketplace_skill_id": skill.id,
+        "marketplace_skill_slug": skill.slug,
         "repo_url": skill.repo_url,
         "skill_path": skill.skill_path,
+        "install_url": skill.install_url,
+        "created_at": skill.created_at,
         "author": skill.author,
         "tags": skill.tags,
         "remote_revision": remote_revision,
@@ -1735,6 +2337,8 @@ fn write_marketplace_meta(
 struct LocalMarketplaceMeta {
     source: Option<String>,
     marketplace_source_id: Option<String>,
+    marketplace_skill_id: Option<String>,
+    marketplace_skill_slug: Option<String>,
     remote_revision: Option<String>,
 }
 
@@ -1744,6 +2348,8 @@ fn read_marketplace_meta(dir: &Path) -> Result<LocalMarketplaceMeta, String> {
         return Ok(LocalMarketplaceMeta {
             source: None,
             marketplace_source_id: None,
+            marketplace_skill_id: None,
+            marketplace_skill_slug: None,
             remote_revision: None,
         });
     }
@@ -1762,6 +2368,14 @@ fn read_marketplace_meta(dir: &Path) -> Result<LocalMarketplaceMeta, String> {
             .get("marketplace_source_id")
             .and_then(|v| v.as_str())
             .map(ToOwned::to_owned),
+        marketplace_skill_id: value
+            .get("marketplace_skill_id")
+            .and_then(|v| v.as_str())
+            .map(ToOwned::to_owned),
+        marketplace_skill_slug: value
+            .get("marketplace_skill_slug")
+            .and_then(|v| v.as_str())
+            .map(ToOwned::to_owned),
         remote_revision: value
             .get("remote_revision")
             .and_then(|v| v.as_str())
@@ -1769,10 +2383,107 @@ fn read_marketplace_meta(dir: &Path) -> Result<LocalMarketplaceMeta, String> {
     })
 }
 
-fn is_same_marketplace_skill(dir: &PathBuf, source_id: &str) -> Result<bool, String> {
+fn is_same_marketplace_skill(dir: &Path, skill: &MarketplaceSkill) -> Result<bool, String> {
     let meta = read_marketplace_meta(dir)?;
-    Ok(meta.source.as_deref() == Some("marketplace")
-        && meta.marketplace_source_id.as_deref() == Some(source_id))
+    Ok(is_marketplace_meta_for_skill(&meta, skill))
+}
+
+fn is_marketplace_meta_for_skill(meta: &LocalMarketplaceMeta, skill: &MarketplaceSkill) -> bool {
+    if meta.source.as_deref() != Some("marketplace") {
+        return false;
+    }
+    if meta.marketplace_source_id.as_deref() != Some(skill.source_id.as_str()) {
+        return false;
+    }
+    if let Some(meta_skill_id) = meta.marketplace_skill_id.as_deref() {
+        return meta_skill_id == skill.id;
+    }
+    if let (Some(meta_slug), Some(skill_slug)) = (
+        meta.marketplace_skill_slug.as_deref(),
+        skill.slug.as_deref(),
+    ) {
+        return meta_slug == skill_slug;
+    }
+    true
+}
+
+fn preferred_marketplace_install_dir(skills_dir: &Path, skill: &MarketplaceSkill) -> PathBuf {
+    let dir_name = sanitize_install_dir_name(skill.name.as_str())
+        .or_else(|| {
+            skill.slug.as_deref().and_then(|slug| {
+                sanitize_install_dir_name(slug.rsplit('/').next().unwrap_or_default())
+            })
+        })
+        .unwrap_or_else(|| {
+            sanitize_install_dir_name(skill.id.as_str()).unwrap_or_else(|| "skill".to_string())
+        });
+    skills_dir.join(dir_name)
+}
+
+fn legacy_marketplace_install_dir(skills_dir: &Path, skill: &MarketplaceSkill) -> Option<PathBuf> {
+    let legacy = skills_dir.join(&skill.id);
+    let preferred = preferred_marketplace_install_dir(skills_dir, skill);
+    if legacy == preferred {
+        None
+    } else {
+        Some(legacy)
+    }
+}
+
+fn find_installed_marketplace_skill(
+    skills_dir: &Path,
+    skill: &MarketplaceSkill,
+) -> Option<(PathBuf, LocalMarketplaceMeta)> {
+    let mut candidates = vec![preferred_marketplace_install_dir(skills_dir, skill)];
+    if let Some(legacy) = legacy_marketplace_install_dir(skills_dir, skill) {
+        candidates.push(legacy);
+    }
+
+    for dir in candidates {
+        if !dir.exists() {
+            continue;
+        }
+        let meta = match read_marketplace_meta(&dir) {
+            Ok(meta) => meta,
+            Err(_) => continue,
+        };
+        if is_marketplace_meta_for_skill(&meta, skill) {
+            return Some((dir, meta));
+        }
+    }
+    None
+}
+
+fn sanitize_install_dir_name(input: &str) -> Option<String> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let mut normalized = String::with_capacity(trimmed.len());
+    let mut prev_dash = false;
+    for ch in trimmed.chars() {
+        let unsafe_char =
+            ch.is_control() || matches!(ch, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|');
+        if unsafe_char {
+            if !prev_dash {
+                normalized.push('-');
+                prev_dash = true;
+            }
+            continue;
+        }
+        normalized.push(ch);
+        prev_dash = false;
+    }
+
+    let cleaned = normalized
+        .trim_matches(|c| c == '-' || c == '.')
+        .to_string();
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    }
 }
 
 #[cfg(test)]
@@ -1783,8 +2494,9 @@ mod tests {
         get_cached_github_tree, github_tree_cache, github_tree_cache_key, normalize_github_token,
         set_cached_github_tree, should_include_github_root_dir, CachedGitHubTree, GitHubContent,
         GitHubTreeEntry, InstallStatus, MarketplaceCache, MarketplaceSkill,
-        PersistedMarketplaceState, PersistedSkillDescriptionEntry, GITHUB_TREE_CACHE_TTL,
-        PERSISTED_CACHE_TTL, PERSISTED_SKILL_DESCRIPTION_CACHE_TTL,
+        MarketplaceSkillsResponse, PersistedMarketplaceCacheEntry, PersistedMarketplaceState,
+        PersistedSkillDescriptionEntry, GITHUB_TREE_CACHE_TTL, PERSISTED_CACHE_TTL,
+        PERSISTED_SKILL_DESCRIPTION_CACHE_TTL,
     };
     use std::collections::HashSet;
     use std::fs;
@@ -1844,6 +2556,56 @@ mod tests {
             link,
             Some("https://example.com/skills/my-skill".to_string())
         );
+    }
+
+    #[test]
+    fn derive_github_repo_and_skill_path_prefers_install_url_tree_path() {
+        let (repo_url, skill_path) = super::derive_github_repo_and_skill_path(
+            Some("https://github.com/foo/bar/tree/main/.claude/skills/demo"),
+            "foo/bar/other/path",
+        );
+        assert_eq!(repo_url, Some("https://github.com/foo/bar".to_string()));
+        assert_eq!(skill_path, Some(".claude/skills/demo".to_string()));
+    }
+
+    #[test]
+    fn derive_github_repo_and_skill_path_falls_back_to_slug() {
+        let (repo_url, skill_path) =
+            super::derive_github_repo_and_skill_path(None, "foo/bar/.claude/skills/demo");
+        assert_eq!(repo_url, Some("https://github.com/foo/bar".to_string()));
+        assert_eq!(skill_path, Some(".claude/skills/demo".to_string()));
+    }
+
+    #[test]
+    fn derive_github_repo_and_skill_path_uses_slug_path_when_install_url_is_repo_root() {
+        let (repo_url, skill_path) = super::derive_github_repo_and_skill_path(
+            Some("https://github.com/anthropics/skills"),
+            "anthropics/skills/skills/skill-creator",
+        );
+        assert_eq!(
+            repo_url,
+            Some("https://github.com/anthropics/skills".to_string())
+        );
+        assert_eq!(skill_path, Some("skills/skill-creator".to_string()));
+    }
+
+    #[test]
+    fn build_skill_path_candidates_adds_common_prefixes_for_single_segment_path() {
+        let candidates = super::build_skill_path_candidates("docfactory-prd");
+        assert_eq!(
+            candidates,
+            vec![
+                "docfactory-prd".to_string(),
+                "skills/docfactory-prd".to_string(),
+                ".claude/skills/docfactory-prd".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn build_skill_path_candidates_keeps_nested_path_without_extra_prefixes() {
+        let candidates = super::build_skill_path_candidates("skills/docfactory-prd");
+        assert_eq!(candidates, vec!["skills/docfactory-prd".to_string()]);
     }
 
     #[test]
@@ -1983,6 +2745,75 @@ mod tests {
     }
 
     #[test]
+    fn check_install_status_detects_installation_under_skill_name_directory() {
+        with_temp_home(|home| {
+            let skills_dir = home.join(".skills-manager").join("skills");
+            let mut skill = sample_marketplace_skill("source-a", "alpha");
+            skill.name = "skill-creator".to_string();
+
+            let install_dir = skills_dir.join("skill-creator");
+            fs::create_dir_all(&install_dir).expect("create install dir");
+
+            let meta = serde_json::json!({
+                "name": skill.name,
+                "source": "marketplace",
+                "marketplace_source_id": skill.source_id,
+                "marketplace_skill_id": skill.id,
+                "remote_revision": "rev-remote",
+            });
+            fs::write(
+                install_dir.join("meta.json"),
+                serde_json::to_string_pretty(&meta).expect("serialize meta"),
+            )
+            .expect("write meta");
+
+            let mut remote_skill = skill.clone();
+            remote_skill.remote_revision = Some("rev-remote".to_string());
+
+            let status =
+                super::MarketplaceService::check_install_status(&remote_skill, &skills_dir);
+            assert_eq!(status, InstallStatus::Installed);
+        });
+    }
+
+    #[test]
+    fn preferred_marketplace_install_dir_uses_skill_name() {
+        with_temp_home(|home| {
+            let skills_dir = home.join(".skills-manager").join("skills");
+            let mut skill = sample_marketplace_skill("source-a", "alpha");
+            skill.name = "skill-creator".to_string();
+
+            let dir = super::preferred_marketplace_install_dir(&skills_dir, &skill);
+            assert_eq!(dir, skills_dir.join("skill-creator"));
+        });
+    }
+
+    #[test]
+    fn install_revision_prefers_marketplace_revision_over_tree_hash() {
+        let mut skill = sample_marketplace_skill("source-a", "alpha");
+        skill.remote_revision = Some("market-api-fnv64:abcdef".to_string());
+
+        let files = vec![super::SkillFileNode {
+            name: "SKILL.md".to_string(),
+            path: "alpha/SKILL.md".to_string(),
+            is_dir: false,
+            download_url: Some("https://example.com/SKILL.md".to_string()),
+            sha: Some("sha-local".to_string()),
+            children: None,
+        }];
+
+        let resolved = skill
+            .remote_revision
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_string())
+            .or_else(|| super::compute_skill_revision_from_file_nodes(&files));
+
+        assert_eq!(resolved.as_deref(), Some("market-api-fnv64:abcdef"));
+    }
+
+    #[test]
     fn github_tree_cache_round_trip() {
         let entries = vec![GitHubTreeEntry {
             path: "skill/SKILL.md".to_string(),
@@ -2065,12 +2896,89 @@ description: "来自 frontmatter 的描述"
             cache.set(vec![expected.clone()], None, false, None);
 
             let restored = MarketplaceCache::default()
-                .get_fresh_with_meta(&None, &None)
+                .get_fresh_with_meta(1, &None, &None)
                 .expect("expected persisted cache on new instance");
 
             assert_eq!(restored.skills.len(), 1);
             assert_eq!(restored.skills[0].id, expected.id);
             assert_eq!(restored.skills[0].name, expected.name);
+        });
+    }
+
+    #[test]
+    fn marketplace_cache_migrates_legacy_single_state_format() {
+        with_temp_home(|_| {
+            let now_secs = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("now should be after epoch")
+                .as_secs();
+            let legacy_payload = serde_json::json!({
+                "fetched_at_unix_secs": now_secs,
+                "skills": [sample_marketplace_skill("source-a", "legacy-skill")],
+                "query": null,
+                "has_more": false,
+                "source_filter": null
+            });
+
+            let path = super::persisted_marketplace_cache_path().expect("cache path should exist");
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).expect("create cache dir");
+            }
+            fs::write(
+                &path,
+                serde_json::to_string(&legacy_payload).expect("serialize legacy payload"),
+            )
+            .expect("write legacy payload");
+
+            let restored = MarketplaceCache::default()
+                .get_fresh_with_meta(1, &None, &None)
+                .expect("legacy payload should be restored");
+            assert_eq!(restored.skills.len(), 1);
+            assert_eq!(restored.skills[0].id, "source-a::legacy-skill");
+
+            let migrated_content = fs::read_to_string(&path).expect("read migrated cache");
+            let migrated: PersistedMarketplaceState =
+                serde_json::from_str(&migrated_content).expect("parse migrated cache");
+            assert_eq!(migrated.pages.len(), 1);
+            assert_eq!(migrated.pages[0].page, 1);
+        });
+    }
+
+    #[test]
+    fn marketplace_cache_separates_pages_by_cache_key() {
+        with_temp_home(|_| {
+            let cache = MarketplaceCache::default();
+            let page1 = sample_marketplace_skill("source-a", "page-1");
+            let page2 = sample_marketplace_skill("source-a", "page-2");
+
+            cache.set_page(
+                1,
+                None,
+                None,
+                MarketplaceSkillsResponse {
+                    skills: vec![page1.clone()],
+                    has_more: true,
+                },
+            );
+            cache.set_page(
+                2,
+                None,
+                None,
+                MarketplaceSkillsResponse {
+                    skills: vec![page2.clone()],
+                    has_more: false,
+                },
+            );
+
+            let restored_page1 = cache
+                .get_fresh_with_meta(1, &None, &None)
+                .expect("page 1 should be cached");
+            let restored_page2 = cache
+                .get_fresh_with_meta(2, &None, &None)
+                .expect("page 2 should be cached");
+
+            assert_eq!(restored_page1.skills[0].id, page1.id);
+            assert_eq!(restored_page2.skills[0].id, page2.id);
         });
     }
 
@@ -2082,11 +2990,16 @@ description: "来自 frontmatter 的描述"
                 .expect("expired timestamp should be after unix epoch")
                 .as_secs();
             let persisted = PersistedMarketplaceState {
-                fetched_at_unix_secs: expired_secs,
-                skills: vec![sample_marketplace_skill("source-a", "skill-a")],
-                query: None,
-                has_more: false,
-                source_filter: None,
+                pages: vec![PersistedMarketplaceCacheEntry {
+                    page: 1,
+                    query: None,
+                    source_filter: None,
+                    fetched_at_unix_secs: expired_secs,
+                    response: MarketplaceSkillsResponse {
+                        skills: vec![sample_marketplace_skill("source-a", "skill-a")],
+                        has_more: false,
+                    },
+                }],
             };
 
             let path = super::persisted_marketplace_cache_path().expect("cache path should exist");
@@ -2099,7 +3012,7 @@ description: "来自 frontmatter 的描述"
             )
             .expect("write cache file");
 
-            let restored = MarketplaceCache::default().get_fresh_with_meta(&None, &None);
+            let restored = MarketplaceCache::default().get_fresh_with_meta(1, &None, &None);
             assert!(
                 restored.is_none(),
                 "expired persisted cache should not be used"
@@ -2119,7 +3032,7 @@ description: "来自 frontmatter 的描述"
             );
             cache.invalidate();
 
-            let restored = MarketplaceCache::default().get_fresh_with_meta(&None, &None);
+            let restored = MarketplaceCache::default().get_fresh_with_meta(1, &None, &None);
             assert!(restored.is_none(), "cache should be empty after invalidate");
         });
     }
@@ -2241,11 +3154,16 @@ description: "来自 frontmatter 的描述"
     fn sample_marketplace_skill(source_id: &str, slug: &str) -> MarketplaceSkill {
         MarketplaceSkill {
             id: format!("{}::{}", source_id, slug),
+            slug: Some(slug.to_string()),
             name: slug.to_string(),
             description: None,
             author: Some("tester".to_string()),
             source_id: source_id.to_string(),
             source_name: "source".to_string(),
+            install_url: Some(
+                "https://github.com/example/repo/tree/main/example-skill".to_string(),
+            ),
+            created_at: Some(1_771_234_567),
             repo_url: Some("https://github.com/example/repo".to_string()),
             skill_path: Some(slug.to_string()),
             external_url: None,

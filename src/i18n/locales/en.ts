@@ -191,6 +191,7 @@ export const en = {
     marketplace: "Marketplace",
     marketplaceEmpty: "No marketplace sources configured",
     marketplaceSourceTypeGithub: "GitHub Repository",
+    marketplaceSourceTypeApi: "Third-Party API",
     githubToken: "GitHub Token",
     githubTokenDesc: "Optional: higher GitHub API limit, fewer refresh/preview failures",
     githubTokenPlaceholder: "Paste your GitHub personal access token",

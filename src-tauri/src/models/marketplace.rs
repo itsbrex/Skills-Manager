@@ -15,6 +15,9 @@ pub struct MarketplaceSource {
 #[serde(rename_all = "snake_case")]
 pub enum SourceType {
     GithubRepo,
+    Api,
+    Crawler,
+    Manual,
     #[serde(other)]
     Unknown,
 }
@@ -22,11 +25,17 @@ pub enum SourceType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MarketplaceSkill {
     pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slug: Option<String>,
     pub name: String,
     pub description: Option<String>,
     pub author: Option<String>,
     pub source_id: String,
     pub source_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub install_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<u64>,
     pub repo_url: Option<String>,
     pub skill_path: Option<String>,
     pub external_url: Option<String>,

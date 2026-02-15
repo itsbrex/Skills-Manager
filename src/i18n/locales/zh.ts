@@ -193,6 +193,7 @@ export const zh = {
     marketplace: "市场",
     marketplaceEmpty: "暂无可配置的市场源",
     marketplaceSourceTypeGithub: "GitHub 仓库",
+    marketplaceSourceTypeApi: "第三方 API",
     githubToken: "GitHub Token",
     githubTokenDesc:
       "可选：提高 GitHub API 限额，减少刷新与预览失败",

@@ -51,6 +51,45 @@ fn normalize_source_filter(source_ids: Option<Vec<String>>) -> Option<Vec<String
     }
 }
 
+fn merge_remote_sources_into_config(
+    config: &mut AppConfig,
+    mut remote_sources: Vec<MarketplaceSource>,
+) -> Vec<MarketplaceSource> {
+    let enabled_map: HashMap<String, bool> = config
+        .marketplace_sources
+        .clone()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|source| (source.id, source.enabled))
+        .collect();
+
+    for source in &mut remote_sources {
+        source.enabled = enabled_map.get(&source.id).copied().unwrap_or(true);
+        source.builtin = true;
+        source.api_key = None;
+    }
+
+    config.marketplace_sources = Some(remote_sources.clone());
+    remote_sources
+}
+
+async fn load_marketplace_sources_for_runtime(
+    manager: &ConfigManager,
+    config: &mut AppConfig,
+) -> Vec<MarketplaceSource> {
+    match MarketplaceService::fetch_marketplace_sources().await {
+        Ok(remote_sources) => {
+            let merged = merge_remote_sources_into_config(config, remote_sources);
+            let _ = manager.save(config);
+            merged
+        }
+        Err(_) => config
+            .marketplace_sources
+            .clone()
+            .unwrap_or_else(|| AppConfig::default().marketplace_sources.unwrap_or_default()),
+    }
+}
+
 fn marketplace_update_check_state_path() -> Option<PathBuf> {
     Some(
         dirs::home_dir()?
@@ -115,31 +154,25 @@ pub async fn fetch_marketplace_skills(
     let normalized_source_filter = normalize_source_filter(source_ids);
     let page = page.unwrap_or(1).max(1);
 
-    if page == 1 && !force_refresh {
+    if !force_refresh {
         if let Some(cached) =
-            cache.get_fresh_with_meta(&normalized_query, &normalized_source_filter)
+            cache.get_fresh_with_meta(page, &normalized_query, &normalized_source_filter)
         {
             return Ok(cached);
         }
     }
 
     let manager = ConfigManager::new();
-    let config = manager.load()?;
-    let github_token = github_token_from_config(&config);
-    let mut sources = config
-        .marketplace_sources
-        .clone()
-        .unwrap_or_else(|| AppConfig::default().marketplace_sources.unwrap_or_default());
-    if let Some(ids) = &normalized_source_filter {
-        sources.retain(|source| ids.contains(&source.id));
-    }
+    let mut config = manager.load()?;
+    let sources = load_marketplace_sources_for_runtime(&manager, &mut config).await;
 
     let result = match MarketplaceService::fetch_marketplace_skills_page(
         &sources,
         &config.skills_dir,
         normalized_query.clone(),
-        github_token.as_deref(),
+        None,
         page,
+        normalized_source_filter.clone(),
     )
     .await
     {
@@ -170,14 +203,12 @@ pub async fn fetch_marketplace_skills(
         }
     };
 
-    if page == 1 {
-        cache.set(
-            result.skills.clone(),
-            normalized_query.clone(),
-            result.has_more,
-            normalized_source_filter,
-        );
-    }
+    cache.set_page(
+        page,
+        normalized_query.clone(),
+        normalized_source_filter.clone(),
+        result.clone(),
+    );
 
     Ok(result)
 }
@@ -241,22 +272,7 @@ pub async fn install_marketplace_skill(
     let skill = if let Some(skill) = marketplace_cache.get_cached_skill(&skill_id) {
         skill
     } else {
-        let sources = config
-            .marketplace_sources
-            .clone()
-            .unwrap_or_else(|| AppConfig::default().marketplace_sources.unwrap_or_default());
-        let skills = MarketplaceService::fetch_marketplace_skills(
-            &sources,
-            &config.skills_dir,
-            None,
-            github_token.as_deref(),
-        )
-        .await?;
-        marketplace_cache.set(skills.clone(), None, false, None);
-        skills
-            .into_iter()
-            .find(|s| s.id == skill_id)
-            .ok_or_else(|| "未找到对应的 Skill，请刷新后重试".to_string())?
+        return Err("未找到对应的 Skill，请先在市场列表中加载该技能后再安装".to_string());
     };
 
     let result =
@@ -277,23 +293,18 @@ pub async fn sync_marketplace_installed_skills(
     app_cache: State<'_, AppCache>,
 ) -> Result<MarketplaceSyncResult, String> {
     let manager = ConfigManager::new();
-    let config = manager.load()?;
+    let mut config = manager.load()?;
     let github_token = github_token_from_config(&config);
     let normalized_source_filter = normalize_source_filter(source_ids);
-    let mut sources = config
-        .marketplace_sources
-        .clone()
-        .unwrap_or_else(|| AppConfig::default().marketplace_sources.unwrap_or_default());
-    if let Some(ids) = &normalized_source_filter {
-        sources.retain(|source| ids.contains(&source.id));
-    }
+    let sources = load_marketplace_sources_for_runtime(&manager, &mut config).await;
 
     let listing = MarketplaceService::fetch_marketplace_skills_page(
         &sources,
         &config.skills_dir,
         None,
-        github_token.as_deref(),
+        None,
         1,
+        normalized_source_filter.clone(),
     )
     .await?;
 
@@ -344,19 +355,16 @@ pub async fn check_marketplace_updates_if_stale(
     }
 
     let manager = ConfigManager::new();
-    let config = manager.load()?;
-    let github_token = github_token_from_config(&config);
-    let sources = config
-        .marketplace_sources
-        .clone()
-        .unwrap_or_else(|| AppConfig::default().marketplace_sources.unwrap_or_default());
+    let mut config = manager.load()?;
+    let sources = load_marketplace_sources_for_runtime(&manager, &mut config).await;
 
     let listing = MarketplaceService::fetch_marketplace_skills_page(
         &sources,
         &config.skills_dir,
         None,
-        github_token.as_deref(),
+        None,
         1,
+        None,
     )
     .await?;
 
@@ -382,13 +390,11 @@ pub async fn check_marketplace_updates_if_stale(
 }
 
 #[tauri::command]
-pub fn get_marketplace_sources() -> Result<Vec<MarketplaceSource>, String> {
+pub async fn get_marketplace_sources() -> Result<Vec<MarketplaceSource>, String> {
     let manager = ConfigManager::new();
-    let config = manager.load()?;
-    Ok(config
-        .marketplace_sources
-        .clone()
-        .unwrap_or_else(|| AppConfig::default().marketplace_sources.unwrap_or_default()))
+    let mut config = manager.load()?;
+    let sources = load_marketplace_sources_for_runtime(&manager, &mut config).await;
+    Ok(sources)
 }
 
 #[tauri::command]
@@ -423,8 +429,8 @@ mod tests {
     use crate::test_support::with_temp_home;
 
     use super::{
-        load_last_update_check_time, persist_update_check_time, should_run_marketplace_update_check,
-        MARKETPLACE_UPDATE_CHECK_INTERVAL,
+        load_last_update_check_time, persist_update_check_time,
+        should_run_marketplace_update_check, MARKETPLACE_UPDATE_CHECK_INTERVAL,
     };
 
     #[test]

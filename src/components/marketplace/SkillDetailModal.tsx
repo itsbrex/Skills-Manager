@@ -251,7 +251,6 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
   }, [skill]);
 
   const handleSelectFile = useCallback(async (path: string) => {
-    if (path === selectedPath && !previewError) return;
     setSelectedPath(path);
     setPreviewPath(path);
     setPreviewError(null);
@@ -291,7 +290,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
         setContentLoading(false);
       }
     }
-  }, [fileMap, previewError, selectedPath, t]);
+  }, [fileMap, t]);
 
   useEffect(() => {
     if (!fileTree) return;

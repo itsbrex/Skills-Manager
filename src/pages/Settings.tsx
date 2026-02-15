@@ -500,7 +500,9 @@ export function Settings() {
             ) : (
               marketplaceRows.map((source, index) => {
                 const isLast = index === marketplaceRows.length - 1;
-                const typeLabel = t("settings.marketplaceSourceTypeGithub");
+                const typeLabel = source.source_type === "github_repo"
+                  ? t("settings.marketplaceSourceTypeGithub")
+                  : t("settings.marketplaceSourceTypeApi");
                 return (
                   <SettingsRow
                     key={`${source.id}-source`}

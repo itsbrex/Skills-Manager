@@ -103,7 +103,7 @@ export interface MarketplaceSource {
   id: string;
   name: string;
   url: string;
-  source_type: "github_repo";
+  source_type: "github_repo" | "api" | "crawler" | "manual" | "unknown";
   enabled: boolean;
   builtin: boolean;
   api_key?: string | null;
@@ -111,11 +111,14 @@ export interface MarketplaceSource {
 
 export interface MarketplaceSkill {
   id: string;
+  slug?: string | null;
   name: string;
   description: string | null;
   author: string | null;
   source_id: string;
   source_name: string;
+  install_url?: string | null;
+  created_at?: number | null;
   repo_url: string | null;
   skill_path: string | null;
   external_url: string | null;

@@ -83,13 +83,19 @@ export function Marketplace() {
   const [refreshing, setRefreshing] = useState(false);
   const [updatingAll, setUpdatingAll] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [descriptionHydrationTick, setDescriptionHydrationTick] = useState(0);
   const deferredSearchQuery = useDeferredValue(searchQuery);
-  const isFirstSourceFilter = useRef(true);
+  const listRequestSeqRef = useRef(0);
+  const remoteLoadSeqRef = useRef(0);
   const descriptionInFlightRef = useRef<Set<string>>(new Set());
   const descriptionFetchedRef = useRef<Set<string>>(new Set());
   const descriptionRequestSeqRef = useRef(0);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const normalizedRemoteQuery = useMemo(
+    () => deferredSearchQuery.trim(),
+    [deferredSearchQuery],
+  );
 
   const loadSkills = useCallback(async (options?: {
     forceRefresh?: boolean;
@@ -104,6 +110,9 @@ export function Marketplace() {
     const append = options?.append ?? false;
     const sourceIds = options?.sourceIds;
     const normalizedQuery = query && query.trim().length > 0 ? query.trim() : undefined;
+    const requestSeq = listRequestSeqRef.current + 1;
+    listRequestSeqRef.current = requestSeq;
+    const isStaleRequest = () => requestSeq !== listRequestSeqRef.current;
 
     try {
       const result = await invoke<MarketplaceSkillsResponse>("fetch_marketplace_skills", {
@@ -112,6 +121,9 @@ export function Marketplace() {
         page,
         sourceIds: sourceIds && sourceIds.length > 0 ? sourceIds : undefined,
       });
+      if (isStaleRequest()) {
+        return;
+      }
       primeDescriptionCache(result.skills);
       const incoming = result.skills.map(withCachedDescription);
 
@@ -131,9 +143,12 @@ export function Marketplace() {
       setHasMore(result.has_more);
       setCurrentPage(page);
     } catch (err) {
+      if (isStaleRequest()) {
+        return;
+      }
       addToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
-      if (page === 1) {
+      if (page === 1 && !isStaleRequest()) {
         setInitialLoading(false);
       }
     }
@@ -163,19 +178,19 @@ export function Marketplace() {
   }, []);
 
   useEffect(() => {
-    void loadSkills({ page: 1, sourceIds: selectedSourceIds });
-  }, [loadSkills]);
-
-  useEffect(() => {
-    if (isFirstSourceFilter.current) {
-      isFirstSourceFilter.current = false;
-      return;
-    }
+    const loadSeq = remoteLoadSeqRef.current + 1;
+    remoteLoadSeqRef.current = loadSeq;
+    setSearching(true);
     void loadSkills({
       page: 1,
+      query: normalizedRemoteQuery,
       sourceIds: selectedSourceIds,
+    }).finally(() => {
+      if (remoteLoadSeqRef.current === loadSeq) {
+        setSearching(false);
+      }
     });
-  }, [selectedSourceIds, loadSkills]);
+  }, [loadSkills, normalizedRemoteQuery, selectedSourceIds]);
 
   useEffect(() => {
     const candidates = skills
@@ -287,6 +302,7 @@ export function Marketplace() {
       await loadSkills({
         forceRefresh: true,
         page: 1,
+        query: normalizedRemoteQuery,
         sourceIds: selectedSourceIds,
       });
       addToast(t("common.refreshSuccess"), "success");
@@ -295,7 +311,7 @@ export function Marketplace() {
     } finally {
       setRefreshing(false);
     }
-  }, [addToast, loadSkills, selectedSourceIds, t]);
+  }, [addToast, loadSkills, normalizedRemoteQuery, selectedSourceIds, t]);
 
   const updateAvailableCount = useMemo(
     () => skills.filter((skill) => skill.install_status === "update_available").length,
@@ -334,6 +350,7 @@ export function Marketplace() {
       await loadSkills({
         forceRefresh: true,
         page: 1,
+        query: normalizedRemoteQuery,
         sourceIds: selectedSourceIds,
       });
     } catch (err) {
@@ -345,6 +362,7 @@ export function Marketplace() {
     addToast,
     installingSkill,
     loadSkills,
+    normalizedRemoteQuery,
     selectedSourceIds,
     t,
     updateAvailableCount,
@@ -360,6 +378,7 @@ export function Marketplace() {
       await loadSkills({
         page: currentPage + 1,
         append: true,
+        query: normalizedRemoteQuery,
         sourceIds: selectedSourceIds,
       });
     } finally {
@@ -371,6 +390,7 @@ export function Marketplace() {
     initialLoading,
     loadSkills,
     loadingMore,
+    normalizedRemoteQuery,
     refreshing,
     selectedSourceIds,
   ]);
@@ -399,6 +419,7 @@ export function Marketplace() {
         await loadSkills({
           forceRefresh: true,
           page: 1,
+          query: normalizedRemoteQuery,
           sourceIds: selectedSourceIds,
         });
       } else {
@@ -412,7 +433,7 @@ export function Marketplace() {
     } finally {
       setInstallingSkill(null);
     }
-  }, [addToast, loadSkills, selectedSourceIds, t]);
+  }, [addToast, loadSkills, normalizedRemoteQuery, selectedSourceIds, t]);
 
   const handleOpenExternalLink = useCallback(async (event: MouseEvent, url: string) => {
     event.stopPropagation();
@@ -455,26 +476,13 @@ export function Marketplace() {
     return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
   }, [skills]);
 
-  const normalizedSearchQuery = useMemo(
-    () => deferredSearchQuery.trim().toLowerCase(),
-    [deferredSearchQuery],
-  );
   const filteredSkills = useMemo(() => {
     return skills.filter((skill) => {
-      const searchableText = [
-        skill.name,
-        skill.description || "",
-        skill.author || "",
-        skill.source_name,
-      ]
-        .join("\n")
-        .toLowerCase();
-      const matchesQuery = !normalizedSearchQuery || searchableText.includes(normalizedSearchQuery);
       const matchesTags = selectedTags.length === 0
         || selectedTags.some((tag) => skill.tags.includes(tag));
-      return matchesQuery && matchesTags;
+      return matchesTags;
     });
-  }, [normalizedSearchQuery, selectedTags, skills]);
+  }, [selectedTags, skills]);
 
   const showSourceFilter = availableSources.length > 1;
   const sourceNameMap = useMemo(() => {
@@ -698,7 +706,7 @@ export function Marketplace() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
                   width: '240px',
-                  padding: '8px 12px 8px 36px',
+                  padding: '8px 34px 8px 36px',
                   fontSize: '13px',
                   border: '1px solid var(--border)',
                   borderRadius: '8px',
@@ -716,6 +724,41 @@ export function Marketplace() {
                   e.currentTarget.style.boxShadow = 'none';
                 }}
               />
+              {searching && !initialLoading && (
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--muted-foreground)',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="8"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeDasharray="30 22"
+                  >
+                    <animateTransform
+                      attributeName="transform"
+                      type="rotate"
+                      from="0 12 12"
+                      to="360 12 12"
+                      dur="0.8s"
+                      repeatCount="indefinite"
+                    />
+                  </circle>
+                </svg>
+              )}
             </div>
           </>
         }
@@ -762,7 +805,11 @@ export function Marketplace() {
               borderRadius: '10px',
               border: '1px solid var(--border)',
             }}>
-              {skills.length === 0 ? t("marketplace.noSkills") : t("marketplace.noMatch")}
+              {searching
+                ? t("loading.default")
+                : skills.length === 0
+                  ? t("marketplace.noSkills")
+                  : t("marketplace.noMatch")}
             </div>
           ) : (
             <div style={{

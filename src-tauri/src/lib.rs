@@ -12,8 +12,8 @@ use commands::{
     get_config, get_marketplace_sources, get_tool_status, import_skills_to_hub,
     install_marketplace_skill, is_initialized, list_skills, mark_initialized, open_in_editor,
     read_directory_tree, read_file, refresh_editors, refresh_skills, refresh_tools, save_config,
-    scan_existing_skills, set_tool_enabled, sync_marketplace_installed_skills,
-    submit_feedback, toggle_marketplace_source, update_custom_tool, update_tool_paths, write_file,
+    scan_existing_skills, set_tool_enabled, submit_feedback, sync_marketplace_installed_skills,
+    toggle_marketplace_source, update_custom_tool, update_tool_paths, write_file,
 };
 use services::{AppCache, MarketplaceCache};
 
