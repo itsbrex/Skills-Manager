@@ -175,7 +175,31 @@ invoke("enable_skill", { skill_id, tool_id }) // ✗ 不生效
 
 ---
 
-## 11. 版本升级操作
+## 11. CI 打包与测试文件隔离（重要）
+
+**问题**: GitHub Action 执行 `npm run tauri build` 时，`beforeBuildCommand` 里的 `npm run build` 报错：
+- `TS2307: Cannot find module 'node:test'`
+- `TS2307: Cannot find module 'node:assert/strict'`
+
+**根因**:
+- `tsconfig.json` 的 `include: ["src"]` 把 `src/**/*.test.ts` 一并纳入了生产构建类型检查。
+- 这些测试文件使用 Node 内置测试模块（`node:test`），但前端构建环境并不保证存在对应 Node 类型声明。
+- 本地环境可能因为全局/上层目录类型注入而“侥幸通过”，CI 环境更干净所以稳定暴露问题。
+
+**已验证修复**:
+- 在 `tsconfig.json` 中增加：
+  - `exclude: ["src/**/*.test.ts", "src/**/*.test.tsx"]`
+- 使生产构建只检查业务代码，不检查 Node 测试文件。
+
+**防止复发规则**:
+1. Web/Tauri 前端生产构建的 `tsconfig` 不要包含 `*.test.ts(x)`。
+2. 测试代码（尤其依赖 Node API）要与生产构建类型检查隔离（独立 test tsconfig 或独立测试流程）。
+3. 本地验证时增加“干净类型根目录”检查，避免被全局类型污染掩盖问题：
+   - `npx tsc --noEmit --typeRoots ./node_modules/@types`
+
+---
+
+## 12. 版本升级操作
 
 **决策**: 升级版本号时需要同时修改以下文件，确保版本一致：
 
