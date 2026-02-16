@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -14,6 +14,7 @@ import {
 } from "@/constants/modal";
 import { AppConfig, Skill, Tool } from "@/types";
 import { useTranslation, TranslationPath } from "@/i18n";
+import { orderToolIdsForSkill } from "./skills/orderToolIds";
 
 function getToolDisplayName(toolId: string, tools: Tool[]): string {
   const tool = tools.find(t => t.id === toolId);
@@ -200,14 +201,18 @@ export function Skills() {
     );
   });
 
-  const toolIds = config
-    ? Array.from(
-        new Set([
-          ...Object.keys(config.tools),
-          ...Object.keys(config.custom_tools ?? {}),
-        ])
-      ).sort()
-    : [];
+  const toolIds = useMemo(
+    () =>
+      config
+        ? Array.from(
+            new Set([
+              ...Object.keys(config.tools),
+              ...Object.keys(config.custom_tools ?? {}),
+            ])
+          ).sort()
+        : [],
+    [config]
+  );
 
   // Show loading state while initial data is being fetched
   if (initialLoading) {
@@ -363,6 +368,7 @@ export function Skills() {
               }}>
                 {filteredSkills.map((skill) => {
                   const color = getSkillColor(skill.name);
+                  const orderedToolIds = orderToolIdsForSkill(toolIds, skill.enabled);
                   return (
                     <div
                       key={skill.id}
@@ -491,7 +497,7 @@ export function Skills() {
                             }}>
                               {t("skills.enableFor")}
                             </span>
-                            {toolIds.map((toolId) => {
+                            {orderedToolIds.map((toolId) => {
                               const isEnabled = skill.enabled[toolId] ?? false;
                               const toggleKey = `${skill.id}:${toolId}`;
                               const isToggling = togglingSkill === toggleKey;
@@ -571,7 +577,7 @@ export function Skills() {
                               {t("skills.enableFor")}
                             </span>
                             {(() => {
-                              const enabledTools = toolIds.filter(id => skill.enabled[id]);
+                              const enabledTools = orderedToolIds.filter(id => skill.enabled[id]);
                               const enabledCount = enabledTools.length;
                               const totalCount = toolIds.length;
 

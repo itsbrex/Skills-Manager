@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { Tool } from "@/types";
@@ -13,6 +13,7 @@ import { ToastContainer, useToast } from "@/components/ui/toast";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageLoader } from "@/components/ui/loading";
+import { sortToolsByEnabled } from "./tools/sortTools";
 
 export function Tools() {
   const { t } = useTranslation();
@@ -352,8 +353,14 @@ export function Tools() {
     };
   }, [formOpen]);
 
-  const builtinTools = tools.filter((tool) => tool.source !== "custom");
-  const customTools = tools.filter((tool) => tool.source === "custom");
+  const builtinTools = useMemo(
+    () => sortToolsByEnabled(tools.filter((tool) => tool.source !== "custom")),
+    [tools]
+  );
+  const customTools = useMemo(
+    () => sortToolsByEnabled(tools.filter((tool) => tool.source === "custom")),
+    [tools]
+  );
 
   const handleIconError = useCallback((toolId: string) => {
     setIconFallbackStage(prev => {
