@@ -413,7 +413,7 @@ mod tests {
             let config_path = config_dir.join("config.json");
 
             let config_json = json!({
-                "version": "1.1.1",
+                "version": "1.1.2",
                 "skills_dir": config_dir.join("skills").to_string_lossy(),
                 "tools": {},
                 "custom_tools": {},
