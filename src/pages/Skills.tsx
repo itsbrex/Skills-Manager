@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
-import { Switch } from "@/components/ui/switch";
+import { Toggle } from "@/components/ui/toggle";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -15,6 +15,7 @@ import {
 import { AppConfig, Skill, Tool } from "@/types";
 import { useTranslation, TranslationPath } from "@/i18n";
 import { orderToolIdsForSkill } from "./skills/orderToolIds";
+import { summarizeEnabledTools } from "./skills/summarizeEnabledTools";
 
 function getToolDisplayName(toolId: string, tools: Tool[]): string {
   const tool = tools.find(t => t.id === toolId);
@@ -47,7 +48,9 @@ export function Skills() {
   const [searchQuery, setSearchQuery] = useState("");
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
   const [deletingSkill, setDeletingSkill] = useState<string | null>(null);
-  const [editingSkill, setEditingSkill] = useState<string | null>(null);
+  const [toolEditorSkillId, setToolEditorSkillId] = useState<string | null>(null);
+  const [toolEditorQuery, setToolEditorQuery] = useState("");
+  const [toolEditorEnabledOnly, setToolEditorEnabledOnly] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [creating, setCreating] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -213,6 +216,51 @@ export function Skills() {
         : [],
     [config]
   );
+
+  const toolEditorSkill = useMemo(
+    () => skills.find((skill) => skill.id === toolEditorSkillId) ?? null,
+    [skills, toolEditorSkillId],
+  );
+
+  const toolEditorOrderedToolIds = useMemo(() => {
+    if (!toolEditorSkill) {
+      return [];
+    }
+
+    return orderToolIdsForSkill(toolIds, toolEditorSkill.enabled);
+  }, [toolEditorSkill, toolIds]);
+
+  const toolEditorFilteredToolIds = useMemo(() => {
+    if (!toolEditorSkill) {
+      return [];
+    }
+
+    const normalizedQuery = toolEditorQuery.trim().toLowerCase();
+    return toolEditorOrderedToolIds.filter((toolId) => {
+      if (toolEditorEnabledOnly && !toolEditorSkill.enabled[toolId]) {
+        return false;
+      }
+
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      const displayName = getToolDisplayName(toolId, tools).toLowerCase();
+      return displayName.includes(normalizedQuery) || toolId.toLowerCase().includes(normalizedQuery);
+    });
+  }, [toolEditorEnabledOnly, toolEditorOrderedToolIds, toolEditorQuery, toolEditorSkill, tools]);
+
+  const openToolEditor = useCallback((skillId: string) => {
+    setToolEditorSkillId(skillId);
+    setToolEditorQuery("");
+    setToolEditorEnabledOnly(false);
+  }, []);
+
+  const closeToolEditor = useCallback(() => {
+    setToolEditorSkillId(null);
+    setToolEditorQuery("");
+    setToolEditorEnabledOnly(false);
+  }, []);
 
   // Show loading state while initial data is being fetched
   if (initialLoading) {
@@ -474,222 +522,133 @@ export function Skills() {
                         </button>
                       </div>
 
-                      {/* Bottom: Tool Toggles */}
+                      {/* Bottom: Tool Summary */}
                       <div style={{
                         paddingTop: '14px',
                         borderTop: '1px solid var(--border)',
                       }}>
-                        {editingSkill === skill.id ? (
-                          /* Edit Mode: Show all toggles */
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            flexWrap: 'wrap',
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}>
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: 500,
+                            color: 'var(--muted-foreground)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            flexShrink: 0,
                           }}>
-                            <span style={{
-                              fontSize: '11px',
-                              fontWeight: 500,
-                              color: 'var(--muted-foreground)',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.5px',
-                              marginRight: '4px',
-                            }}>
-                              {t("skills.enableFor")}
-                            </span>
-                            {orderedToolIds.map((toolId) => {
-                              const isEnabled = skill.enabled[toolId] ?? false;
-                              const toggleKey = `${skill.id}:${toolId}`;
-                              const isToggling = togglingSkill === toggleKey;
-                              const tool = tools.find(t => t.id === toolId);
-                              const isDetected = tool?.detected ?? false;
-                              const isDisabled = isToggling || !isDetected;
+                            {t("skills.enableFor")}
+                          </span>
+                          {(() => {
+                            const toolSummary = summarizeEnabledTools(orderedToolIds, skill.enabled, 2);
 
+                            if (toolSummary.state === "none") {
                               return (
-                                <label
-                                  key={toolId}
-                                  style={{
+                                <span style={{
+                                  fontSize: '12px',
+                                  color: 'var(--muted-foreground)',
+                                  fontStyle: 'italic',
+                                  flex: 1,
+                                }}>
+                                  {t("skills.noToolsEnabled")}
+                                </span>
+                              );
+                            }
+
+                            if (toolSummary.state === "all") {
+                              return (
+                                <>
+                                  <span style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: '6px',
-                                    cursor: isDisabled ? (isToggling ? 'wait' : 'not-allowed') : 'pointer',
-                                    padding: '5px 10px',
-                                    borderRadius: '8px',
-                                    backgroundColor: isEnabled ? 'rgba(9, 105, 218, 0.12)' : 'var(--background)',
-                                    border: isEnabled ? '1px solid rgba(9, 105, 218, 0.35)' : '1px solid var(--border)',
-                                    transition: 'all 0.15s',
-                                    opacity: !isDetected ? 0.5 : 1,
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                  title={!isDetected ? t("skills.toolNotDetected") : undefined}
-                                >
-                                  <Switch
-                                    checked={isEnabled}
-                                    disabled={isDisabled}
-                                    onCheckedChange={(checked) =>
-                                      handleToggle(skill.id, skill.name, toolId, checked)
-                                    }
-                                  />
+                                    gap: '4px',
+                                    fontSize: '12px',
+                                    fontWeight: 500,
+                                    color: 'var(--color-success)',
+                                    backgroundColor: 'var(--color-success-bg)',
+                                    padding: '4px 10px',
+                                    borderRadius: '6px',
+                                    border: '1px solid var(--color-success-border)',
+                                  }}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                      <polyline points="20 6 9 17 4 12"/>
+                                    </svg>
+                                    {t("skills.allEnabled")}
+                                  </span>
+                                  <div style={{ flex: 1 }} />
+                                </>
+                              );
+                            }
+
+                            return (
+                              <>
+                                <div style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  flex: 1,
+                                  minWidth: 0,
+                                  overflow: 'hidden',
+                                }}>
+                                  {toolSummary.visibleEnabledToolIds.map(toolId => (
+                                    <span
+                                      key={toolId}
+                                      style={{
+                                        fontSize: '12px',
+                                        fontWeight: 500,
+                                        color: 'var(--primary)',
+                                        backgroundColor: 'rgba(9, 105, 218, 0.12)',
+                                        padding: '4px 8px',
+                                        borderRadius: '6px',
+                                        border: '1px solid rgba(9, 105, 218, 0.35)',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                      }}
+                                    >
+                                      {getToolDisplayName(toolId, tools)}
+                                    </span>
+                                  ))}
+                                </div>
+                                {toolSummary.remainingCount > 0 && (
                                   <span style={{
                                     fontSize: '12px',
                                     fontWeight: 500,
-                                    color: !isDetected ? 'var(--muted-foreground)' : (isEnabled ? 'var(--primary)' : 'var(--muted-foreground)'),
+                                    color: 'var(--muted-foreground)',
+                                    whiteSpace: 'nowrap',
+                                    flexShrink: 0,
                                   }}>
-                                    {getToolDisplayName(toolId, tools)}
+                                    +{toolSummary.remainingCount}
                                   </span>
-                                </label>
-                              );
-                            })}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingSkill(null);
-                              }}
-                              style={{
-                                fontSize: '12px',
-                                fontWeight: 500,
-                                color: 'var(--primary)',
-                                backgroundColor: 'transparent',
-                                border: 'none',
-                                cursor: 'pointer',
-                                padding: '5px 8px',
-                                marginLeft: 'auto',
-                              }}
-                            >
-                              {t("common.done")}
-                            </button>
-                          </div>
-                        ) : (
-                          /* View Mode: Show compact badges */
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                          }}>
-                            <span style={{
-                              fontSize: '11px',
+                                )}
+                              </>
+                            );
+                          })()}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openToolEditor(skill.id);
+                            }}
+                            style={{
+                              fontSize: '12px',
                               fontWeight: 500,
                               color: 'var(--muted-foreground)',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.5px',
+                              backgroundColor: 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: '5px 8px',
                               flexShrink: 0,
-                            }}>
-                              {t("skills.enableFor")}
-                            </span>
-                            {(() => {
-                              const enabledTools = orderedToolIds.filter(id => skill.enabled[id]);
-                              const enabledCount = enabledTools.length;
-                              const totalCount = toolIds.length;
-
-                              if (enabledCount === 0) {
-                                return (
-                                  <span style={{
-                                    fontSize: '12px',
-                                    color: 'var(--muted-foreground)',
-                                    fontStyle: 'italic',
-                                    flex: 1,
-                                  }}>
-                                    {t("skills.noToolsEnabled")}
-                                  </span>
-                                );
-                              }
-
-                              if (enabledCount === totalCount) {
-                                return (
-                                  <>
-                                    <span style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '4px',
-                                      fontSize: '12px',
-                                      fontWeight: 500,
-                                      color: 'var(--color-success)',
-                                      backgroundColor: 'var(--color-success-bg)',
-                                      padding: '4px 10px',
-                                      borderRadius: '6px',
-                                      border: '1px solid var(--color-success-border)',
-                                    }}>
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                        <polyline points="20 6 9 17 4 12"/>
-                                      </svg>
-                                      {t("skills.allEnabled")}
-                                    </span>
-                                    <div style={{ flex: 1 }} />
-                                  </>
-                                );
-                              }
-
-                              const maxShow = 2;
-                              const showTools = enabledTools.slice(0, maxShow);
-                              const remaining = enabledCount - maxShow;
-
-                              return (
-                                <>
-                                  <div style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    flex: 1,
-                                    minWidth: 0,
-                                    overflow: 'hidden',
-                                  }}>
-                                    {showTools.map(toolId => (
-                                      <span
-                                        key={toolId}
-                                        style={{
-                                          fontSize: '12px',
-                                          fontWeight: 500,
-                                          color: 'var(--primary)',
-                                          backgroundColor: 'rgba(9, 105, 218, 0.12)',
-                                          padding: '4px 8px',
-                                          borderRadius: '6px',
-                                          border: '1px solid rgba(9, 105, 218, 0.35)',
-                                          whiteSpace: 'nowrap',
-                                          overflow: 'hidden',
-                                          textOverflow: 'ellipsis',
-                                        }}
-                                      >
-                                        {getToolDisplayName(toolId, tools)}
-                                      </span>
-                                    ))}
-                                  </div>
-                                  {remaining > 0 && (
-                                    <span style={{
-                                      fontSize: '12px',
-                                      fontWeight: 500,
-                                      color: 'var(--muted-foreground)',
-                                      whiteSpace: 'nowrap',
-                                      flexShrink: 0,
-                                    }}>
-                                      +{remaining}
-                                    </span>
-                                  )}
-                                </>
-                              );
-                            })()}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingSkill(skill.id);
-                              }}
-                              style={{
-                                fontSize: '12px',
-                                fontWeight: 500,
-                                color: 'var(--muted-foreground)',
-                                backgroundColor: 'transparent',
-                                border: 'none',
-                                cursor: 'pointer',
-                                padding: '5px 8px',
-                                flexShrink: 0,
-                                transition: 'color 0.15s',
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--foreground)'}
-                              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--muted-foreground)'}
-                            >
-                              {t("common.edit")}
-                            </button>
-                          </div>
-                        )}
+                              transition: 'color 0.15s',
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--foreground)'}
+                            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--muted-foreground)'}
+                          >
+                            {t("common.edit")}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -701,6 +660,23 @@ export function Skills() {
       </main>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
+      {toolEditorSkill && (
+        <SkillToolsDialog
+          skill={toolEditorSkill}
+          tools={tools}
+          allToolIds={toolEditorOrderedToolIds}
+          visibleToolIds={toolEditorFilteredToolIds}
+          query={toolEditorQuery}
+          enabledOnly={toolEditorEnabledOnly}
+          togglingSkill={togglingSkill}
+          onQueryChange={setToolEditorQuery}
+          onEnabledOnlyChange={setToolEditorEnabledOnly}
+          onToggle={handleToggle}
+          onClose={closeToolEditor}
+          t={t}
+        />
+      )}
+
       {showCreateDialog && (
         <CreateSkillDialog
           creating={creating}
@@ -710,6 +686,259 @@ export function Skills() {
           t={t}
         />
       )}
+    </div>
+  );
+}
+
+function SkillToolsDialog({
+  skill,
+  tools,
+  allToolIds,
+  visibleToolIds,
+  query,
+  enabledOnly,
+  togglingSkill,
+  onQueryChange,
+  onEnabledOnlyChange,
+  onToggle,
+  onClose,
+  t,
+}: {
+  skill: Skill;
+  tools: Tool[];
+  allToolIds: string[];
+  visibleToolIds: string[];
+  query: string;
+  enabledOnly: boolean;
+  togglingSkill: string | null;
+  onQueryChange: (query: string) => void;
+  onEnabledOnlyChange: (enabledOnly: boolean) => void;
+  onToggle: (skillId: string, skillName: string, toolId: string, enabled: boolean) => void;
+  onClose: () => void;
+  t: (key: TranslationPath) => string;
+}) {
+  const enabledCount = allToolIds.filter((toolId) => Boolean(skill.enabled[toolId])).length;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: MODAL_OVERLAY_COLOR,
+        zIndex: MODAL_LAYER_Z_INDEX,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          width: "min(640px, calc(100vw - 48px))",
+          maxHeight: "calc(100vh - 72px)",
+          backgroundColor: "var(--background)",
+          borderRadius: "14px",
+          border: "1px solid var(--border)",
+          boxShadow: "0 20px 56px rgba(0,0,0,0.22)",
+          padding: "20px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "14px",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ margin: "0 0 6px 0", fontSize: "15px", fontWeight: 600, color: "var(--foreground)" }}>
+              {t("skills.configureToolsTitle")}
+            </h3>
+            <p style={{ margin: 0, fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
+              {t("skills.configureToolsDesc")
+                .replace("{skill}", skill.name)
+                .replace("{enabled}", String(enabledCount))
+                .replace("{total}", String(allToolIds.length))}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              width: "30px",
+              height: "30px",
+              borderRadius: "8px",
+              border: "1px solid var(--border)",
+              backgroundColor: "var(--secondary)",
+              color: "var(--muted-foreground)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 0,
+              flexShrink: 0,
+            }}
+            title={t("common.cancel")}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <div style={{ position: "relative", flex: "1 1 280px", minWidth: "200px" }}>
+            <svg
+              style={{
+                position: "absolute",
+                left: "10px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: "var(--muted-foreground)",
+                pointerEvents: "none",
+              }}
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => onQueryChange(e.target.value)}
+              placeholder={t("skills.searchToolsPlaceholder")}
+              style={{
+                width: "100%",
+                padding: "8px 10px 8px 32px",
+                fontSize: "12px",
+                border: "1px solid var(--border)",
+                borderRadius: "8px",
+                backgroundColor: "var(--secondary)",
+                color: "var(--foreground)",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              fontSize: "12px",
+              color: "var(--muted-foreground)",
+              userSelect: "none",
+            }}
+          >
+            <Toggle
+              checked={enabledOnly}
+              onChange={(checked) => onEnabledOnlyChange(checked)}
+            />
+            {t("skills.enabledOnly")}
+          </label>
+        </div>
+
+        <div
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: "10px",
+            backgroundColor: "var(--secondary)",
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ maxHeight: "360px", overflow: "auto", padding: "6px" }}>
+            {visibleToolIds.length === 0 ? (
+              <div
+                style={{
+                  padding: "30px 14px",
+                  textAlign: "center",
+                  fontSize: "12px",
+                  color: "var(--muted-foreground)",
+                }}
+              >
+                {t("skills.noToolsInFilter")}
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gap: "8px",
+                }}
+              >
+                {visibleToolIds.map((toolId) => {
+                  const isEnabled = skill.enabled[toolId] ?? false;
+                  const toggleKey = `${skill.id}:${toolId}`;
+                  const isToggling = togglingSkill === toggleKey;
+                  const tool = tools.find((item) => item.id === toolId);
+                  const isDetected = tool?.detected ?? false;
+                  const isDisabled = isToggling || !isDetected;
+
+                  return (
+                    <div
+                      key={toolId}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "10px",
+                        minHeight: "48px",
+                        padding: "10px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--border)",
+                        backgroundColor: isEnabled ? "rgba(9, 105, 218, 0.08)" : "var(--background)",
+                        opacity: isDetected ? 1 : 0.6,
+                      }}
+                      title={!isDetected ? t("skills.toolNotDetected") : undefined}
+                    >
+                      <div
+                        style={{
+                          fontSize: "14px",
+                          fontWeight: 500,
+                          color: "var(--foreground)",
+                          lineHeight: 1.35,
+                          minWidth: 0,
+                          overflow: "hidden",
+                          whiteSpace: "nowrap",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {getToolDisplayName(toolId, tools)}
+                      </div>
+                      <Toggle
+                        checked={isEnabled}
+                        disabled={isDisabled}
+                        onChange={(checked) => onToggle(skill.id, skill.name, toolId, checked)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button
+            onClick={onClose}
+            style={{
+              fontSize: "12px",
+              fontWeight: 500,
+              color: "var(--primary-foreground)",
+              backgroundColor: "var(--foreground)",
+              border: "none",
+              borderRadius: "8px",
+              padding: "7px 12px",
+              cursor: "pointer",
+            }}
+          >
+            {t("common.done")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
