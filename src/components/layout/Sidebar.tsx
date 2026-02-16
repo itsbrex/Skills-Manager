@@ -12,6 +12,7 @@ const navItems = [
   { path: "/marketplace", labelKey: "nav.marketplace" as const, icon: "store" },
   { path: "/settings", labelKey: "nav.settings" as const, icon: "cog" },
   { path: "/feedback", labelKey: "nav.feedback" as const, icon: "message" },
+  { path: "/polls", labelKey: "nav.polls" as const, icon: "poll" },
 ];
 
 const icons: Record<string, React.ReactNode> = {
@@ -42,6 +43,13 @@ const icons: Record<string, React.ReactNode> = {
   message: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  ),
+  poll: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 20V10" />
+      <path d="M12 20V4" />
+      <path d="M6 20v-6" />
     </svg>
   ),
 };

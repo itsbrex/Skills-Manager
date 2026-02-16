@@ -173,3 +173,46 @@ export interface FeedbackRequest {
   source?: string | null;
   language?: string | null;
 }
+
+export interface PollOption {
+  id: string;
+  label: string;
+}
+
+export interface PollOptionResult extends PollOption {
+  votes: number;
+}
+
+export interface Poll {
+  id: string;
+  title: string;
+  locale: string;
+  defaultLocale: string;
+  isActive: boolean;
+  options: PollOption[];
+  createdAt: number;
+}
+
+export interface PollResult {
+  id: string;
+  title: string;
+  locale: string;
+  defaultLocale: string;
+  isActive: boolean;
+  options: PollOptionResult[];
+  totalVotes: number;
+  createdAt: number;
+}
+
+export interface PollVoteRequest {
+  voterId: string;
+  optionId: string;
+}
+
+export interface PollVote {
+  id: string;
+  pollId: string;
+  voterId: string;
+  optionId: string;
+  createdAt: number;
+}
