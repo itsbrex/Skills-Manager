@@ -766,9 +766,53 @@ impl MarketplaceService {
         let (owner, repo) = parse_github_repo_url(repo_url)?;
         let client = github_client()?;
         let candidates = build_skill_path_candidates(skill_path);
+        let mut attempted_candidates: HashSet<String> = HashSet::new();
         let mut last_not_found_error: Option<String> = None;
 
         for candidate in candidates {
+            attempted_candidates.insert(candidate.clone());
+            if let Some(tree) =
+                fetch_skill_files_from_tree_api(&client, &owner, &repo, &candidate, github_token)
+                    .await?
+            {
+                return Ok(tree);
+            }
+
+            match build_github_tree(&client, &owner, &repo, &candidate, github_token).await {
+                Ok(tree) => return Ok(tree),
+                Err(err) => {
+                    if err.contains("GitHub API 请求受限") {
+                        if let Some(tree) =
+                            fetch_skill_files_from_raw(&owner, &repo, &candidate).await?
+                        {
+                            return Ok(tree);
+                        }
+                        continue;
+                    }
+                    if is_github_not_found_error(&err) {
+                        last_not_found_error = Some(err);
+                        continue;
+                    }
+                    return Err(err);
+                }
+            }
+        }
+
+        let inferred_candidates = infer_skill_path_candidates_from_repo_tree(
+            &client,
+            &owner,
+            &repo,
+            skill_path,
+            github_token,
+        )
+        .await?;
+
+        for candidate in inferred_candidates {
+            if attempted_candidates.contains(&candidate) {
+                continue;
+            }
+            attempted_candidates.insert(candidate.clone());
+
             if let Some(tree) =
                 fetch_skill_files_from_tree_api(&client, &owner, &repo, &candidate, github_token)
                     .await?
@@ -1885,6 +1929,148 @@ fn build_skill_path_candidates(skill_path: &str) -> Vec<String> {
     candidates
 }
 
+async fn infer_skill_path_candidates_from_repo_tree(
+    client: &Client,
+    owner: &str,
+    repo: &str,
+    requested_skill_path: &str,
+    github_token: Option<&str>,
+) -> Result<Vec<String>, String> {
+    if let Some(cached) = get_cached_github_tree(owner, repo) {
+        return Ok(infer_skill_path_candidates_from_tree_entries(
+            &cached.tree,
+            requested_skill_path,
+        ));
+    }
+
+    let branches = ["main", "master"];
+    let mut rate_limited = false;
+
+    for branch in branches {
+        let url = format!(
+            "{}/repos/{}/{}/git/trees/{}?recursive=1",
+            GITHUB_API_BASE, owner, repo, branch
+        );
+        let response = with_github_auth(client.get(url), github_token)
+            .send()
+            .await
+            .map_err(|e| format!("GitHub 请求失败: {}", e))?;
+
+        if response.status().as_u16() == 404 {
+            continue;
+        }
+        if response.status().as_u16() == 403 {
+            rate_limited = true;
+            continue;
+        }
+        if !response.status().is_success() {
+            continue;
+        }
+
+        let payload = response
+            .json::<GitHubTreeResponse>()
+            .await
+            .map_err(|e| format!("GitHub 响应解析失败: {}", e))?;
+        set_cached_github_tree(owner, repo, branch, &payload.tree);
+        return Ok(infer_skill_path_candidates_from_tree_entries(
+            &payload.tree,
+            requested_skill_path,
+        ));
+    }
+
+    if rate_limited {
+        return Ok(Vec::new());
+    }
+
+    Ok(Vec::new())
+}
+
+fn infer_skill_path_candidates_from_tree_entries(
+    entries: &[GitHubTreeEntry],
+    requested_skill_path: &str,
+) -> Vec<String> {
+    let requested = requested_skill_path.trim_matches('/');
+    if requested.is_empty() {
+        return Vec::new();
+    }
+
+    let requested_lower = requested.to_ascii_lowercase();
+    let requested_name_lower = repo_path_name(requested).to_ascii_lowercase();
+    let requested_suffix = format!("/{}", requested_lower);
+
+    let mut exact_or_suffix_matches: Vec<String> = Vec::new();
+    let mut basename_matches: Vec<String> = Vec::new();
+
+    for entry in entries.iter().filter(|entry| entry.kind == "blob") {
+        let normalized_path = entry.path.trim_matches('/');
+        let Some((parent_dir, file_name)) = normalized_path.rsplit_once('/') else {
+            continue;
+        };
+        if !is_skill_manifest_file(file_name) {
+            continue;
+        }
+
+        let dir = parent_dir.trim_matches('/');
+        if dir.is_empty() {
+            continue;
+        }
+
+        let dir_lower = dir.to_ascii_lowercase();
+        if dir_lower == requested_lower || dir_lower.ends_with(&requested_suffix) {
+            if !exact_or_suffix_matches.iter().any(|value| value == dir) {
+                exact_or_suffix_matches.push(dir.to_string());
+            }
+            continue;
+        }
+
+        if repo_path_name(dir).eq_ignore_ascii_case(&requested_name_lower)
+            && !basename_matches.iter().any(|value| value == dir)
+        {
+            basename_matches.push(dir.to_string());
+        }
+    }
+
+    let sort_candidates = |candidates: &mut Vec<String>| {
+        candidates.sort_by(|left, right| {
+            let left_depth = left
+                .split('/')
+                .filter(|segment| !segment.is_empty())
+                .count();
+            let right_depth = right
+                .split('/')
+                .filter(|segment| !segment.is_empty())
+                .count();
+            left_depth
+                .cmp(&right_depth)
+                .then_with(|| left.len().cmp(&right.len()))
+                .then_with(|| left.cmp(right))
+        });
+    };
+
+    sort_candidates(&mut exact_or_suffix_matches);
+    if !exact_or_suffix_matches.is_empty() {
+        return exact_or_suffix_matches;
+    }
+
+    sort_candidates(&mut basename_matches);
+    if !basename_matches.is_empty() {
+        return basename_matches;
+    }
+
+    if has_root_skill_manifest(entries) {
+        return vec![String::new()];
+    }
+
+    Vec::new()
+}
+
+fn has_root_skill_manifest(entries: &[GitHubTreeEntry]) -> bool {
+    entries
+        .iter()
+        .filter(|entry| entry.kind == "blob")
+        .any(|entry| entry.path.eq_ignore_ascii_case("SKILL.md"))
+}
+
 fn is_github_not_found_error(error_message: &str) -> bool {
     error_message.contains("HTTP 404")
 }
@@ -2606,6 +2792,65 @@ mod tests {
     fn build_skill_path_candidates_keeps_nested_path_without_extra_prefixes() {
         let candidates = super::build_skill_path_candidates("skills/docfactory-prd");
         assert_eq!(candidates, vec!["skills/docfactory-prd".to_string()]);
+    }
+
+    #[test]
+    fn infer_skill_path_candidates_from_tree_entries_matches_suffix_paths() {
+        let entries = vec![
+            GitHubTreeEntry {
+                path: "skills/frameworks/nestjs/SKILL.md".to_string(),
+                kind: "blob".to_string(),
+                sha: None,
+            },
+            GitHubTreeEntry {
+                path: "skills/backend/fastify/SKILL.md".to_string(),
+                kind: "blob".to_string(),
+                sha: None,
+            },
+        ];
+
+        let candidates = super::infer_skill_path_candidates_from_tree_entries(&entries, "nestjs");
+        assert_eq!(candidates, vec!["skills/frameworks/nestjs".to_string()]);
+    }
+
+    #[test]
+    fn infer_skill_path_candidates_from_tree_entries_falls_back_to_basename_match() {
+        let entries = vec![
+            GitHubTreeEntry {
+                path: "skills/frameworks/nestjs/SKILL.md".to_string(),
+                kind: "blob".to_string(),
+                sha: None,
+            },
+            GitHubTreeEntry {
+                path: "skills/frameworks/express/SKILL.md".to_string(),
+                kind: "blob".to_string(),
+                sha: None,
+            },
+        ];
+
+        let candidates =
+            super::infer_skill_path_candidates_from_tree_entries(&entries, "catalog/nestjs");
+        assert_eq!(candidates, vec!["skills/frameworks/nestjs".to_string()]);
+    }
+
+    #[test]
+    fn infer_skill_path_candidates_from_tree_entries_falls_back_to_repo_root_skill_manifest() {
+        let entries = vec![
+            GitHubTreeEntry {
+                path: "SKILL.md".to_string(),
+                kind: "blob".to_string(),
+                sha: None,
+            },
+            GitHubTreeEntry {
+                path: "README.md".to_string(),
+                kind: "blob".to_string(),
+                sha: None,
+            },
+        ];
+
+        let candidates =
+            super::infer_skill_path_candidates_from_tree_entries(&entries, "skill-as-a-service");
+        assert_eq!(candidates, vec![String::new()]);
     }
 
     #[test]

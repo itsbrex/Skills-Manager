@@ -191,7 +191,7 @@ impl ConfigManager {
         let mut normalized_sources = previous_sources
             .clone()
             .unwrap_or_else(|| default_sources.clone());
-        normalized_sources.retain(|source| source.source_type == SourceType::GithubRepo);
+        normalized_sources.retain(|source| source.source_type != SourceType::Unknown);
         if normalized_sources.is_empty() {
             normalized_sources = default_sources;
         }
@@ -401,6 +401,52 @@ mod tests {
             assert_eq!(
                 vercel_skills.skills_path,
                 home_dir.join(".agents").join("skills")
+            );
+        });
+    }
+
+    #[test]
+    fn load_preserves_non_github_marketplace_sources_enabled_state() {
+        with_temp_home(|home_dir| {
+            let config_dir = home_dir.join(".skills-manager");
+            fs::create_dir_all(&config_dir).expect("create config dir");
+            let config_path = config_dir.join("config.json");
+
+            let config_json = json!({
+                "version": "1.1.1",
+                "skills_dir": config_dir.join("skills").to_string_lossy(),
+                "tools": {},
+                "custom_tools": {},
+                "marketplace_sources": [
+                    {
+                        "id": "src_test_crawler",
+                        "name": "Test Crawler Source",
+                        "url": "https://example.com",
+                        "source_type": "crawler",
+                        "enabled": false,
+                        "builtin": true,
+                        "api_key": null
+                    }
+                ],
+                "initialized": true
+            });
+            fs::write(
+                &config_path,
+                serde_json::to_string_pretty(&config_json).expect("serialize config"),
+            )
+            .expect("write config");
+
+            let manager = ConfigManager::new();
+            let loaded = manager.load().expect("load config");
+            let sources = loaded
+                .marketplace_sources
+                .expect("marketplace sources should exist");
+
+            assert_eq!(sources.len(), 1, "should keep configured source");
+            assert_eq!(sources[0].id, "src_test_crawler");
+            assert!(
+                !sources[0].enabled,
+                "enabled=false should persist after loading config"
             );
         });
     }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -48,6 +48,35 @@ fn normalize_source_filter(source_ids: Option<Vec<String>>) -> Option<Vec<String
         None
     } else {
         Some(ids)
+    }
+}
+
+fn resolve_cache_source_scope(
+    normalized_source_filter: &Option<Vec<String>>,
+    sources: &[MarketplaceSource],
+) -> Option<Vec<String>> {
+    let mut enabled_ids: Vec<String> = sources
+        .iter()
+        .filter(|source| source.enabled)
+        .map(|source| source.id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect();
+    enabled_ids.sort();
+    enabled_ids.dedup();
+
+    match normalized_source_filter {
+        Some(explicit_ids) => {
+            let enabled_set: HashSet<&str> = enabled_ids.iter().map(String::as_str).collect();
+            let mut scoped_ids: Vec<String> = explicit_ids
+                .iter()
+                .map(|id| id.trim().to_string())
+                .filter(|id| !id.is_empty() && enabled_set.contains(id.as_str()))
+                .collect();
+            scoped_ids.sort();
+            scoped_ids.dedup();
+            Some(scoped_ids)
+        }
+        None => Some(enabled_ids),
     }
 }
 
@@ -153,18 +182,24 @@ pub async fn fetch_marketplace_skills(
         .filter(|q| !q.is_empty());
     let normalized_source_filter = normalize_source_filter(source_ids);
     let page = page.unwrap_or(1).max(1);
+    let manager = ConfigManager::new();
+    let mut config = manager.load()?;
+    let cache_source_scope = resolve_cache_source_scope(
+        &normalized_source_filter,
+        config.marketplace_sources.as_deref().unwrap_or(&[]),
+    );
 
     if !force_refresh {
         if let Some(cached) =
-            cache.get_fresh_with_meta(page, &normalized_query, &normalized_source_filter)
+            cache.get_fresh_with_meta(page, &normalized_query, &cache_source_scope)
         {
             return Ok(cached);
         }
     }
 
-    let manager = ConfigManager::new();
-    let mut config = manager.load()?;
     let sources = load_marketplace_sources_for_runtime(&manager, &mut config).await;
+    let runtime_cache_source_scope =
+        resolve_cache_source_scope(&normalized_source_filter, &sources);
 
     let result = match MarketplaceService::fetch_marketplace_skills_page(
         &sources,
@@ -180,15 +215,21 @@ pub async fn fetch_marketplace_skills(
         Err(err) => {
             if page == 1 {
                 if let Some(cached) = cache.get_any() {
-                    let filtered_by_source: Vec<MarketplaceSkill> =
-                        if let Some(ids) = &normalized_source_filter {
-                            cached
-                                .into_iter()
-                                .filter(|skill| ids.contains(&skill.source_id))
-                                .collect()
-                        } else {
-                            cached
-                        };
+                    let runtime_scope_ids = runtime_cache_source_scope.clone().unwrap_or_default();
+                    let runtime_scope_set: HashSet<&str> =
+                        runtime_scope_ids.iter().map(String::as_str).collect();
+                    let filtered_by_source: Vec<MarketplaceSkill> = if !runtime_scope_set.is_empty()
+                        || runtime_cache_source_scope
+                            .as_ref()
+                            .is_some_and(|ids| ids.is_empty())
+                    {
+                        cached
+                            .into_iter()
+                            .filter(|skill| runtime_scope_set.contains(skill.source_id.as_str()))
+                            .collect()
+                    } else {
+                        cached
+                    };
                     let filtered = MarketplaceService::filter_marketplace_skills_by_query(
                         filtered_by_source,
                         normalized_query.as_deref(),
@@ -206,7 +247,7 @@ pub async fn fetch_marketplace_skills(
     cache.set_page(
         page,
         normalized_query.clone(),
-        normalized_source_filter.clone(),
+        runtime_cache_source_scope.clone(),
         result.clone(),
     );
 
@@ -368,7 +409,13 @@ pub async fn check_marketplace_updates_if_stale(
     )
     .await?;
 
-    marketplace_cache.set(listing.skills.clone(), None, listing.has_more, None);
+    let cache_source_scope = resolve_cache_source_scope(&None, &sources);
+    marketplace_cache.set(
+        listing.skills.clone(),
+        None,
+        listing.has_more,
+        cache_source_scope,
+    );
     persist_update_check_time(now);
 
     let checked = listing
@@ -426,12 +473,25 @@ pub fn toggle_marketplace_source(source_id: String, enabled: bool) -> Result<(),
 mod tests {
     use std::time::{Duration, SystemTime};
 
+    use crate::models::{MarketplaceSource, SourceType};
     use crate::test_support::with_temp_home;
 
     use super::{
-        load_last_update_check_time, persist_update_check_time,
+        load_last_update_check_time, persist_update_check_time, resolve_cache_source_scope,
         should_run_marketplace_update_check, MARKETPLACE_UPDATE_CHECK_INTERVAL,
     };
+
+    fn make_source(id: &str, enabled: bool) -> MarketplaceSource {
+        MarketplaceSource {
+            id: id.to_string(),
+            name: id.to_string(),
+            url: format!("https://{id}.example.com"),
+            source_type: SourceType::Api,
+            enabled,
+            builtin: true,
+            api_key: None,
+        }
+    }
 
     #[test]
     fn should_run_marketplace_update_check_respects_interval() {
@@ -465,5 +525,42 @@ mod tests {
             let loaded = load_last_update_check_time();
             assert!(loaded.is_some(), "expected persisted timestamp");
         });
+    }
+
+    #[test]
+    fn resolve_cache_source_scope_defaults_to_enabled_sources() {
+        let sources = vec![
+            make_source("src_skills", true),
+            make_source("src_awesome", false),
+        ];
+
+        let scope = resolve_cache_source_scope(&None, &sources);
+
+        assert_eq!(
+            scope,
+            Some(vec!["src_skills".to_string()]),
+            "no explicit filter should cache by enabled sources"
+        );
+    }
+
+    #[test]
+    fn resolve_cache_source_scope_intersects_with_enabled_sources() {
+        let sources = vec![
+            make_source("src_skills", true),
+            make_source("src_awesome", false),
+        ];
+        let explicit = Some(vec![
+            "src_awesome".to_string(),
+            "src_skills".to_string(),
+            "src_skills".to_string(),
+        ]);
+
+        let scope = resolve_cache_source_scope(&explicit, &sources);
+
+        assert_eq!(
+            scope,
+            Some(vec!["src_skills".to_string()]),
+            "explicit filter should drop disabled source ids and deduplicate"
+        );
     }
 }

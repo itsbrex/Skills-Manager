@@ -750,41 +750,52 @@ function parseFrontmatterBlock(block: string): ParsedFrontmatter | null {
   };
   const lines = block.split("\n");
   let section: "compatibility" | "metadata" | null = null;
+  let index = 0;
 
-  for (const line of lines) {
+  while (index < lines.length) {
+    const line = lines[index];
     const trimmed = line.trim();
-    if (!trimmed) continue;
+    if (!trimmed) {
+      index += 1;
+      continue;
+    }
 
-    const rootMatch = trimmed.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-    if (rootMatch && !line.startsWith("  ")) {
+    const rootMatch = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    if (rootMatch && !/^\s/.test(line)) {
       const key = rootMatch[1];
-      const value = stripYamlValue(rootMatch[2]);
+      const { value, nextIndex } = parseYamlScalarValue(lines, index, rootMatch[2]);
       if (key === "name") {
         result.name = value;
         section = null;
+        index = nextIndex;
         continue;
       }
       if (key === "description") {
         result.description = value;
         section = null;
+        index = nextIndex;
         continue;
       }
       if (key === "compatibility") {
         section = "compatibility";
         if (value) result.compatibility.push(value);
+        index = nextIndex;
         continue;
       }
       if (key === "metadata") {
         section = "metadata";
+        index += 1;
         continue;
       }
       section = null;
+      index += 1;
       continue;
     }
 
     const listMatch = trimmed.match(/^-\s+(.+)$/);
     if (listMatch && section === "compatibility") {
       result.compatibility.push(stripYamlValue(listMatch[1]));
+      index += 1;
       continue;
     }
 
@@ -796,6 +807,7 @@ function parseFrontmatterBlock(block: string): ParsedFrontmatter | null {
         result.metadata[key] = value;
       }
     }
+    index += 1;
   }
 
   if (
@@ -819,4 +831,79 @@ function stripYamlValue(value: string): string {
     return trimmed.slice(1, -1).trim();
   }
   return trimmed;
+}
+
+function parseYamlScalarValue(
+  lines: string[],
+  startIndex: number,
+  rawValue: string,
+): { value: string; nextIndex: number } {
+  const indicator = rawValue.trim();
+  const blockScalarMatch = indicator.match(/^([|>])[+-]?$/);
+  if (!blockScalarMatch) {
+    return {
+      value: stripYamlValue(rawValue),
+      nextIndex: startIndex + 1,
+    };
+  }
+
+  const style = blockScalarMatch[1];
+  const blockLines: string[] = [];
+  let index = startIndex + 1;
+  let baseIndent: number | null = null;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      blockLines.push("");
+      index += 1;
+      continue;
+    }
+
+    const indentMatch = line.match(/^(\s+)(.*)$/);
+    if (!indentMatch) {
+      break;
+    }
+
+    const indentLength = indentMatch[1].length;
+    if (baseIndent === null) {
+      baseIndent = indentLength;
+    }
+    if (indentLength < baseIndent) {
+      break;
+    }
+
+    blockLines.push(line.slice(baseIndent));
+    index += 1;
+  }
+
+  const value = style === ">"
+    ? foldYamlLines(blockLines)
+    : blockLines.join("\n");
+
+  return {
+    value: value.trim(),
+    nextIndex: index,
+  };
+}
+
+function foldYamlLines(lines: string[]): string {
+  let output = "";
+  let previousLineBlank = false;
+
+  lines.forEach((line, index) => {
+    const isBlank = line.trim().length === 0;
+    if (index === 0) {
+      output = line;
+      previousLineBlank = isBlank;
+      return;
+    }
+
+    output += isBlank || previousLineBlank ? `\n${line}` : ` ${line}`;
+    previousLineBlank = isBlank;
+  });
+
+  return output;
 }
