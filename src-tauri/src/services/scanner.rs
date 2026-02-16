@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::models::{AppConfig, Skill, SkillSource};
 use crate::services::detector::DetectorService;
-use crate::services::linker::is_symlink_or_junction;
+use crate::services::linker::{is_symlink_or_junction, LinkerService};
 
 pub struct ScannerService;
 
@@ -125,6 +125,14 @@ impl ScannerService {
         let mut enabled = HashMap::new();
 
         for (tool_id, tool_config) in config.collect_tool_configs() {
+            if LinkerService::tool_uses_copy_mode(&tool_id) {
+                let copied_path = tool_config.skills_path.join(skill_id);
+                if copied_path.exists() && copied_path.is_dir() {
+                    enabled.insert(tool_id, true);
+                }
+                continue;
+            }
+
             let link_path = tool_config.skills_path.join(skill_id);
 
             // Check if a symlink or Junction (Windows) exists at the expected location

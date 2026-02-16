@@ -41,6 +41,7 @@ pub struct LinkReport {
 }
 
 pub struct LinkerService;
+const IFLOW_TOOL_ID: &str = "iflow";
 
 /// Check if a path is a symlink or a Windows Junction.
 /// On Unix, this is equivalent to `is_symlink()`.
@@ -84,6 +85,43 @@ pub fn remove_symlink_or_junction(path: &Path) -> Result<(), std::io::Error> {
 }
 
 impl LinkerService {
+    pub fn tool_uses_copy_mode(tool_id: &str) -> bool {
+        tool_id == IFLOW_TOOL_ID
+    }
+
+    pub fn enable_skill_for_tool(
+        skill_source: &Path,
+        tool_skills_dir: &Path,
+        skill_id: &str,
+        tool_id: &str,
+    ) -> Result<(), String> {
+        if !Self::tool_uses_copy_mode(tool_id) {
+            return Self::enable_skill(skill_source, tool_skills_dir, skill_id);
+        }
+
+        if !tool_skills_dir.exists() {
+            fs::create_dir_all(tool_skills_dir)
+                .map_err(|e| format!("Failed to create skills directory: {}", e))?;
+        }
+
+        let target_path = tool_skills_dir.join(skill_id);
+        if target_path.exists() || target_path.symlink_metadata().is_ok() {
+            fs::remove_file(&target_path)
+                .or_else(|_| fs::remove_dir_all(&target_path))
+                .map_err(|e| format!("Failed to remove existing skill directory: {}", e))?;
+        }
+
+        if !skill_source.is_dir() {
+            return Err(format!(
+                "Skill source is not a directory: {}",
+                skill_source.display()
+            ));
+        }
+
+        copy_dir_all_include_hidden(skill_source, &target_path)?;
+        Ok(())
+    }
+
     pub fn enable_skill(
         skill_source: &Path,
         tool_skills_dir: &Path,
@@ -114,6 +152,14 @@ impl LinkerService {
         }
 
         Ok(())
+    }
+
+    pub fn disable_skill_for_tool(
+        tool_skills_dir: &Path,
+        skill_id: &str,
+        _tool_id: &str,
+    ) -> Result<(), String> {
+        Self::disable_skill(tool_skills_dir, skill_id)
     }
 
     #[cfg(windows)]
@@ -213,10 +259,37 @@ impl LinkerService {
         }
     }
 
-    pub fn sync_all(
+    pub fn check_link_for_tool(
+        skill_source: &Path,
+        tool_skills_dir: &Path,
+        skill_id: &str,
+        tool_id: &str,
+    ) -> LinkStatus {
+        if !Self::tool_uses_copy_mode(tool_id) {
+            return Self::check_link(skill_source, tool_skills_dir, skill_id);
+        }
+
+        let copied_path = tool_skills_dir.join(skill_id);
+        if copied_path.exists() {
+            if copied_path.is_dir() {
+                if skill_source.exists() {
+                    LinkStatus::Valid
+                } else {
+                    LinkStatus::Broken
+                }
+            } else {
+                LinkStatus::NotALink
+            }
+        } else {
+            LinkStatus::Missing
+        }
+    }
+
+    pub fn sync_all_for_tool(
         skills: &[(String, std::path::PathBuf)],
         tool_skills_dir: &Path,
         enabled_skills: &[String],
+        tool_id: &str,
     ) -> LinkReport {
         let mut report = LinkReport::default();
 
@@ -224,7 +297,7 @@ impl LinkerService {
             let should_be_enabled = enabled_skills.contains(skill_id);
 
             if should_be_enabled {
-                match Self::enable_skill(skill_path, tool_skills_dir, skill_id) {
+                match Self::enable_skill_for_tool(skill_path, tool_skills_dir, skill_id, tool_id) {
                     Ok(_) => {
                         report.success.push(LinkResult {
                             skill_id: skill_id.clone(),
@@ -243,7 +316,7 @@ impl LinkerService {
                     }
                 }
             } else {
-                match Self::disable_skill(tool_skills_dir, skill_id) {
+                match Self::disable_skill_for_tool(tool_skills_dir, skill_id, tool_id) {
                     Ok(_) => {
                         report.success.push(LinkResult {
                             skill_id: skill_id.clone(),
@@ -338,6 +411,18 @@ impl LinkerService {
 }
 
 fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
+    copy_dir_all_with_options(src, dst, true)
+}
+
+fn copy_dir_all_include_hidden(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
+    copy_dir_all_with_options(src, dst, false)
+}
+
+fn copy_dir_all_with_options(
+    src: &std::path::Path,
+    dst: &std::path::Path,
+    skip_hidden: bool,
+) -> Result<(), String> {
     std::fs::create_dir_all(dst).map_err(|e| format!("Failed to create directory: {}", e))?;
 
     for entry in std::fs::read_dir(src).map_err(|e| format!("Failed to read directory: {}", e))? {
@@ -345,8 +430,8 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), Stri
         let file_name = entry.file_name();
         let file_name_str = file_name.to_string_lossy();
 
-        // Skip hidden files/directories (starting with .)
-        if file_name_str.starts_with('.') {
+        // Optionally skip hidden files/directories (starting with .)
+        if skip_hidden && file_name_str.starts_with('.') {
             continue;
         }
 
@@ -355,11 +440,98 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), Stri
             .map_err(|e| format!("Failed to get file type: {}", e))?;
 
         if ty.is_dir() {
-            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
+            copy_dir_all_with_options(&entry.path(), &dst.join(entry.file_name()), skip_hidden)?;
         } else {
             std::fs::copy(entry.path(), dst.join(entry.file_name()))
                 .map_err(|e| format!("Failed to copy file: {}", e))?;
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LinkStatus, LinkerService};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn make_temp_dir(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after unix epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir()
+            .join("skills-manager-linker-tests")
+            .join(format!("{}-{}-{}", name, std::process::id(), unique));
+        fs::create_dir_all(&dir).expect("temp dir should be created");
+        dir
+    }
+
+    #[test]
+    fn iflow_enable_skill_uses_copy_mode_instead_of_symlink() {
+        let root = make_temp_dir("iflow-copy");
+        let source_skill = root.join("hub").join("demo-skill");
+        let tool_skills_dir = root.join("iflow").join("skills");
+        let target_skill = tool_skills_dir.join("demo-skill");
+
+        fs::create_dir_all(&source_skill).expect("source skill dir should be created");
+        fs::write(source_skill.join("SKILL.md"), "# Demo\n").expect("skill file should be created");
+        fs::write(source_skill.join("meta.json"), "{\"name\":\"demo\"}")
+            .expect("meta file should be created");
+        fs::write(source_skill.join(".env"), "TOKEN=demo\n")
+            .expect("hidden file should be created");
+        fs::create_dir_all(source_skill.join(".github")).expect("hidden dir should be created");
+        fs::write(
+            source_skill.join(".github").join("workflows.yml"),
+            "name: ci\n",
+        )
+        .expect("hidden nested file should be created");
+
+        LinkerService::enable_skill_for_tool(
+            &source_skill,
+            &tool_skills_dir,
+            "demo-skill",
+            "iflow",
+        )
+        .expect("iflow enable should succeed");
+
+        assert!(target_skill.exists(), "target directory should exist");
+        assert!(target_skill.is_dir(), "target should be a directory");
+        let meta = fs::symlink_metadata(&target_skill).expect("target metadata should exist");
+        assert!(
+            !meta.file_type().is_symlink(),
+            "iflow target should be copied dir, not symlink"
+        );
+        assert!(
+            target_skill.join("SKILL.md").exists(),
+            "copied skill should contain SKILL.md"
+        );
+        assert!(
+            target_skill.join(".env").exists(),
+            "copied skill should contain hidden file"
+        );
+        assert!(
+            target_skill.join(".github").join("workflows.yml").exists(),
+            "copied skill should contain hidden directory files"
+        );
+        assert_eq!(
+            LinkerService::check_link_for_tool(
+                &source_skill,
+                &tool_skills_dir,
+                "demo-skill",
+                "iflow"
+            ),
+            LinkStatus::Valid
+        );
+
+        LinkerService::disable_skill_for_tool(&tool_skills_dir, "demo-skill", "iflow")
+            .expect("iflow disable should succeed");
+        assert!(
+            !target_skill.exists(),
+            "disable should remove copied iflow skill"
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

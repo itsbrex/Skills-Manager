@@ -41,7 +41,12 @@ pub fn enable_skill(
         return Err(format!("Skill not found: {}", skill_id));
     }
 
-    LinkerService::enable_skill(&skill_path, &tool_config.skills_path, &skill_id)?;
+    LinkerService::enable_skill_for_tool(
+        &skill_path,
+        &tool_config.skills_path,
+        &skill_id,
+        &tool_id,
+    )?;
 
     // Invalidate cache after modification
     cache.invalidate_skills();
@@ -65,7 +70,7 @@ pub fn disable_skill(
         return Err(format!("Tool is disabled: {}", tool_id));
     }
 
-    LinkerService::disable_skill(&tool_config.skills_path, &skill_id)?;
+    LinkerService::disable_skill_for_tool(&tool_config.skills_path, &skill_id, &tool_id)?;
 
     // Invalidate cache after modification
     cache.invalidate_skills();
@@ -101,8 +106,9 @@ pub fn delete_skill(skill_id: String, cache: State<AppCache>) -> Result<(), Stri
     }
 
     // First, remove all symlinks from tool directories
-    for (_tool_id, tool_config) in config.collect_tool_configs() {
-        let _ = LinkerService::disable_skill(&tool_config.skills_path, &skill_id);
+    for (tool_id, tool_config) in config.collect_tool_configs() {
+        let _ =
+            LinkerService::disable_skill_for_tool(&tool_config.skills_path, &skill_id, &tool_id);
     }
 
     // Then delete the skill folder

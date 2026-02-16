@@ -14,10 +14,14 @@ pub fn check_sync_status() -> Result<SyncReport, String> {
     let skills = ScannerService::scan_skills(&config.skills_dir)?;
     let mut issues_count = 0;
 
-    for (_tool_id, tool_config) in config.collect_tool_configs() {
+    for (tool_id, tool_config) in config.collect_tool_configs() {
         for skill in &skills {
-            let status =
-                LinkerService::check_link(&skill.path, &tool_config.skills_path, &skill.id);
+            let status = LinkerService::check_link_for_tool(
+                &skill.path,
+                &tool_config.skills_path,
+                &skill.id,
+                &tool_id,
+            );
 
             if status != LinkStatus::Valid && status != LinkStatus::Missing {
                 issues_count += 1;
@@ -48,8 +52,12 @@ pub fn fix_sync_issues() -> Result<LinkReport, String> {
             .map(|s| s.id.clone())
             .collect();
 
-        let report =
-            LinkerService::sync_all(&skill_data, &tool_config.skills_path, &enabled_skills);
+        let report = LinkerService::sync_all_for_tool(
+            &skill_data,
+            &tool_config.skills_path,
+            &enabled_skills,
+            &tool_id,
+        );
 
         combined_report.success.extend(report.success);
         combined_report.failed.extend(report.failed);
