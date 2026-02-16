@@ -7,6 +7,11 @@ import { ToastContainer, useToast } from "@/components/ui/toast";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoader } from "@/components/ui/loading";
+import {
+  CREATE_SKILL_MODAL_WIDTH,
+  MODAL_LAYER_Z_INDEX,
+  MODAL_OVERLAY_COLOR,
+} from "@/constants/modal";
 import { AppConfig, Skill, Tool } from "@/types";
 import { useTranslation, TranslationPath } from "@/i18n";
 
@@ -745,14 +750,14 @@ function CreateSkillDialog({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "rgba(0,0,0,0.4)",
-        zIndex: 1000,
+        backgroundColor: MODAL_OVERLAY_COLOR,
+        zIndex: MODAL_LAYER_Z_INDEX,
       }}
       onClick={onCancel}
     >
       <div
         style={{
-          width: "420px",
+          width: CREATE_SKILL_MODAL_WIDTH,
           backgroundColor: "var(--background)",
           borderRadius: "14px",
           border: "1px solid var(--border)",

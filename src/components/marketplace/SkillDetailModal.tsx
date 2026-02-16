@@ -8,6 +8,13 @@ import { FileTree } from "@/components/editor/FileTree";
 import { MarketplaceSkill, SkillFileNode, FileNode } from "@/types";
 import { useTranslation } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
+import {
+  MODAL_LAYER_Z_INDEX,
+  MODAL_MAX_VIEWPORT_WIDTH,
+  MODAL_OVERLAY_COLOR,
+  SKILL_DETAIL_MODAL_HEIGHT,
+  SKILL_DETAIL_MODAL_WIDTH,
+} from "@/constants/modal";
 import { ExternalLink } from "lucide-react";
 
 interface SkillDetailModalProps {
@@ -327,22 +334,23 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "rgba(0,0,0,0.45)",
-        zIndex: 1000,
+        backgroundColor: MODAL_OVERLAY_COLOR,
+        zIndex: MODAL_LAYER_Z_INDEX,
       }}
       onClick={onClose}
     >
       <div
         style={{
-          width: "980px",
-          maxWidth: "90vw",
-          maxHeight: "90vh",
+          width: SKILL_DETAIL_MODAL_WIDTH,
+          maxWidth: MODAL_MAX_VIEWPORT_WIDTH,
+          height: SKILL_DETAIL_MODAL_HEIGHT,
           backgroundColor: "var(--background)",
           borderRadius: "16px",
           border: "1px solid var(--border)",
           boxShadow: "0 18px 60px rgba(0,0,0,0.25)",
           display: "flex",
           flexDirection: "column",
+          overflow: "hidden",
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -451,7 +459,16 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
                 )}
               </div>
               <div style={{ width: "1px", backgroundColor: "var(--border)" }} />
-              <div style={{ minWidth: 0, minHeight: 0, padding: "18px 20px", overflow: "hidden" }}>
+              <div
+                style={{
+                  minWidth: 0,
+                  minHeight: 0,
+                  padding: "18px 20px",
+                  overflow: "hidden",
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
                 {filesLoading && !treeForDisplay ? (
                   <div style={{ color: "var(--muted-foreground)" }}>{t("marketplace.loadingFiles")}</div>
                 ) : contentLoading ? (
@@ -549,6 +566,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
                       wordBreak: "break-word",
                       height: "100%",
                       overflow: "auto",
+                      margin: 0,
                     }}>
                       {previewContent}
                     </pre>
