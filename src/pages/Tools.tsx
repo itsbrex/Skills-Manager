@@ -98,11 +98,11 @@ export function Tools() {
     }
   }, [addToast, t]);
 
-  // Reload after operations (uses cache)
+  // Reload after operations - force re-detection to avoid stale cached list
   const reloadTools = useCallback(async () => {
     setError(null);
     try {
-      const result = await invoke<Tool[]>("detect_tools");
+      const result = await invoke<Tool[]>("refresh_tools");
       setTools(result);
       setIconFallbackStage({});
     } catch (err) {

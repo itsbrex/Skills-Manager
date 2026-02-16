@@ -51,6 +51,13 @@ impl AppCache {
         }
     }
 
+    /// Invalidate tools cache
+    pub fn invalidate_tools(&self) {
+        if let Ok(mut guard) = self.tools.write() {
+            *guard = None;
+        }
+    }
+
     /// Get cached editors if available
     pub fn get_editors(&self) -> Option<Vec<DetectedEditor>> {
         self.editors.read().ok().and_then(|guard| guard.clone())
@@ -61,5 +68,26 @@ impl AppCache {
         if let Ok(mut guard) = self.editors.write() {
             *guard = Some(data);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppCache;
+
+    #[test]
+    fn invalidate_tools_clears_cached_tools() {
+        let cache = AppCache::default();
+        cache.set_tools(Vec::new());
+        assert!(
+            cache.get_tools().is_some(),
+            "tools cache should be populated"
+        );
+
+        cache.invalidate_tools();
+        assert!(
+            cache.get_tools().is_none(),
+            "tools cache should be invalidated"
+        );
     }
 }

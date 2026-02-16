@@ -93,6 +93,7 @@ pub fn create_custom_tool(
     config_path: String,
     skills_path: String,
     icon_path: Option<String>,
+    cache: State<AppCache>,
 ) -> Result<(), String> {
     if tool_id.trim().is_empty() {
         return Err("Tool ID is required".to_string());
@@ -127,7 +128,9 @@ pub fn create_custom_tool(
     };
 
     config.custom_tools.insert(tool_id, custom_tool);
-    manager.save(&config)
+    manager.save(&config)?;
+    cache.invalidate_tools();
+    Ok(())
 }
 
 #[tauri::command]
@@ -138,6 +141,7 @@ pub fn update_custom_tool(
     skills_path: String,
     icon_path: Option<String>,
     enabled: bool,
+    cache: State<AppCache>,
 ) -> Result<(), String> {
     if tool_id.trim().is_empty() {
         return Err("Tool ID is required".to_string());
@@ -163,16 +167,20 @@ pub fn update_custom_tool(
     custom_tool.icon_path = icon_path.map(PathBuf::from);
     custom_tool.enabled = enabled;
 
-    manager.save(&config)
+    manager.save(&config)?;
+    cache.invalidate_tools();
+    Ok(())
 }
 
 #[tauri::command]
-pub fn delete_custom_tool(tool_id: String) -> Result<(), String> {
+pub fn delete_custom_tool(tool_id: String, cache: State<AppCache>) -> Result<(), String> {
     let manager = ConfigManager::new();
     let mut config = manager.load()?;
 
     if config.custom_tools.remove(&tool_id).is_some() {
-        manager.save(&config)
+        manager.save(&config)?;
+        cache.invalidate_tools();
+        Ok(())
     } else {
         Err(format!("Custom tool not found: {}", tool_id))
     }
