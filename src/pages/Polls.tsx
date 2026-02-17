@@ -59,6 +59,7 @@ export function Polls() {
   const { t, language } = useTranslation();
   const { toasts, addToast, removeToast } = useToast();
   const voterIdRef = useRef<string | null>(null);
+  const votedOptionsRef = useRef<VotedOptions>({});
   const [polls, setPolls] = useState<Poll[]>([]);
   const [pollResults, setPollResults] = useState<Record<string, PollResult>>({});
   const [votedOptions, setVotedOptions] = useState<VotedOptions>({});
@@ -100,23 +101,25 @@ export function Polls() {
     [t],
   );
 
-  const markPollAsVoted = useCallback((pollId: string, optionId: string) => {
-    let nextVotes: VotedOptions | null = null;
-    setVotedOptions((previous) => {
-      if (previous[pollId] === optionId) {
-        return previous;
-      }
-      const next = { ...previous, [pollId]: optionId } as VotedOptions;
-      nextVotes = next;
-      return next;
-    });
-    if (nextVotes) {
-      const voterId = voterIdRef.current ?? createVoterId();
-      voterIdRef.current = voterId;
-      void savePollClientState({
+  const markPollAsVoted = useCallback(async (pollId: string, optionId: string) => {
+    const previous = votedOptionsRef.current;
+    if (previous[pollId] === optionId) {
+      return;
+    }
+
+    const nextVotes = { ...previous, [pollId]: optionId } as VotedOptions;
+    votedOptionsRef.current = nextVotes;
+    setVotedOptions(nextVotes);
+
+    const voterId = voterIdRef.current ?? createVoterId();
+    voterIdRef.current = voterId;
+    try {
+      await savePollClientState({
         voterId,
         votedOptions: nextVotes,
       });
+    } catch {
+      // Ignore persistence failures here to avoid blocking vote UX.
     }
   }, []);
 
@@ -157,6 +160,7 @@ export function Polls() {
         const voterId = normalizedVoterId || createVoterId();
 
         voterIdRef.current = voterId;
+        votedOptionsRef.current = normalizedVotes;
         setVotedOptions(normalizedVotes);
 
         if (
@@ -167,7 +171,7 @@ export function Polls() {
           void savePollClientState({
             voterId,
             votedOptions: normalizedVotes,
-          });
+          }).catch(() => undefined);
         }
 
         setPolls(pageData.pollList);
@@ -209,7 +213,7 @@ export function Polls() {
 
   const handleVote = useCallback(
     async (pollId: string, optionId: string) => {
-      if (votedOptions[pollId] || submittingPollId === pollId) {
+      if (votedOptionsRef.current[pollId] || submittingPollId === pollId) {
         return;
       }
 
@@ -223,12 +227,12 @@ export function Polls() {
             voterId,
             optionId,
           });
-          markPollAsVoted(pollId, optionId);
+          await markPollAsVoted(pollId, optionId);
           addToast(t("polls.voteSuccess"), "success");
           shouldRefreshResults = true;
         } catch (error) {
           if (isPollApiError(error) && error.code === "ALREADY_VOTED") {
-            markPollAsVoted(pollId, UNKNOWN_OPTION_MARKER);
+            await markPollAsVoted(pollId, UNKNOWN_OPTION_MARKER);
             addToast(t("polls.alreadyVoted"), "info");
             shouldRefreshResults = true;
           } else {
@@ -264,7 +268,6 @@ export function Polls() {
       resolvePollErrorMessage,
       submittingPollId,
       t,
-      votedOptions,
     ],
   );
 
