@@ -56,6 +56,12 @@ export interface AppConfig {
   custom_tools?: Record<string, CustomToolConfig>;
   preferences?: UserPreferences;
   marketplace_sources?: MarketplaceSource[];
+  poll_client_state?: PollClientStateConfig | null;
+}
+
+export interface PollClientStateConfig {
+  voter_id?: string | null;
+  voted_options?: Record<string, string>;
 }
 
 export interface CustomToolConfig {
@@ -215,4 +221,9 @@ export interface PollVote {
   voterId: string;
   optionId: string;
   createdAt: number;
+}
+
+export interface PollClientState {
+  voterId: string | null;
+  votedOptions: Record<string, string>;
 }

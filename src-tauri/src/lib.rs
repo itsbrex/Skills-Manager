@@ -8,12 +8,12 @@ use commands::{
     check_marketplace_updates_if_stale, check_sync_status, check_update, create_custom_tool,
     create_skill, delete_custom_tool, delete_skill, detect_available_editors, detect_tools,
     disable_skill, enable_skill, fetch_marketplace_skill_descriptions, fetch_marketplace_skills,
-    fetch_poll_results, fetch_polls,
+    fetch_poll_results, fetch_polls, get_poll_client_state,
     fetch_skill_file_content, fetch_skill_files, fix_sync_issues, get_available_editors,
     get_config, get_marketplace_sources, get_tool_status, import_skills_to_hub,
     install_marketplace_skill, is_initialized, list_skills, mark_initialized, open_in_editor,
     read_directory_tree, read_file, refresh_editors, refresh_skills, refresh_tools, save_config,
-    scan_existing_skills, set_tool_enabled, submit_feedback, submit_poll_vote,
+    save_poll_client_state, scan_existing_skills, set_tool_enabled, submit_feedback, submit_poll_vote,
     sync_marketplace_installed_skills, toggle_marketplace_source, update_custom_tool,
     update_tool_paths, write_file,
 };
@@ -70,6 +70,8 @@ pub fn run() {
             fetch_polls,
             fetch_poll_results,
             submit_poll_vote,
+            get_poll_client_state,
+            save_poll_client_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

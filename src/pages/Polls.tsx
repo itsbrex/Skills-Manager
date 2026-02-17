@@ -6,15 +6,15 @@ import { ToastContainer, useToast } from "@/components/ui/toast";
 import { useTranslation } from "@/i18n";
 import { Poll, PollResult } from "@/types";
 import {
+  getPollClientState,
   fetchPollResults,
   fetchPolls,
   isPollApiError,
+  savePollClientState,
   submitPollVote,
 } from "@/services/polls";
 import { buildPollOptionStats } from "./polls/buildPollOptionStats";
 
-const VOTER_ID_STORAGE_KEY = "skills-manager.polls.voter-id";
-const VOTED_OPTIONS_STORAGE_KEY = "skills-manager.polls.voted-options";
 const UNKNOWN_OPTION_MARKER = "__already_voted__";
 
 type VotedOptions = Record<string, string>;
@@ -26,57 +26,20 @@ function createVoterId(): string {
   return `voter-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function ensureVoterId(): string {
-  if (typeof window === "undefined") {
-    return "skills-manager-anonymous";
-  }
-  try {
-    const existing = window.localStorage.getItem(VOTER_ID_STORAGE_KEY)?.trim();
-    if (existing) {
-      return existing;
-    }
-    const next = createVoterId();
-    window.localStorage.setItem(VOTER_ID_STORAGE_KEY, next);
-    return next;
-  } catch {
-    return createVoterId();
-  }
-}
-
-function loadVotedOptions(): VotedOptions {
-  if (typeof window === "undefined") {
+function normalizeVotedOptions(raw: Record<string, string> | undefined): VotedOptions {
+  if (!raw) {
     return {};
   }
-  try {
-    const raw = window.localStorage.getItem(VOTED_OPTIONS_STORAGE_KEY);
-    if (!raw) {
-      return {};
+  const normalized: VotedOptions = {};
+  for (const [pollId, optionId] of Object.entries(raw)) {
+    const trimmedPollId = pollId.trim();
+    const trimmedOptionId = optionId.trim();
+    if (!trimmedPollId || !trimmedOptionId) {
+      continue;
     }
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== "object") {
-      return {};
-    }
-    const result: VotedOptions = {};
-    for (const [pollId, optionId] of Object.entries(parsed)) {
-      if (typeof optionId === "string" && optionId.trim()) {
-        result[pollId] = optionId.trim();
-      }
-    }
-    return result;
-  } catch {
-    return {};
+    normalized[trimmedPollId] = trimmedOptionId;
   }
-}
-
-function persistVotedOptions(votes: VotedOptions) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.setItem(VOTED_OPTIONS_STORAGE_KEY, JSON.stringify(votes));
-  } catch {
-    // Ignore storage failures and keep in-memory state.
-  }
+  return normalized;
 }
 
 function toFallbackResult(poll: Poll): PollResult {
@@ -96,14 +59,9 @@ export function Polls() {
   const { t, language } = useTranslation();
   const { toasts, addToast, removeToast } = useToast();
   const voterIdRef = useRef<string | null>(null);
-  if (!voterIdRef.current) {
-    voterIdRef.current = ensureVoterId();
-  }
   const [polls, setPolls] = useState<Poll[]>([]);
   const [pollResults, setPollResults] = useState<Record<string, PollResult>>({});
-  const [votedOptions, setVotedOptions] = useState<VotedOptions>(() =>
-    loadVotedOptions(),
-  );
+  const [votedOptions, setVotedOptions] = useState<VotedOptions>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [submittingPollId, setSubmittingPollId] = useState<string | null>(null);
@@ -143,14 +101,23 @@ export function Polls() {
   );
 
   const markPollAsVoted = useCallback((pollId: string, optionId: string) => {
+    let nextVotes: VotedOptions | null = null;
     setVotedOptions((previous) => {
       if (previous[pollId] === optionId) {
         return previous;
       }
-      const next = { ...previous, [pollId]: optionId };
-      persistVotedOptions(next);
+      const next = { ...previous, [pollId]: optionId } as VotedOptions;
+      nextVotes = next;
       return next;
     });
+    if (nextVotes) {
+      const voterId = voterIdRef.current ?? createVoterId();
+      voterIdRef.current = voterId;
+      void savePollClientState({
+        voterId,
+        votedOptions: nextVotes,
+      });
+    }
   }, []);
 
   const loadPageData = useCallback(async () => {
@@ -178,12 +145,33 @@ export function Polls() {
     async function initialize() {
       setLoading(true);
       try {
-        const { pollList, resultById } = await loadPageData();
+        const [clientState, pageData] = await Promise.all([
+          getPollClientState(),
+          loadPageData(),
+        ]);
         if (cancelled) {
           return;
         }
-        setPolls(pollList);
-        setPollResults(resultById);
+        const normalizedVotes = normalizeVotedOptions(clientState.votedOptions);
+        const normalizedVoterId = clientState.voterId?.trim();
+        const voterId = normalizedVoterId || createVoterId();
+
+        voterIdRef.current = voterId;
+        setVotedOptions(normalizedVotes);
+
+        if (
+          voterId !== normalizedVoterId ||
+          JSON.stringify(normalizedVotes) !==
+            JSON.stringify(clientState.votedOptions ?? {})
+        ) {
+          void savePollClientState({
+            voterId,
+            votedOptions: normalizedVotes,
+          });
+        }
+
+        setPolls(pageData.pollList);
+        setPollResults(pageData.resultById);
       } catch (error) {
         if (cancelled) {
           return;
@@ -203,7 +191,7 @@ export function Polls() {
     return () => {
       cancelled = true;
     };
-  }, [addToast, loadPageData, t]);
+  }, [addToast, loadPageData, resolvePollErrorMessage]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -229,7 +217,7 @@ export function Polls() {
       let shouldRefreshResults = false;
       try {
         try {
-          const voterId = voterIdRef.current ?? ensureVoterId();
+          const voterId = voterIdRef.current ?? createVoterId();
           voterIdRef.current = voterId;
           await submitPollVote(pollId, {
             voterId,

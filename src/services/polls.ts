@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Poll, PollResult, PollVote, PollVoteRequest } from "@/types";
+import {
+  Poll,
+  PollClientState,
+  PollResult,
+  PollVote,
+  PollVoteRequest,
+} from "@/types";
 
 export class PollApiError extends Error {
   readonly status: number;
@@ -69,4 +75,14 @@ export async function submitPollVote(
     pollId,
     request: voteRequest,
   });
+}
+
+export async function getPollClientState(): Promise<PollClientState> {
+  return invokePollCommand<PollClientState>("get_poll_client_state");
+}
+
+export async function savePollClientState(
+  state: PollClientState,
+): Promise<void> {
+  await invokePollCommand("save_poll_client_state", { state });
 }

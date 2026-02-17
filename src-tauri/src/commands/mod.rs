@@ -20,7 +20,10 @@ pub use marketplace::{
     fetch_marketplace_skills, fetch_skill_file_content, fetch_skill_files, get_marketplace_sources,
     install_marketplace_skill, sync_marketplace_installed_skills, toggle_marketplace_source,
 };
-pub use polls::{fetch_poll_results, fetch_polls, submit_poll_vote};
+pub use polls::{
+    fetch_poll_results, fetch_polls, get_poll_client_state, save_poll_client_state,
+    submit_poll_vote,
+};
 pub use skills::{
     create_skill, delete_skill, disable_skill, enable_skill, import_skills_to_hub, list_skills,
     refresh_skills, scan_existing_skills,

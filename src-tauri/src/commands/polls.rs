@@ -2,7 +2,10 @@ use reqwest::header::{ACCEPT, ACCEPT_LANGUAGE, ORIGIN, REFERER, USER_AGENT};
 use reqwest::{Client, Method, StatusCode, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::process::Command;
+use crate::models::PollClientState as ModelPollClientState;
+use crate::services::ConfigManager;
 
 const POLLS_API_BASE: &str = "https://skills-market-api.guardssl.info/api/v1";
 const POLLS_SITE_ORIGIN: &str = "https://skills-market-api.guardssl.info";
@@ -87,6 +90,40 @@ pub struct PollVote {
     pub voter_id: String,
     pub option_id: String,
     pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PollClientStatePayload {
+    pub voter_id: Option<String>,
+    pub voted_options: HashMap<String, String>,
+}
+
+fn normalize_poll_client_state(
+    state: PollClientStatePayload,
+) -> PollClientStatePayload {
+    let voter_id = state
+        .voter_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+
+    let voted_options = state
+        .voted_options
+        .into_iter()
+        .filter_map(|(poll_id, option_id)| {
+            let poll_id = poll_id.trim().to_string();
+            let option_id = option_id.trim().to_string();
+            if poll_id.is_empty() || option_id.is_empty() {
+                return None;
+            }
+            Some((poll_id, option_id))
+        })
+        .collect();
+
+    PollClientStatePayload {
+        voter_id,
+        voted_options,
+    }
 }
 
 fn normalize_optional_string(value: Option<String>) -> Option<String> {
@@ -287,6 +324,52 @@ fn polls_url(path: &str, locale: Option<String>) -> Result<Url, String> {
 }
 
 #[tauri::command]
+pub fn get_poll_client_state() -> Result<PollClientStatePayload, String> {
+    let manager = ConfigManager::new();
+    let mut config = manager.load()?;
+    let existing = config
+        .poll_client_state
+        .clone()
+        .unwrap_or_default();
+
+    let normalized = normalize_poll_client_state(PollClientStatePayload {
+        voter_id: existing.voter_id,
+        voted_options: existing.voted_options,
+    });
+
+    let should_update = config
+        .poll_client_state
+        .as_ref()
+        .map(|state| {
+            state.voter_id != normalized.voter_id
+                || state.voted_options != normalized.voted_options
+        })
+        .unwrap_or(true);
+    if should_update {
+        config.poll_client_state = Some(ModelPollClientState {
+            voter_id: normalized.voter_id.clone(),
+            voted_options: normalized.voted_options.clone(),
+        });
+        let _ = manager.save(&config);
+    }
+
+    Ok(normalized)
+}
+
+#[tauri::command]
+pub fn save_poll_client_state(state: PollClientStatePayload) -> Result<(), String> {
+    let normalized = normalize_poll_client_state(state);
+
+    let manager = ConfigManager::new();
+    let mut config = manager.load()?;
+    config.poll_client_state = Some(ModelPollClientState {
+        voter_id: normalized.voter_id,
+        voted_options: normalized.voted_options,
+    });
+    manager.save(&config)
+}
+
+#[tauri::command]
 pub async fn fetch_polls(locale: Option<String>) -> Result<Vec<Poll>, String> {
     let normalized_locale = normalize_optional_string(locale);
     let client = Client::new();
@@ -358,4 +441,30 @@ pub async fn submit_poll_vote(
         .map_err(|_| "REQUEST_FAILED: 请求失败，请稍后重试".to_string())?;
     let response = send_with_403_retry(&client, Method::POST, url, None, Some(body)).await?;
     parse_api_payload(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize_poll_client_state, PollClientStatePayload};
+    use std::collections::HashMap;
+
+    #[test]
+    fn normalize_poll_client_state_trims_voter_and_filters_invalid_votes() {
+        let mut voted_options = HashMap::new();
+        voted_options.insert(" poll_a ".to_string(), " option_1 ".to_string());
+        voted_options.insert("".to_string(), "option_2".to_string());
+        voted_options.insert("poll_b".to_string(), "".to_string());
+
+        let normalized = normalize_poll_client_state(PollClientStatePayload {
+            voter_id: Some("  user-123  ".to_string()),
+            voted_options,
+        });
+
+        assert_eq!(normalized.voter_id.as_deref(), Some("user-123"));
+        assert_eq!(normalized.voted_options.len(), 1);
+        assert_eq!(
+            normalized.voted_options.get("poll_a").map(String::as_str),
+            Some("option_1")
+        );
+    }
 }

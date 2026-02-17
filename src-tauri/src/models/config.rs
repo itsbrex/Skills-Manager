@@ -88,7 +88,17 @@ pub struct AppConfig {
     #[serde(default)]
     pub marketplace_sources: Option<Vec<MarketplaceSource>>,
     #[serde(default)]
+    pub poll_client_state: Option<PollClientState>,
+    #[serde(default)]
     pub initialized: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PollClientState {
+    #[serde(default)]
+    pub voter_id: Option<String>,
+    #[serde(default)]
+    pub voted_options: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -122,6 +132,7 @@ impl Default for AppConfig {
             custom_tools: HashMap::new(),
             preferences: Some(UserPreferences::default()),
             marketplace_sources: Some(default_marketplace_sources()),
+            poll_client_state: Some(PollClientState::default()),
             initialized: false,
         }
     }
