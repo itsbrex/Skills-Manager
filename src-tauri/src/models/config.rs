@@ -123,7 +123,7 @@ pub struct ToolConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            version: "1.1.3".to_string(),
+            version: "1.1.4".to_string(),
             skills_dir: dirs::home_dir()
                 .unwrap_or_default()
                 .join(".skills-manager")
