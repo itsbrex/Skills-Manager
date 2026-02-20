@@ -3,10 +3,13 @@ use std::fs;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
+use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use reqwest::Client;
+use reqwest::header::{ACCEPT, ORIGIN, REFERER, USER_AGENT};
+use reqwest::{Client, StatusCode, Url};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -19,6 +22,11 @@ const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 const PERSISTED_CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 const GITHUB_API_BASE: &str = "https://api.github.com";
 const MARKETPLACE_API_BASE: &str = "https://skills-market-api.guardssl.info/api/v1";
+const MARKETPLACE_SITE_ORIGIN: &str = "https://skills-market-api.guardssl.info";
+const MARKETPLACE_SITE_REFERER: &str = "https://skills-market-api.guardssl.info/";
+const MARKETPLACE_BROWSER_LIKE_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
+const MARKETPLACE_ACCEPT_HEADER: &str = "application/json, text/plain, */*";
+const MARKETPLACE_CURL_HTTP_STATUS_MARKER: &str = "__HTTP_STATUS__:";
 const MARKETPLACE_API_PAGE_SIZE: u32 = 20;
 const MAX_MARKETPLACE_CACHED_PAGES: usize = 200;
 const GITHUB_TREE_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
@@ -49,6 +57,11 @@ struct CachedGitHubTree {
 struct CachedSkillDescription {
     fetched_at: SystemTime,
     description: Option<String>,
+}
+
+struct RawHttpResponse {
+    status_code: u16,
+    body: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -475,6 +488,147 @@ fn filter_marketplace_skills_by_query(
         .collect()
 }
 
+fn marketplace_api_default_headers() -> [(&'static str, &'static str); 4] {
+    [
+        (ACCEPT.as_str(), MARKETPLACE_ACCEPT_HEADER),
+        (ORIGIN.as_str(), MARKETPLACE_SITE_ORIGIN),
+        (REFERER.as_str(), MARKETPLACE_SITE_REFERER),
+        (USER_AGENT.as_str(), MARKETPLACE_BROWSER_LIKE_USER_AGENT),
+    ]
+}
+
+fn build_marketplace_api_get_request(client: &Client, endpoint: &str) -> reqwest::RequestBuilder {
+    let endpoint = endpoint.trim_start_matches('/');
+    let mut request = client.get(format!("{}/{}", MARKETPLACE_API_BASE, endpoint));
+    for (name, value) in marketplace_api_default_headers() {
+        request = request.header(name, value);
+    }
+    request
+}
+
+fn is_cloudflare_challenge_html(body: &str) -> bool {
+    body.contains("Just a moment...")
+        || body.contains("/cdn-cgi/challenge-platform/")
+        || body.contains("cf-browser-verification")
+}
+
+fn build_marketplace_api_url(endpoint: &str, params: &[(&str, String)]) -> Result<Url, String> {
+    let endpoint = endpoint.trim_start_matches('/');
+    let mut url = Url::parse(&format!("{}/{}", MARKETPLACE_API_BASE, endpoint))
+        .map_err(|e| format!("技能市场请求失败: {}", e))?;
+    {
+        let mut query_pairs = url.query_pairs_mut();
+        for (name, value) in params {
+            query_pairs.append_pair(name, value);
+        }
+    }
+    Ok(url)
+}
+
+fn try_send_marketplace_get_with_curl(
+    endpoint: &str,
+    params: &[(&str, String)],
+) -> Result<RawHttpResponse, String> {
+    let url = build_marketplace_api_url(endpoint, params)?;
+    let mut command = Command::new("curl");
+    command
+        .arg("-sS")
+        .arg("-L")
+        .arg("--http1.1")
+        .arg("-X")
+        .arg("GET")
+        .arg("-H")
+        .arg(format!("accept: {MARKETPLACE_ACCEPT_HEADER}"))
+        .arg("-H")
+        .arg(format!("origin: {MARKETPLACE_SITE_ORIGIN}"))
+        .arg("-H")
+        .arg(format!("referer: {MARKETPLACE_SITE_REFERER}"))
+        .arg("-H")
+        .arg(format!("user-agent: {MARKETPLACE_BROWSER_LIKE_USER_AGENT}"))
+        .arg("--write-out")
+        .arg(format!(
+            "\n{MARKETPLACE_CURL_HTTP_STATUS_MARKER}%{{http_code}}"
+        ))
+        .arg(url.as_str());
+
+    let output = command
+        .output()
+        .map_err(|e| format!("技能市场请求失败: {}", e))?;
+
+    if !output.status.success() {
+        return Err("技能市场请求失败: curl 请求失败".to_string());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let marker = format!("\n{MARKETPLACE_CURL_HTTP_STATUS_MARKER}");
+    let marker_index = stdout
+        .rfind(&marker)
+        .ok_or_else(|| "技能市场响应解析失败: 缺少 HTTP 状态标记".to_string())?;
+
+    let body = stdout[..marker_index].to_string();
+    let status_code = stdout[marker_index + marker.len()..]
+        .trim()
+        .parse::<u16>()
+        .map_err(|_| "技能市场响应解析失败: 无效的 HTTP 状态码".to_string())?;
+
+    Ok(RawHttpResponse { status_code, body })
+}
+
+fn parse_marketplace_api_envelope<T: DeserializeOwned>(
+    body: &str,
+    parse_error_prefix: &str,
+) -> Result<MarketplaceApiEnvelope<T>, String> {
+    serde_json::from_str::<MarketplaceApiEnvelope<T>>(body)
+        .map_err(|e| format!("{parse_error_prefix}: {}", e))
+}
+
+async fn request_marketplace_api_envelope<T: DeserializeOwned>(
+    endpoint: &str,
+    params: &[(&str, String)],
+    request_error_prefix: &str,
+    parse_error_prefix: &str,
+) -> Result<MarketplaceApiEnvelope<T>, String> {
+    let client = Client::new();
+    let response = build_marketplace_api_get_request(&client, endpoint)
+        .query(params)
+        .send()
+        .await
+        .map_err(|e| format!("{request_error_prefix}: {}", e))?;
+
+    let status = response.status();
+    if status.is_success() {
+        return response
+            .json::<MarketplaceApiEnvelope<T>>()
+            .await
+            .map_err(|e| format!("{parse_error_prefix}: {}", e));
+    }
+
+    if status == StatusCode::FORBIDDEN {
+        let fallback_detail = match try_send_marketplace_get_with_curl(endpoint, params) {
+            Ok(raw) if (200..300).contains(&raw.status_code) => {
+                return parse_marketplace_api_envelope(&raw.body, parse_error_prefix);
+            }
+            Ok(raw) if raw.status_code == StatusCode::FORBIDDEN.as_u16() => {
+                if is_cloudflare_challenge_html(&raw.body) {
+                    return Err(format!("{request_error_prefix}: HTTP 403 Forbidden"));
+                }
+                "curl fallback returned HTTP 403".to_string()
+            }
+            Ok(raw) => {
+                format!("curl fallback returned HTTP {}", raw.status_code)
+            }
+            Err(err) => {
+                err
+            }
+        };
+        return Err(format!(
+            "{request_error_prefix}: HTTP {status} ({fallback_detail})"
+        ));
+    }
+
+    Err(format!("{request_error_prefix}: HTTP {status}"))
+}
+
 impl MarketplaceService {
     pub(crate) fn filter_marketplace_skills_by_query(
         skills: Vec<MarketplaceSkill>,
@@ -496,21 +650,13 @@ impl MarketplaceService {
     }
 
     pub async fn fetch_marketplace_sources() -> Result<Vec<MarketplaceSource>, String> {
-        let client = Client::new();
-        let response = client
-            .get(format!("{}/sources", MARKETPLACE_API_BASE))
-            .send()
-            .await
-            .map_err(|e| format!("技能市场来源请求失败: {}", e))?;
-
-        if !response.status().is_success() {
-            return Err(format!("技能市场来源请求失败: HTTP {}", response.status()));
-        }
-
-        let payload = response
-            .json::<MarketplaceApiEnvelope<Vec<MarketplaceApiSourceRecord>>>()
-            .await
-            .map_err(|e| format!("技能市场来源响应解析失败: {}", e))?;
+        let payload = request_marketplace_api_envelope::<Vec<MarketplaceApiSourceRecord>>(
+            "/sources",
+            &[],
+            "技能市场来源请求失败",
+            "技能市场来源响应解析失败",
+        )
+        .await?;
 
         Ok(payload
             .data
@@ -615,22 +761,13 @@ impl MarketplaceService {
             params.push(("sourceId", value.to_string()));
         }
 
-        let client = Client::new();
-        let response = client
-            .get(format!("{}/skills", MARKETPLACE_API_BASE))
-            .query(&params)
-            .send()
-            .await
-            .map_err(|e| format!("技能市场请求失败: {}", e))?;
-
-        if !response.status().is_success() {
-            return Err(format!("技能市场请求失败: HTTP {}", response.status()));
-        }
-
-        let payload = response
-            .json::<MarketplaceApiEnvelope<MarketplaceApiSkillsPage>>()
-            .await
-            .map_err(|e| format!("技能市场响应解析失败: {}", e))?;
+        let payload = request_marketplace_api_envelope::<MarketplaceApiSkillsPage>(
+            "/skills",
+            &params,
+            "技能市场请求失败",
+            "技能市场响应解析失败",
+        )
+        .await?;
 
         let has_more = payload.data.page < payload.data.total_pages;
         let skills = payload
@@ -2702,6 +2839,47 @@ mod tests {
         assert_eq!(
             normalize_github_token(Some("  ghp_example_token  ")),
             Some("ghp_example_token".to_string())
+        );
+    }
+
+    #[test]
+    fn is_cloudflare_challenge_html_detects_known_markers() {
+        let html = "<html><title>Just a moment...</title><script src=\"/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1\"></script></html>";
+        assert!(super::is_cloudflare_challenge_html(html));
+    }
+
+    #[test]
+    fn is_cloudflare_challenge_html_ignores_normal_api_json() {
+        let body = r#"{"data":{"items":[],"page":1}}"#;
+        assert!(!super::is_cloudflare_challenge_html(body));
+    }
+
+    #[test]
+    fn marketplace_api_default_headers_include_browser_like_metadata() {
+        let headers = super::marketplace_api_default_headers();
+
+        assert!(
+            headers
+                .iter()
+                .any(|(name, value)| *name == "accept"
+                    && *value == "application/json, text/plain, */*"),
+            "marketplace api requests should explicitly accept json payload"
+        );
+        assert!(
+            headers.iter().any(|(name, value)| *name == "origin"
+                && *value == "https://skills-market-api.guardssl.info"),
+            "marketplace api requests should include expected origin"
+        );
+        assert!(
+            headers.iter().any(|(name, value)| *name == "referer"
+                && *value == "https://skills-market-api.guardssl.info/"),
+            "marketplace api requests should include expected referer"
+        );
+        assert!(
+            headers
+                .iter()
+                .any(|(name, value)| *name == "user-agent" && !value.trim().is_empty()),
+            "marketplace api requests should always provide user agent"
         );
     }
 

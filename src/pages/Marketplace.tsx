@@ -97,6 +97,17 @@ export function Marketplace() {
     [deferredSearchQuery],
   );
 
+  const showMarketplaceError = useCallback((err: unknown, fallbackMessage: string) => {
+    const rawMessage = err instanceof Error ? err.message : String(err);
+    const rateLimited =
+      /(^|[^0-9])429([^0-9]|$)/.test(rawMessage)
+      || /too many requests/i.test(rawMessage)
+      || /rate limit/i.test(rawMessage)
+      || /请求过于频繁/.test(rawMessage);
+    addToast(rateLimited ? t("marketplace.rateLimited") : fallbackMessage, "error");
+    console.error("[marketplace] request failed", err);
+  }, [addToast, t]);
+
   const loadSkills = useCallback(async (options?: {
     forceRefresh?: boolean;
     query?: string;
@@ -146,13 +157,13 @@ export function Marketplace() {
       if (isStaleRequest()) {
         return;
       }
-      addToast(err instanceof Error ? err.message : String(err), "error");
+      showMarketplaceError(err, t("marketplace.networkError"));
     } finally {
       if (page === 1 && !isStaleRequest()) {
         setInitialLoading(false);
       }
     }
-  }, [addToast]);
+  }, [showMarketplaceError, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -307,11 +318,11 @@ export function Marketplace() {
       });
       addToast(t("common.refreshSuccess"), "success");
     } catch (err) {
-      addToast(err instanceof Error ? err.message : String(err), "error");
+      showMarketplaceError(err, t("marketplace.networkError"));
     } finally {
       setRefreshing(false);
     }
-  }, [addToast, loadSkills, normalizedRemoteQuery, selectedSourceIds, t]);
+  }, [addToast, loadSkills, normalizedRemoteQuery, selectedSourceIds, showMarketplaceError, t]);
 
   const updateAvailableCount = useMemo(
     () => skills.filter((skill) => skill.install_status === "update_available").length,
@@ -354,16 +365,16 @@ export function Marketplace() {
         sourceIds: selectedSourceIds,
       });
     } catch (err) {
-      addToast(err instanceof Error ? err.message : String(err), "error");
+      showMarketplaceError(err, t("marketplace.networkError"));
     } finally {
       setUpdatingAll(false);
     }
   }, [
-    addToast,
     installingSkill,
     loadSkills,
     normalizedRemoteQuery,
     selectedSourceIds,
+    showMarketplaceError,
     t,
     updateAvailableCount,
     updatingAll,
@@ -424,16 +435,19 @@ export function Marketplace() {
         });
       } else {
         addToast(
-          result.message || t(isUpdateAction ? "marketplace.updateFailed" : "marketplace.installFailed"),
+          t(isUpdateAction ? "marketplace.updateFailed" : "marketplace.installFailed"),
           "error",
         );
       }
     } catch (err) {
-      addToast(err instanceof Error ? err.message : String(err), "error");
+      showMarketplaceError(
+        err,
+        t(isUpdateAction ? "marketplace.updateFailed" : "marketplace.installFailed"),
+      );
     } finally {
       setInstallingSkill(null);
     }
-  }, [addToast, loadSkills, normalizedRemoteQuery, selectedSourceIds, t]);
+  }, [addToast, loadSkills, normalizedRemoteQuery, selectedSourceIds, showMarketplaceError, t]);
 
   const handleOpenExternalLink = useCallback(async (event: MouseEvent, url: string) => {
     event.stopPropagation();
@@ -441,10 +455,10 @@ export function Marketplace() {
       try {
         await openUrl(url);
       } catch (err) {
-        addToast(err instanceof Error ? err.message : String(err), "error");
+        showMarketplaceError(err, t("marketplace.networkError"));
       }
     }
-  }, [addToast]);
+  }, [showMarketplaceError, t]);
 
   useEffect(() => {
     if (!hasMore || initialLoading || refreshing) {
