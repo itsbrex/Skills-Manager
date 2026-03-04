@@ -17,6 +17,11 @@ import { useTranslation, TranslationPath } from "@/i18n";
 import { orderToolIdsForSkill } from "./skills/orderToolIds";
 import { summarizeEnabledTools } from "./skills/summarizeEnabledTools";
 import { getEnabledToolIds } from "./skills/getEnabledToolIds";
+import {
+  getSkillBulkToggleConfirmKey,
+  getSkillBulkToggleMode,
+  getSkillBulkToggleTargets,
+} from "./skills/bulkToggleSkillTools";
 
 function getToolDisplayName(toolId: string, tools: Tool[]): string {
   const tool = tools.find(t => t.id === toolId);
@@ -52,6 +57,7 @@ export function Skills() {
   const [toolEditorSkillId, setToolEditorSkillId] = useState<string | null>(null);
   const [toolEditorQuery, setToolEditorQuery] = useState("");
   const [toolEditorEnabledOnly, setToolEditorEnabledOnly] = useState(false);
+  const [bulkTogglingSkillId, setBulkTogglingSkillId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [creating, setCreating] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -151,6 +157,71 @@ export function Skills() {
       setTogglingSkill(null);
     }
   };
+
+  const handleBulkToggle = useCallback(async (skill: Skill, visibleToolIds: string[]) => {
+    const bulkMode = getSkillBulkToggleMode(visibleToolIds, skill.enabled, tools);
+    const targetToolIds = getSkillBulkToggleTargets(visibleToolIds, skill.enabled, tools, bulkMode);
+    if (targetToolIds.length === 0) {
+      return;
+    }
+
+    const enabled = bulkMode === "enable";
+    const confirmed = await confirm(
+      t(getSkillBulkToggleConfirmKey(bulkMode)).replace("{count}", String(targetToolIds.length)),
+      {
+        title: t("skills.bulkConfirmTitle"),
+        kind: "warning",
+      },
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setBulkTogglingSkillId(skill.id);
+
+    // Optimistic update for quicker visual feedback in the dialog.
+    setSkills((prevSkills) =>
+      prevSkills.map((item) => {
+        if (item.id !== skill.id) {
+          return item;
+        }
+
+        const nextEnabled = { ...item.enabled };
+        targetToolIds.forEach((toolId) => {
+          nextEnabled[toolId] = enabled;
+        });
+
+        return { ...item, enabled: nextEnabled };
+      }),
+    );
+
+    try {
+      const command = enabled ? "enable_skill" : "disable_skill";
+      const results = await Promise.allSettled(
+        targetToolIds.map((toolId) => invoke(command, { skillId: skill.id, toolId })),
+      );
+
+      const failedCount = results.filter((result) => result.status === "rejected").length;
+      const changedCount = targetToolIds.length - failedCount;
+
+      if (changedCount > 0) {
+        const successMessage = enabled ? t("skills.bulkEnableSuccess") : t("skills.bulkDisableSuccess");
+        addToast(successMessage.replace("{count}", String(changedCount)), "success");
+      }
+
+      if (failedCount > 0) {
+        const failedMessage = t("skills.bulkTogglePartialFailed").replace("{count}", String(failedCount));
+        addToast(failedMessage, "error");
+      }
+
+      await reloadData();
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+      await reloadData();
+    } finally {
+      setBulkTogglingSkillId(null);
+    }
+  }, [addToast, reloadData, t, tools]);
 
   const handleDelete = async (skill: Skill, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -662,9 +733,11 @@ export function Skills() {
           query={toolEditorQuery}
           enabledOnly={toolEditorEnabledOnly}
           togglingSkill={togglingSkill}
+          bulkTogglingSkillId={bulkTogglingSkillId}
           onQueryChange={setToolEditorQuery}
           onEnabledOnlyChange={setToolEditorEnabledOnly}
           onToggle={handleToggle}
+          onBulkToggle={handleBulkToggle}
           onClose={closeToolEditor}
           t={t}
         />
@@ -691,9 +764,11 @@ function SkillToolsDialog({
   query,
   enabledOnly,
   togglingSkill,
+  bulkTogglingSkillId,
   onQueryChange,
   onEnabledOnlyChange,
   onToggle,
+  onBulkToggle,
   onClose,
   t,
 }: {
@@ -704,13 +779,31 @@ function SkillToolsDialog({
   query: string;
   enabledOnly: boolean;
   togglingSkill: string | null;
+  bulkTogglingSkillId: string | null;
   onQueryChange: (query: string) => void;
   onEnabledOnlyChange: (enabledOnly: boolean) => void;
   onToggle: (skillId: string, skillName: string, toolId: string, enabled: boolean) => void;
+  onBulkToggle: (skill: Skill, visibleToolIds: string[]) => Promise<void> | void;
   onClose: () => void;
   t: (key: TranslationPath) => string;
 }) {
   const enabledCount = allToolIds.filter((toolId) => Boolean(skill.enabled[toolId])).length;
+  const bulkToggleMode = useMemo(
+    () => getSkillBulkToggleMode(visibleToolIds, skill.enabled, tools),
+    [visibleToolIds, skill.enabled, tools],
+  );
+  const bulkToggleTargets = useMemo(
+    () => getSkillBulkToggleTargets(visibleToolIds, skill.enabled, tools, bulkToggleMode),
+    [visibleToolIds, skill.enabled, tools, bulkToggleMode],
+  );
+  const isBulkToggling = bulkTogglingSkillId === skill.id;
+  const hasPendingSingleToggle = Boolean(togglingSkill?.startsWith(`${skill.id}:`));
+  const isBulkToggleDisabled = isBulkToggling || hasPendingSingleToggle || bulkToggleTargets.length === 0;
+  const bulkToggleLabel = isBulkToggling
+    ? t("skills.bulkUpdating")
+    : bulkToggleMode === "enable"
+      ? t("skills.bulkEnable")
+      : t("skills.bulkDisable");
 
   return (
     <div
@@ -832,6 +925,32 @@ function SkillToolsDialog({
             />
             {t("skills.enabledOnly")}
           </label>
+
+          <button
+            type="button"
+            onClick={() => onBulkToggle(skill, visibleToolIds)}
+            disabled={isBulkToggleDisabled}
+            title={bulkToggleTargets.length === 0 ? t("skills.bulkNoTarget") : undefined}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 10px",
+              fontSize: "12px",
+              fontWeight: 500,
+              color: "var(--foreground)",
+              backgroundColor: "var(--secondary)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              cursor: isBulkToggleDisabled ? "not-allowed" : "pointer",
+              opacity: isBulkToggleDisabled ? 0.6 : 1,
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
+            </svg>
+            {bulkToggleLabel}
+          </button>
         </div>
 
         <div
@@ -869,7 +988,7 @@ function SkillToolsDialog({
                   const tool = tools.find((item) => item.id === toolId);
                   const isDetected = tool?.detected ?? false;
                   const isToolEnabled = tool?.config.enabled ?? false;
-                  const isDisabled = isToggling || !isDetected || !isToolEnabled;
+                  const isDisabled = isBulkToggling || isToggling || !isDetected || !isToolEnabled;
 
                   return (
                     <div
