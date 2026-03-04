@@ -4,7 +4,7 @@ import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { Tool } from "@/types";
 import { useTranslation } from "@/i18n";
 import { getToolIconUrl, GenericToolIcon } from "@/assets/tools";
-import { FolderOpen, Pencil, Plus, Trash2, X } from "lucide-react";
+import { FolderOpen, Pencil, Plus, Power, Trash2, X } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -14,6 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageLoader } from "@/components/ui/loading";
 import { sortToolsByEnabled } from "./tools/sortTools";
+import {
+  getBulkToggleConfirmKey,
+  getBulkToggleTargets,
+  getNextBulkToggleMode,
+} from "./tools/bulkToggleTools";
 
 export function Tools() {
   const { t } = useTranslation();
@@ -21,6 +26,7 @@ export function Tools() {
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [bulkToggling, setBulkToggling] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
@@ -136,6 +142,80 @@ export function Tools() {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, [t]);
+
+  const bulkToggleMode = useMemo(
+    () => getNextBulkToggleMode(tools),
+    [tools]
+  );
+  const bulkToggleTargets = useMemo(
+    () => getBulkToggleTargets(tools, bulkToggleMode),
+    [tools, bulkToggleMode]
+  );
+
+  const handleBulkToggleTools = useCallback(async () => {
+    if (bulkToggleTargets.length === 0) {
+      return;
+    }
+
+    const enabled = bulkToggleMode === "enable";
+    const confirmed = await confirm(
+      t(getBulkToggleConfirmKey(bulkToggleMode)).replace("{count}", String(bulkToggleTargets.length)),
+      {
+        title: t("tools.bulkConfirmTitle"),
+        kind: "warning",
+      }
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const targetIds = new Set(bulkToggleTargets.map((tool) => tool.id));
+
+    setBulkToggling(true);
+    setError(null);
+
+    try {
+      // Optimistic update for immediate feedback.
+      setTools((prev) =>
+        prev.map((tool) =>
+          targetIds.has(tool.id)
+            ? { ...tool, config: { ...tool.config, enabled } }
+            : tool
+        )
+      );
+
+      const results = await Promise.allSettled(
+        bulkToggleTargets.map((tool) =>
+          invoke("set_tool_enabled", { toolId: tool.id, enabled })
+        )
+      );
+
+      const failedCount = results.filter((result) => result.status === "rejected").length;
+      const changedCount = bulkToggleTargets.length - failedCount;
+
+      if (changedCount > 0) {
+        const successMessage = enabled
+          ? t("tools.bulkEnableSuccess")
+          : t("tools.bulkDisableSuccess");
+        addToast(successMessage.replace("{count}", String(changedCount)), "success");
+      }
+
+      if (failedCount > 0) {
+        const failedMessage = t("tools.bulkTogglePartialFailed").replace("{count}", String(failedCount));
+        addToast(failedMessage, "error");
+        setError(failedMessage);
+      }
+
+      await reloadTools();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addToast(message, "error");
+      setError(message);
+      await reloadTools();
+    } finally {
+      setBulkToggling(false);
+    }
+  }, [addToast, bulkToggleMode, bulkToggleTargets, reloadTools, t]);
 
   const handleEditConfigPath = useCallback(async (toolId: string) => {
     const selected = await open({
@@ -361,6 +441,11 @@ export function Tools() {
     () => sortToolsByEnabled(tools.filter((tool) => tool.source === "custom")),
     [tools]
   );
+  const bulkToggleLabel = bulkToggling
+    ? t("tools.bulkUpdating")
+    : bulkToggleMode === "enable"
+      ? t("tools.bulkEnable")
+      : t("tools.bulkDisable");
 
   const handleIconError = useCallback((toolId: string) => {
     setIconFallbackStage(prev => {
@@ -719,6 +804,40 @@ export function Tools() {
         actions={
           <>
             <RefreshButton onClick={handleRefresh} loading={refreshing} />
+            <button
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 12px',
+                fontSize: '13px',
+                fontWeight: 500,
+                color: 'var(--foreground)',
+                backgroundColor: 'var(--secondary)',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                cursor: bulkToggling || refreshing || bulkToggleTargets.length === 0 ? 'not-allowed' : 'pointer',
+                opacity: bulkToggling || refreshing || bulkToggleTargets.length === 0 ? 0.6 : 1,
+                transition: 'background-color 0.15s, border-color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                if (bulkToggling || refreshing || bulkToggleTargets.length === 0) {
+                  return;
+                }
+                e.currentTarget.style.backgroundColor = 'var(--muted)';
+                e.currentTarget.style.borderColor = 'var(--ring)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--secondary)';
+                e.currentTarget.style.borderColor = 'var(--border)';
+              }}
+              onClick={handleBulkToggleTools}
+              disabled={bulkToggling || refreshing || bulkToggleTargets.length === 0}
+              title={bulkToggleTargets.length === 0 ? t("tools.bulkNoTarget") : undefined}
+            >
+              <Power style={{ width: '14px', height: '14px' }} />
+              {bulkToggleLabel}
+            </button>
             <button
               style={{
                 display: 'flex',
