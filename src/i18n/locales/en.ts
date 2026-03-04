@@ -191,6 +191,8 @@ export const en = {
     defaultEditorDesc: "Editor for opening skill files",
     autoSync: "Auto Sync",
     autoSyncDesc: "Automatically sync skills after editing",
+    removeLinksWhenDisablingTool: "Clean links when disabling tool",
+    removeLinksWhenDisablingToolDesc: "When a tool is disabled, also remove its linked/copied skills",
     syncNotifications: "Sync Notifications",
     syncNotificationsDesc: "Show notifications after sync",
     // Marketplace

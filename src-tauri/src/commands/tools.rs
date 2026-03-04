@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::models::{CustomToolConfig, Tool, SUPPORTED_TOOLS};
-use crate::services::{AppCache, ConfigManager, DetectorService};
+use crate::services::{AppCache, ConfigManager, DetectorService, LinkerService};
 use tauri::State;
 
 #[tauri::command]
@@ -31,16 +31,85 @@ pub fn get_tool_status(tool_id: String) -> Result<Tool, String> {
 }
 
 #[tauri::command]
-pub fn set_tool_enabled(tool_id: String, enabled: bool) -> Result<(), String> {
+pub fn set_tool_enabled(
+    tool_id: String,
+    enabled: bool,
+    cache: State<AppCache>,
+) -> Result<(), String> {
+    set_tool_enabled_with_cache(tool_id, enabled, &cache)
+}
+
+fn set_tool_enabled_with_cache(
+    tool_id: String,
+    enabled: bool,
+    cache: &AppCache,
+) -> Result<(), String> {
+    if !enabled {
+        let manager = ConfigManager::new();
+        let config = manager.load()?;
+        let tool_config = config
+            .get_tool_config(&tool_id)
+            .ok_or_else(|| format!("Tool not found: {}", tool_id))?;
+        if should_remove_links_when_disabling_tool(&config) {
+            remove_skill_links_for_tool(&config.skills_dir, &tool_config.skills_path, &tool_id)?;
+        }
+    }
+
+    set_tool_enabled_in_config(&tool_id, enabled)?;
+    cache.invalidate_tools();
+    cache.invalidate_skills();
+    Ok(())
+}
+
+fn should_remove_links_when_disabling_tool(config: &crate::models::AppConfig) -> bool {
+    config
+        .preferences
+        .as_ref()
+        .map(|preferences| preferences.remove_links_when_disabling_tool)
+        .unwrap_or(false)
+}
+
+fn remove_skill_links_for_tool(
+    hub_skills_dir: &std::path::Path,
+    tool_skills_dir: &std::path::Path,
+    tool_id: &str,
+) -> Result<(), String> {
+    if !hub_skills_dir.exists() {
+        return Ok(());
+    }
+
+    for entry in std::fs::read_dir(hub_skills_dir)
+        .map_err(|e| format!("Failed to read hub skills directory: {}", e))?
+    {
+        let entry = entry.map_err(|e| format!("Failed to read skill entry: {}", e))?;
+        let skill_path = entry.path();
+        if !skill_path.is_dir() {
+            continue;
+        }
+
+        let Some(skill_id) = skill_path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if skill_id.starts_with('.') {
+            continue;
+        }
+
+        LinkerService::disable_skill_for_tool(tool_skills_dir, skill_id, tool_id)?;
+    }
+
+    Ok(())
+}
+
+fn set_tool_enabled_in_config(tool_id: &str, enabled: bool) -> Result<(), String> {
     let manager = ConfigManager::new();
     let mut config = manager.load()?;
 
-    if let Some(tool_config) = config.tools.get_mut(&tool_id) {
+    if let Some(tool_config) = config.tools.get_mut(tool_id) {
         tool_config.enabled = enabled;
         return manager.save(&config);
     }
 
-    if let Some(custom_tool) = config.custom_tools.get_mut(&tool_id) {
+    if let Some(custom_tool) = config.custom_tools.get_mut(tool_id) {
         custom_tool.enabled = enabled;
         return manager.save(&config);
     }
@@ -188,13 +257,22 @@ pub fn delete_custom_tool(tool_id: String, cache: State<AppCache>) -> Result<(),
 
 #[cfg(test)]
 mod tests {
-    use super::{set_tool_enabled, update_tool_paths};
+    use super::{set_tool_enabled_in_config, update_tool_paths};
+    use crate::services::{AppCache, LinkerService};
     use crate::test_support::with_temp_home;
     use serde_json::json;
     use std::fs;
     use std::path::Path;
 
     fn write_config(home_dir: &Path, enabled: bool) -> std::path::PathBuf {
+        write_config_with_remove_links_preference(home_dir, enabled, false)
+    }
+
+    fn write_config_with_remove_links_preference(
+        home_dir: &Path,
+        enabled: bool,
+        remove_links_when_disabling_tool: bool,
+    ) -> std::path::PathBuf {
         let config_dir = home_dir.join(".skills-manager");
         let config_path = config_dir.join("config.json");
         fs::create_dir_all(&config_dir).unwrap();
@@ -217,6 +295,9 @@ mod tests {
                     "icon_path": null
                 }
             },
+            "preferences": {
+                "remove_links_when_disabling_tool": remove_links_when_disabling_tool
+            },
             "initialized": true
         });
 
@@ -228,12 +309,27 @@ mod tests {
         config_path
     }
 
+    fn create_demo_skill_link(home_dir: &Path) -> std::path::PathBuf {
+        let skill_dir = home_dir
+            .join(".skills-manager")
+            .join("skills")
+            .join("demo-skill");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(skill_dir.join("SKILL.md"), "# Demo\n").unwrap();
+
+        let tool_skills_dir = home_dir.join(".my-tool").join("skills");
+        LinkerService::enable_skill_for_tool(&skill_dir, &tool_skills_dir, "demo-skill", "my-tool")
+            .expect("link skill");
+
+        tool_skills_dir.join("demo-skill")
+    }
+
     #[test]
     fn set_tool_enabled_updates_custom_tool_entry() {
         with_temp_home(|home_dir| {
             let config_path = write_config(home_dir, false);
 
-            let result = set_tool_enabled("my-tool".to_string(), true);
+            let result = set_tool_enabled_in_config("my-tool", true);
             assert!(result.is_ok(), "expected set_tool_enabled to succeed");
 
             let updated = fs::read_to_string(&config_path).unwrap();
@@ -271,6 +367,62 @@ mod tests {
             assert_eq!(
                 skills_path_value,
                 Some(new_skills.to_string_lossy().as_ref())
+            );
+        });
+    }
+
+    #[test]
+    fn set_tool_enabled_invalidates_tools_and_skills_cache() {
+        with_temp_home(|home_dir| {
+            write_config(home_dir, false);
+
+            let cache = AppCache::default();
+            cache.set_tools(Vec::new());
+            cache.set_skills(Vec::new());
+
+            let result = super::set_tool_enabled_with_cache("my-tool".to_string(), true, &cache);
+            assert!(result.is_ok(), "expected set_tool_enabled to succeed");
+            assert!(cache.get_tools().is_none(), "tools cache should be invalidated");
+            assert!(cache.get_skills().is_none(), "skills cache should be invalidated");
+        });
+    }
+
+    #[test]
+    fn set_tool_enabled_disabling_tool_keeps_skill_links_by_default() {
+        with_temp_home(|home_dir| {
+            write_config_with_remove_links_preference(home_dir, true, false);
+            let link_path = create_demo_skill_link(home_dir);
+            assert!(
+                link_path.exists() || link_path.symlink_metadata().is_ok(),
+                "skill link should exist before disabling tool"
+            );
+
+            let cache = AppCache::default();
+            let result = super::set_tool_enabled_with_cache("my-tool".to_string(), false, &cache);
+            assert!(result.is_ok(), "expected set_tool_enabled to succeed");
+            assert!(
+                link_path.exists() || link_path.symlink_metadata().is_ok(),
+                "skill link should be preserved when preference is disabled"
+            );
+        });
+    }
+
+    #[test]
+    fn set_tool_enabled_disabling_tool_removes_skill_links_when_preference_enabled() {
+        with_temp_home(|home_dir| {
+            write_config_with_remove_links_preference(home_dir, true, true);
+            let link_path = create_demo_skill_link(home_dir);
+            assert!(
+                link_path.exists() || link_path.symlink_metadata().is_ok(),
+                "skill link should exist before disabling tool"
+            );
+
+            let cache = AppCache::default();
+            let result = super::set_tool_enabled_with_cache("my-tool".to_string(), false, &cache);
+            assert!(result.is_ok(), "expected set_tool_enabled to succeed");
+            assert!(
+                !link_path.exists() && link_path.symlink_metadata().is_err(),
+                "skill link should be removed when preference is enabled"
             );
         });
     }

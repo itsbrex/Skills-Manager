@@ -193,6 +193,8 @@ export const zh = {
     defaultEditorDesc: "用于打开 Skill 文件的编辑器",
     autoSync: "自动同步",
     autoSyncDesc: "编辑 Skill 后自动同步到已启用的工具",
+    removeLinksWhenDisablingTool: "禁用工具时清理链接",
+    removeLinksWhenDisablingToolDesc: "禁用工具时，同时删除该工具下已链接/复制的 Skills",
     syncNotifications: "同步通知",
     syncNotificationsDesc: "同步完成后显示通知提示",
     // Marketplace

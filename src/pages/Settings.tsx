@@ -24,6 +24,7 @@ const defaultPreferences: UserPreferences = {
   default_editor: "system",
   tab_size: 2,
   show_sync_notifications: true,
+  remove_links_when_disabling_tool: false,
   github_token: "",
 };
 
@@ -438,6 +439,17 @@ export function Settings() {
               <Toggle
                 checked={prefs.auto_sync}
                 onChange={(v) => updatePreference("auto_sync", v)}
+              />
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.removeLinksWhenDisablingTool")}
+              description={t("settings.removeLinksWhenDisablingToolDesc")}
+              isLast={false}
+            >
+              <Toggle
+                checked={prefs.remove_links_when_disabling_tool}
+                onChange={(v) => updatePreference("remove_links_when_disabling_tool", v)}
               />
             </SettingsRow>
 

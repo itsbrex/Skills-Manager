@@ -19,6 +19,8 @@ pub struct UserPreferences {
     pub tab_size: u8,
     #[serde(default = "default_true")]
     pub show_sync_notifications: bool,
+    #[serde(default = "default_false")]
+    pub remove_links_when_disabling_tool: bool,
     #[serde(default)]
     pub github_token: Option<String>,
 }
@@ -37,6 +39,9 @@ fn default_tab_size() -> u8 {
 }
 fn default_true() -> bool {
     true
+}
+fn default_false() -> bool {
+    false
 }
 fn default_marketplace_sources() -> Vec<MarketplaceSource> {
     vec![
@@ -71,6 +76,7 @@ impl Default for UserPreferences {
             default_editor: default_editor(),
             tab_size: default_tab_size(),
             show_sync_notifications: true,
+            remove_links_when_disabling_tool: false,
             github_token: None,
         }
     }

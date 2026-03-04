@@ -44,6 +44,7 @@ export interface UserPreferences {
 
   // Notifications
   show_sync_notifications: boolean;
+  remove_links_when_disabling_tool: boolean;
 
   // Marketplace auth
   github_token?: string | null;

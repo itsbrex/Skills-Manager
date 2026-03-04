@@ -16,6 +16,7 @@ import { AppConfig, Skill, Tool } from "@/types";
 import { useTranslation, TranslationPath } from "@/i18n";
 import { orderToolIdsForSkill } from "./skills/orderToolIds";
 import { summarizeEnabledTools } from "./skills/summarizeEnabledTools";
+import { getEnabledToolIds } from "./skills/getEnabledToolIds";
 
 function getToolDisplayName(toolId: string, tools: Tool[]): string {
   const tool = tools.find(t => t.id === toolId);
@@ -205,16 +206,8 @@ export function Skills() {
   });
 
   const toolIds = useMemo(
-    () =>
-      config
-        ? Array.from(
-            new Set([
-              ...Object.keys(config.tools),
-              ...Object.keys(config.custom_tools ?? {}),
-            ])
-          ).sort()
-        : [],
-    [config]
+    () => getEnabledToolIds(tools),
+    [tools]
   );
 
   const toolEditorSkill = useMemo(
@@ -875,7 +868,8 @@ function SkillToolsDialog({
                   const isToggling = togglingSkill === toggleKey;
                   const tool = tools.find((item) => item.id === toolId);
                   const isDetected = tool?.detected ?? false;
-                  const isDisabled = isToggling || !isDetected;
+                  const isToolEnabled = tool?.config.enabled ?? false;
+                  const isDisabled = isToggling || !isDetected || !isToolEnabled;
 
                   return (
                     <div
