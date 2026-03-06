@@ -130,10 +130,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             version: "1.1.4".to_string(),
-            skills_dir: dirs::home_dir()
-                .unwrap_or_default()
-                .join(".skills-manager")
-                .join("skills"),
+            skills_dir: Self::default_skills_dir(),
             tools: HashMap::new(),
             custom_tools: HashMap::new(),
             preferences: Some(UserPreferences::default()),
@@ -157,6 +154,13 @@ impl ToolConfig {
 }
 
 impl AppConfig {
+    pub fn default_skills_dir() -> PathBuf {
+        dirs::home_dir()
+            .unwrap_or_default()
+            .join(".skills-manager")
+            .join("skills")
+    }
+
     pub fn get_tool_config(&self, tool_id: &str) -> Option<ToolConfig> {
         if let Some(tool) = self.tools.get(tool_id) {
             return Some(tool.clone());

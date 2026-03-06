@@ -200,10 +200,11 @@ impl ConfigManager {
             updated = true;
         }
 
-        // Normalize all paths loaded from config (fix mixed separators on Windows)
-        let normalized_skills_dir = normalize_path(&config.skills_dir);
-        if normalized_skills_dir != config.skills_dir {
-            config.skills_dir = normalized_skills_dir;
+        let loaded_skills_dir = normalize_path(&config.skills_dir);
+        let loaded_skills_dir_str = loaded_skills_dir.to_string_lossy().into_owned();
+        let default_skills_dir = normalize_path(&AppConfig::default_skills_dir());
+        if loaded_skills_dir != default_skills_dir {
+            config.skills_dir = default_skills_dir.clone();
             updated = true;
         }
 
@@ -212,10 +213,7 @@ impl ConfigManager {
         // produces single backslashes but JSON contains escaped double backslashes.
         // This fixes configs where skills_dir still points to the old .skills-hub directory.
         {
-            let skills_dir_str = config.skills_dir.to_string_lossy();
-            if skills_dir_str.contains(".skills-hub") {
-                let fixed = skills_dir_str.replace(".skills-hub", ".skills-manager");
-                config.skills_dir = PathBuf::from(fixed.to_string());
+            if loaded_skills_dir_str.contains(".skills-hub") {
                 // Also fix tool paths that reference the old directory
                 for tool_config in config.tools.values_mut() {
                     let sp = tool_config.skills_path.to_string_lossy();
@@ -230,12 +228,17 @@ impl ConfigManager {
                     }
                 }
                 // Ensure the new skills directory exists
-                if !config.skills_dir.exists() {
-                    let _ = fs::create_dir_all(&config.skills_dir);
+                if !default_skills_dir.exists() {
+                    let _ = fs::create_dir_all(&default_skills_dir);
                 }
                 updated = true;
                 println!("Fixed stale .skills-hub references in config");
             }
+        }
+
+        if !default_skills_dir.exists() {
+            fs::create_dir_all(&default_skills_dir)
+                .map_err(|e| format!("Failed to create skills directory: {}", e))?;
         }
 
         for tool_config in config.tools.values_mut() {
@@ -309,7 +312,12 @@ impl ConfigManager {
                 .map_err(|e| format!("Failed to create config directory: {}", e))?;
         }
 
-        let content = serde_json::to_string_pretty(config)
+        let mut normalized = config.clone();
+        normalized.skills_dir = normalize_path(&AppConfig::default_skills_dir());
+        fs::create_dir_all(&normalized.skills_dir)
+            .map_err(|e| format!("Failed to create skills directory: {}", e))?;
+
+        let content = serde_json::to_string_pretty(&normalized)
             .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
         fs::write(&self.config_path, content).map_err(|e| format!("Failed to write config: {}", e))
@@ -448,6 +456,30 @@ mod tests {
                 !sources[0].enabled,
                 "enabled=false should persist after loading config"
             );
+        });
+    }
+
+    #[test]
+    fn save_and_load_force_default_skills_dir() {
+        with_temp_home(|home_dir| {
+            let manager = ConfigManager::new();
+            let mut config = manager.init_default().expect("init default config");
+            let config_path = home_dir.join(".skills-manager").join("config.json");
+            let expected_skills_dir = home_dir.join(".skills-manager").join("skills");
+
+            config.skills_dir = home_dir.join("custom-skills-dir");
+            manager.save(&config).expect("save config");
+
+            let saved: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&config_path).expect("read saved config"))
+                    .expect("parse saved config");
+            assert_eq!(
+                saved.get("skills_dir").and_then(|value| value.as_str()),
+                Some(expected_skills_dir.to_string_lossy().as_ref())
+            );
+
+            let loaded = manager.load().expect("load config");
+            assert_eq!(loaded.skills_dir, expected_skills_dir);
         });
     }
 }

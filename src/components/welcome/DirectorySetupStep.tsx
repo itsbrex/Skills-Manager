@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "@/i18n";
 import { Folder } from "lucide-react";
 
@@ -18,7 +17,6 @@ interface DirectorySetupStepProps {
 export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) {
   const { t } = useTranslation();
   const [skillsDir, setSkillsDir] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -33,32 +31,8 @@ export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) 
     }
   }
 
-  async function selectDirectory() {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: t("welcome.skillsDirectory"),
-      });
-      if (selected && typeof selected === "string") {
-        setSkillsDir(selected);
-      }
-    } catch (error) {
-      console.error("Failed to select directory:", error);
-    }
-  }
-
-  async function handleNext() {
-    setIsSaving(true);
-    try {
-      const config = await invoke<AppConfig>("get_config");
-      await invoke("save_config", { config: { ...config, skills_dir: skillsDir } });
-      onNext();
-    } catch (error) {
-      console.error("Failed to save config:", error);
-    } finally {
-      setIsSaving(false);
-    }
+  function handleNext() {
+    onNext();
   }
 
   return (
@@ -75,8 +49,7 @@ export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) 
 
       {/* Directory selector */}
       <div style={{ marginBottom: '24px' }}>
-        <button
-          onClick={selectDirectory}
+        <div
           style={{
             width: '100%',
             display: 'flex',
@@ -84,19 +57,9 @@ export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) 
             gap: '12px',
             padding: '16px',
             borderRadius: '10px',
-            border: '2px dashed var(--border)',
-            backgroundColor: 'transparent',
-            cursor: 'pointer',
+            border: '1px solid var(--border)',
+            backgroundColor: 'var(--background)',
             textAlign: 'left',
-            transition: 'border-color 0.15s, background-color 0.15s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = 'var(--primary)';
-            e.currentTarget.style.backgroundColor = 'rgba(9, 105, 218, 0.05)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'var(--border)';
-            e.currentTarget.style.backgroundColor = 'transparent';
           }}
         >
           <div
@@ -116,21 +79,18 @@ export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) 
           <div style={{ minWidth: 0, flex: 1 }}>
             {skillsDir ? (
               <>
-                <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {skillsDir.split('/').pop()}
+                <div style={{ fontSize: '14px', fontWeight: 500, color: 'var(--foreground)', marginBottom: '4px' }}>
+                  {t("welcome.skillsDirectory")}
                 </div>
-                <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.5 }}>
                   {skillsDir}
                 </div>
               </>
             ) : (
-              <>
-                <div style={{ fontSize: '14px', color: 'var(--muted-foreground)' }}>{t("welcome.clickToSelect")}</div>
-                <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', opacity: 0.6 }}>{t("welcome.orUseDefault")}</div>
-              </>
+              <div style={{ fontSize: '14px', color: 'var(--muted-foreground)' }}>{t("common.loading")}</div>
             )}
           </div>
-        </button>
+        </div>
         <p style={{ fontSize: '12px', color: 'var(--muted-foreground)', marginTop: '8px', textAlign: 'center' }}>
           {t("welcome.defaultPath")}
         </p>
@@ -140,7 +100,6 @@ export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) 
       <div style={{ display: 'flex', gap: '12px' }}>
         <button
           onClick={onBack}
-          disabled={isSaving}
           style={{
             flex: 1,
             height: '44px',
@@ -150,15 +109,15 @@ export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) 
             backgroundColor: 'transparent',
             border: '1px solid var(--border)',
             borderRadius: '10px',
-            cursor: isSaving ? 'not-allowed' : 'pointer',
-            opacity: isSaving ? 0.5 : 1,
+            cursor: 'pointer',
+            opacity: 1,
           }}
         >
           {t("welcome.previous")}
         </button>
         <button
           onClick={handleNext}
-          disabled={!skillsDir || isSaving}
+          disabled={!skillsDir}
           style={{
             flex: 1,
             height: '44px',
@@ -168,11 +127,11 @@ export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) 
             backgroundColor: 'var(--primary)',
             border: 'none',
             borderRadius: '10px',
-            cursor: !skillsDir || isSaving ? 'not-allowed' : 'pointer',
-            opacity: !skillsDir || isSaving ? 0.5 : 1,
+            cursor: !skillsDir ? 'not-allowed' : 'pointer',
+            opacity: !skillsDir ? 0.5 : 1,
           }}
         >
-          {isSaving ? t("common.saving") : t("welcome.next")}
+          {t("welcome.next")}
         </button>
       </div>
     </div>

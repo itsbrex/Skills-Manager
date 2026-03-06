@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { AppConfig, UserPreferences, DetectedEditor, UpdateInfo, MarketplaceSource } from "@/types";
 import { checkUpdate } from "@/services/updater";
@@ -86,24 +85,6 @@ export function Settings() {
     }
     autoCheckUpdate();
   }, []);
-
-  const handleSelectDirectory = async () => {
-    try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: t("settings.skillsDirectory"),
-      });
-      if (selected && config) {
-        setConfig({
-          ...config,
-          skills_dir: selected as string,
-        });
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
 
   const updatePreference = <K extends keyof UserPreferences>(
     key: K,
@@ -294,35 +275,24 @@ export function Settings() {
               description={t("settings.skillsDirectoryDesc")}
               isLast={false}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <code style={{
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'flex-end' }}>
+                <code
+                  title={config.skills_dir}
+                  style={{
+                  display: 'block',
+                  width: '100%',
                   fontSize: '12px',
                   color: 'var(--muted-foreground)',
                   backgroundColor: 'var(--secondary)',
                   padding: '6px 10px',
                   borderRadius: '6px',
-                  maxWidth: '200px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>
+                  whiteSpace: 'normal',
+                  overflowWrap: 'anywhere',
+                  lineHeight: 1.5,
+                }}
+                >
                   {config.skills_dir}
                 </code>
-                <button
-                  onClick={handleSelectDirectory}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: '12px',
-                    fontWeight: 500,
-                    color: 'var(--foreground)',
-                    backgroundColor: 'var(--background)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {t("common.change")}
-                </button>
               </div>
             </SettingsRow>
 
