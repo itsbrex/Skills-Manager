@@ -14,6 +14,7 @@ import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoader } from "@/components/ui/loading";
 import { ToastContainer, useToast } from "@/components/ui/toast";
+import { InstallCountBadge } from "@/components/marketplace/InstallCountBadge";
 import {
   InstallResult,
   MarketplaceSkill,
@@ -23,6 +24,9 @@ import {
 } from "@/types";
 import { useTranslation } from "@/i18n";
 import { SkillDetailModal } from "@/components/marketplace/SkillDetailModal";
+import { formatInstallCountLabel } from "@/pages/marketplace/formatInstallCount";
+import { buildMarketplaceMetaItems } from "@/pages/marketplace/buildMarketplaceMetaItems";
+import { getMarketplaceMetaChipStyle } from "@/components/marketplace/marketplaceMetaChipStyle";
 
 const DESCRIPTION_BATCH_SIZE = 12;
 const marketplaceDescriptionCache = new Map<string, string | null>();
@@ -838,6 +842,13 @@ export function Marketplace() {
                 const isInstalling = installingSkill === skill.id;
                 const actionBusy = isInstalling || updatingAll;
                 const externalUrl = skill.external_url || skill.repo_url;
+                const installCountLabel = formatInstallCountLabel(skill.install_count);
+                const metaChipStyle = getMarketplaceMetaChipStyle("compact");
+                const metaItems = buildMarketplaceMetaItems(
+                  t("marketplace.source").replace("{source}", skill.source_name),
+                  skill.author ? t("marketplace.author").replace("{author}", skill.author) : null,
+                  installCountLabel,
+                );
                 return (
                     <div
                       key={skill.id}
@@ -926,51 +937,57 @@ export function Marketplace() {
                             {skill.description || t("skills.noDescription")}
                           </p>
                         </div>
-                        {isInstalled ? (
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            fontSize: '10px',
-                            fontWeight: 500,
-                            color: 'var(--color-success)',
-                            backgroundColor: 'var(--color-success-bg)',
-                            padding: '4px 8px',
-                            borderRadius: '6px',
-                            border: '1px solid var(--color-success-border)',
-                            flexShrink: 0,
-                          }}>
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <polyline points="20 6 9 17 4 12"/>
-                            </svg>
-                            {t("marketplace.installed")}
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={(e) => handleInstall(skill, e)}
-                            disabled={actionBusy}
-                            style={{
-                              display: 'flex',
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'flex-end',
+                          flexShrink: 0,
+                        }}>
+                          {isInstalled ? (
+                            <span style={{
+                              display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
-                              padding: '5px 10px',
                               fontSize: '10px',
                               fontWeight: 500,
-                              color: 'var(--primary-foreground)',
-                              backgroundColor: isUpdateAvailable ? 'var(--primary)' : 'var(--foreground)',
-                              border: 'none',
+                              color: 'var(--color-success)',
+                              backgroundColor: 'var(--color-success-bg)',
+                              padding: '4px 8px',
                               borderRadius: '6px',
-                              cursor: actionBusy ? 'wait' : 'pointer',
-                              opacity: actionBusy ? 0.7 : 1,
+                              border: '1px solid var(--color-success-border)',
                               flexShrink: 0,
-                            }}
-                          >
-                            {isInstalling
-                              ? t(isUpdateAvailable ? "marketplace.updating" : "marketplace.installing")
-                              : t(isUpdateAvailable ? "marketplace.update" : "marketplace.install")}
-                          </button>
-                        )}
+                            }}>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <polyline points="20 6 9 17 4 12"/>
+                              </svg>
+                              {t("marketplace.installed")}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => handleInstall(skill, e)}
+                              disabled={actionBusy}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '5px 10px',
+                                fontSize: '10px',
+                                fontWeight: 500,
+                                color: 'var(--primary-foreground)',
+                                backgroundColor: isUpdateAvailable ? 'var(--primary)' : 'var(--foreground)',
+                                border: 'none',
+                                borderRadius: '6px',
+                                cursor: actionBusy ? 'wait' : 'pointer',
+                                opacity: actionBusy ? 0.7 : 1,
+                                flexShrink: 0,
+                              }}
+                            >
+                              {isInstalling
+                                ? t(isUpdateAvailable ? "marketplace.updating" : "marketplace.installing")
+                                : t(isUpdateAvailable ? "marketplace.update" : "marketplace.install")}
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       <div style={{
@@ -980,28 +997,20 @@ export function Marketplace() {
                         alignItems: 'center',
                         marginBottom: '6px',
                       }}>
-                        <span style={{
-                          fontSize: '10px',
-                          color: 'var(--muted-foreground)',
-                          backgroundColor: 'var(--background)',
-                          padding: '2px 6px',
-                          borderRadius: '5px',
-                          border: '1px solid var(--border)',
-                        }}>
-                          {t("marketplace.source").replace("{source}", skill.source_name)}
-                        </span>
-                        {skill.author && (
-                          <span style={{
-                            fontSize: '10px',
-                            color: 'var(--muted-foreground)',
-                            backgroundColor: 'var(--background)',
-                            padding: '2px 6px',
-                            borderRadius: '5px',
-                            border: '1px solid var(--border)',
-                          }}>
-                            {t("marketplace.author").replace("{author}", skill.author)}
-                          </span>
-                        )}
+                        {metaItems.map((item) => (
+                          item.kind === "install_count" ? (
+                            <InstallCountBadge key={item.key} label={item.label} />
+                          ) : (
+                            <span
+                              key={item.key}
+                              style={{
+                                ...metaChipStyle,
+                              }}
+                            >
+                              {item.label}
+                            </span>
+                          )
+                        ))}
                         {skill.tags.length > 0 && (
                           <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                             {skill.tags.slice(0, 3).map((tag) => (

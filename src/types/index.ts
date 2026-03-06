@@ -124,6 +124,7 @@ export interface MarketplaceSkill {
   author: string | null;
   source_id: string;
   source_name: string;
+  install_count?: number | null;
   install_url?: string | null;
   created_at?: number | null;
   repo_url: string | null;

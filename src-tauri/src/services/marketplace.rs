@@ -432,6 +432,7 @@ struct MarketplaceApiSkillRecord {
     slug: String,
     name: String,
     summary: String,
+    install_count: Option<u64>,
     install_url: Option<String>,
     created_at: u64,
     source: MarketplaceApiSkillSource,
@@ -877,6 +878,7 @@ impl MarketplaceService {
                 author: Some(owner.clone()),
                 source_id: source.id.clone(),
                 source_name: source.name.clone(),
+                install_count: None,
                 install_url: None,
                 created_at: None,
                 repo_url: repo_url.clone(),
@@ -2338,6 +2340,7 @@ fn map_marketplace_api_skill_record(record: MarketplaceApiSkillRecord) -> Market
         author,
         source_id,
         source_name,
+        install_count: record.install_count,
         install_url: install_url.clone(),
         created_at: Some(record.created_at),
         repo_url,
@@ -2815,10 +2818,11 @@ mod tests {
         build_marketplace_external_url, build_skill_tree_from_tree_entries, collect_file_nodes,
         extract_root_skill_dirs_from_tree_entries, extract_skill_description_from_markdown,
         get_cached_github_tree, github_tree_cache, github_tree_cache_key, normalize_github_token,
-        set_cached_github_tree, should_include_github_root_dir, CachedGitHubTree, GitHubContent,
-        GitHubTreeEntry, InstallStatus, MarketplaceCache, MarketplaceSkill,
-        MarketplaceSkillsResponse, PersistedMarketplaceCacheEntry, PersistedMarketplaceState,
-        PersistedSkillDescriptionEntry, GITHUB_TREE_CACHE_TTL, PERSISTED_CACHE_TTL,
+        map_marketplace_api_skill_record, set_cached_github_tree, should_include_github_root_dir,
+        CachedGitHubTree, GitHubContent, GitHubTreeEntry, InstallStatus, MarketplaceApiSkillRecord,
+        MarketplaceApiSkillSource, MarketplaceCache, MarketplaceSkill, MarketplaceSkillsResponse,
+        PersistedMarketplaceCacheEntry, PersistedMarketplaceState, PersistedSkillDescriptionEntry,
+        GITHUB_TREE_CACHE_TTL, PERSISTED_CACHE_TTL,
         PERSISTED_SKILL_DESCRIPTION_CACHE_TTL,
     };
     use std::collections::HashSet;
@@ -2881,6 +2885,27 @@ mod tests {
                 .any(|(name, value)| *name == "user-agent" && !value.trim().is_empty()),
             "marketplace api requests should always provide user agent"
         );
+    }
+
+    #[test]
+    fn map_marketplace_api_skill_record_preserves_install_count() {
+        let skill = map_marketplace_api_skill_record(MarketplaceApiSkillRecord {
+            id: "skill-1".to_string(),
+            source_id: "source-a".to_string(),
+            slug: "owner/repo/skill".to_string(),
+            name: "Skill One".to_string(),
+            summary: "summary".to_string(),
+            install_count: Some(12_500),
+            install_url: Some("https://github.com/owner/repo/tree/main/skill".to_string()),
+            created_at: 1_771_234_567,
+            source: MarketplaceApiSkillSource {
+                id: "source-a".to_string(),
+                name: "Source A".to_string(),
+                source_type: "api".to_string(),
+            },
+        });
+
+        assert_eq!(skill.install_count, Some(12_500));
     }
 
     #[test]
@@ -3583,6 +3608,7 @@ description: "来自 frontmatter 的描述"
             author: Some("tester".to_string()),
             source_id: source_id.to_string(),
             source_name: "source".to_string(),
+            install_count: None,
             install_url: Some(
                 "https://github.com/example/repo/tree/main/example-skill".to_string(),
             ),

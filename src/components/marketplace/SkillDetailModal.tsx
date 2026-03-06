@@ -5,6 +5,7 @@ import MonacoEditor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { FileTree } from "@/components/editor/FileTree";
+import { InstallCountBadge } from "@/components/marketplace/InstallCountBadge";
 import { MarketplaceSkill, SkillFileNode, FileNode } from "@/types";
 import { useTranslation } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
@@ -16,6 +17,7 @@ import {
   SKILL_DETAIL_MODAL_WIDTH,
 } from "@/constants/modal";
 import { ExternalLink } from "lucide-react";
+import { formatInstallCountLabel } from "@/pages/marketplace/formatInstallCount";
 
 interface SkillDetailModalProps {
   skill: MarketplaceSkill;
@@ -50,6 +52,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
   const canShowFiles = Boolean(skill.repo_url && skill.skill_path);
   const externalUrl = skill.external_url || skill.repo_url;
   const isUpdateAvailable = skill.install_status === "update_available";
+  const installCountLabel = formatInstallCountLabel(skill.install_count);
 
   const markdownComponents = useMemo(() => ({
     h1: (props: any) => (
@@ -623,48 +626,57 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
           <span>
             {t("marketplace.files")}: {fileTree ? fileCount : (filesLoading ? "-" : 0)}
           </span>
-          {skill.install_status === "installed" ? (
-            <span style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              fontSize: "12px",
-              fontWeight: 500,
-              color: "var(--color-success)",
-              backgroundColor: "var(--color-success-bg)",
-              padding: "6px 10px",
-              borderRadius: "8px",
-              border: "1px solid var(--color-success-border)",
-            }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-              {t("marketplace.installed")}
-            </span>
-          ) : (
-            <button
-              onClick={(e) => onInstall(skill, e)}
-              disabled={installing}
-              style={{
-                display: "flex",
+          <div style={{
+            display: "flex",
+            alignItems: "flex-end",
+            gap: "8px",
+          }}>
+            {installCountLabel && (
+              <InstallCountBadge label={installCountLabel} size="default" />
+            )}
+            {skill.install_status === "installed" ? (
+              <span style={{
+                display: "inline-flex",
                 alignItems: "center",
                 gap: "6px",
-                padding: "8px 16px",
                 fontSize: "12px",
                 fontWeight: 500,
-                color: "var(--primary-foreground)",
-                backgroundColor: isUpdateAvailable ? "var(--primary)" : "var(--foreground)",
-                border: "none",
+                color: "var(--color-success)",
+                backgroundColor: "var(--color-success-bg)",
+                padding: "6px 10px",
                 borderRadius: "8px",
-                cursor: installing ? "wait" : "pointer",
-                opacity: installing ? 0.7 : 1,
-              }}
-            >
-              {installing
-                ? t(isUpdateAvailable ? "marketplace.updating" : "marketplace.installing")
-                : t(isUpdateAvailable ? "marketplace.update" : "marketplace.install")}
-            </button>
-          )}
+                border: "1px solid var(--color-success-border)",
+              }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                {t("marketplace.installed")}
+              </span>
+            ) : (
+              <button
+                onClick={(e) => onInstall(skill, e)}
+                disabled={installing}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "8px 16px",
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  color: "var(--primary-foreground)",
+                  backgroundColor: isUpdateAvailable ? "var(--primary)" : "var(--foreground)",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: installing ? "wait" : "pointer",
+                  opacity: installing ? 0.7 : 1,
+                }}
+              >
+                {installing
+                  ? t(isUpdateAvailable ? "marketplace.updating" : "marketplace.installing")
+                  : t(isUpdateAvailable ? "marketplace.update" : "marketplace.install")}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

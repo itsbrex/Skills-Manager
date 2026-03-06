@@ -33,6 +33,8 @@ pub struct MarketplaceSkill {
     pub source_id: String,
     pub source_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub install_count: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub install_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<u64>,
