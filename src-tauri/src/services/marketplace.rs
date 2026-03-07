@@ -498,13 +498,39 @@ fn marketplace_api_default_headers() -> [(&'static str, &'static str); 4] {
     ]
 }
 
-fn build_marketplace_api_get_request(client: &Client, endpoint: &str) -> reqwest::RequestBuilder {
+fn build_marketplace_api_effective_params(
+    endpoint: &str,
+    params: &[(&str, String)],
+) -> Vec<(String, String)> {
+    let mut effective_params: Vec<(String, String)> = params
+        .iter()
+        .map(|(name, value)| ((*name).to_string(), value.clone()))
+        .collect();
+    let normalized_endpoint = endpoint.trim_start_matches('/');
+
+    if normalized_endpoint == "skills" {
+        if !effective_params.iter().any(|(name, _)| name == "sortBy") {
+            effective_params.push(("sortBy".to_string(), "installCount".to_string()));
+        }
+        if !effective_params.iter().any(|(name, _)| name == "sortOrder") {
+            effective_params.push(("sortOrder".to_string(), "desc".to_string()));
+        }
+    }
+
+    effective_params
+}
+
+fn build_marketplace_api_get_request(
+    client: &Client,
+    endpoint: &str,
+    params: &[(&str, String)],
+) -> reqwest::RequestBuilder {
     let endpoint = endpoint.trim_start_matches('/');
     let mut request = client.get(format!("{}/{}", MARKETPLACE_API_BASE, endpoint));
     for (name, value) in marketplace_api_default_headers() {
         request = request.header(name, value);
     }
-    request
+    request.query(&build_marketplace_api_effective_params(endpoint, params))
 }
 
 fn is_cloudflare_challenge_html(body: &str) -> bool {
@@ -519,8 +545,8 @@ fn build_marketplace_api_url(endpoint: &str, params: &[(&str, String)]) -> Resul
         .map_err(|e| format!("技能市场请求失败: {}", e))?;
     {
         let mut query_pairs = url.query_pairs_mut();
-        for (name, value) in params {
-            query_pairs.append_pair(name, value);
+        for (name, value) in build_marketplace_api_effective_params(endpoint, params) {
+            query_pairs.append_pair(&name, &value);
         }
     }
     Ok(url)
@@ -590,8 +616,7 @@ async fn request_marketplace_api_envelope<T: DeserializeOwned>(
     parse_error_prefix: &str,
 ) -> Result<MarketplaceApiEnvelope<T>, String> {
     let client = Client::new();
-    let response = build_marketplace_api_get_request(&client, endpoint)
-        .query(params)
+    let response = build_marketplace_api_get_request(&client, endpoint, params)
         .send()
         .await
         .map_err(|e| format!("{request_error_prefix}: {}", e))?;
@@ -2885,6 +2910,20 @@ mod tests {
                 .any(|(name, value)| *name == "user-agent" && !value.trim().is_empty()),
             "marketplace api requests should always provide user agent"
         );
+    }
+
+    #[test]
+    fn build_marketplace_api_url_adds_install_count_desc_sorting_for_skills_endpoint() {
+        let url = super::build_marketplace_api_url(
+            "/skills",
+            &[("page", "1".to_string()), ("pageSize", "20".to_string())],
+        )
+        .expect("skills api url should be constructed");
+
+        let query: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+
+        assert_eq!(query.get("sortBy").map(String::as_str), Some("installCount"));
+        assert_eq!(query.get("sortOrder").map(String::as_str), Some("desc"));
     }
 
     #[test]
