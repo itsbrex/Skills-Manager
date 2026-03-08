@@ -5,7 +5,7 @@ pub mod skill;
 pub mod tool;
 pub mod update;
 
-pub use config::{AppConfig, CustomToolConfig, PollClientState, ToolConfig};
+pub use config::{AppConfig, CustomToolConfig, PollClientState, TelemetryConfig, ToolConfig};
 pub use editor::{DetectedEditor, EDITOR_DEFINITIONS};
 pub use marketplace::{
     GitHubContent, InstallResult, InstallStatus, MarketplaceSkill, MarketplaceSkillsResponse,

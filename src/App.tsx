@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Layout } from "@/components/layout/Layout";
 import { Skills } from "@/pages/Skills";
 import { Tools } from "@/pages/Tools";
@@ -13,10 +14,14 @@ import { Welcome } from "@/pages/Welcome";
 import { useInitialization } from "@/hooks/useInitialization";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { I18nProvider, Language } from "@/i18n";
+import { registerTelemetryCloseHandler } from "@/telemetry/registerTelemetryCloseHandler";
 import { AppConfig, MarketplaceUpdateCheckResult } from "@/types";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 
 type Theme = "light" | "dark" | "system";
+const TELEMETRY_HEARTBEAT_INTERVAL_MS = 60_000;
+const TELEMETRY_FLUSH_INTERVAL_MS = 600_000;
+const TELEMETRY_STARTUP_FLUSH_DELAY_MS = 45_000;
 
 function App() {
   const { isInitialized, isLoading: initLoading, markInitialized } = useInitialization();
@@ -69,6 +74,66 @@ function App() {
       window.clearTimeout(timer);
     };
   }, [configLoaded, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized || !configLoaded) {
+      return;
+    }
+
+    void invoke("telemetry_initialize").catch(() => {
+      // keep telemetry initialization silent on failures
+    });
+
+    const startupFlushTimer = window.setTimeout(() => {
+      void invoke("telemetry_flush_pending").catch(() => {
+        // keep telemetry flush silent on failures
+      });
+    }, TELEMETRY_STARTUP_FLUSH_DELAY_MS);
+
+    const heartbeatTimer = window.setInterval(() => {
+      void invoke("telemetry_record_heartbeat").catch(() => {
+        // keep telemetry heartbeat silent on failures
+      });
+    }, TELEMETRY_HEARTBEAT_INTERVAL_MS);
+
+    const flushTimer = window.setInterval(() => {
+      void invoke("telemetry_flush_pending").catch(() => {
+        // keep telemetry flush silent on failures
+      });
+    }, TELEMETRY_FLUSH_INTERVAL_MS);
+
+    let disposed = false;
+    let unlistenCloseRequested: (() => void) | undefined;
+
+    void registerTelemetryCloseHandler({
+      appWindow: getCurrentWindow(),
+      endSession: async (reason) => {
+        await invoke("telemetry_end_session", { reason });
+      },
+    })
+      .then((unlisten) => {
+        if (disposed) {
+          unlisten();
+          return;
+        }
+
+        unlistenCloseRequested = unlisten;
+      })
+      .catch(() => {
+        // keep telemetry shutdown registration silent on failures
+      });
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(startupFlushTimer);
+      window.clearInterval(heartbeatTimer);
+      window.clearInterval(flushTimer);
+      unlistenCloseRequested?.();
+    };
+  }, [
+    configLoaded,
+    isInitialized,
+  ]);
 
   // Wait for both initialization check and config to load
   if (initLoading || !configLoaded) {

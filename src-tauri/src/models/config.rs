@@ -25,6 +25,46 @@ pub struct UserPreferences {
     pub github_token: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TelemetryConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub base_url: Option<String>,
+    #[serde(default = "default_telemetry_ingest_path")]
+    pub ingest_path: String,
+    #[serde(default)]
+    pub ingest_key: Option<String>,
+    #[serde(default = "default_telemetry_heartbeat_interval_secs")]
+    pub heartbeat_interval_secs: u32,
+    #[serde(default = "default_telemetry_flush_interval_secs")]
+    pub flush_interval_secs: u32,
+    #[serde(default = "default_telemetry_startup_flush_delay_secs")]
+    pub startup_flush_delay_secs: u32,
+    #[serde(default = "default_telemetry_batch_size")]
+    pub batch_size: u32,
+}
+
+fn default_telemetry_ingest_path() -> String {
+    "/api/v1/telemetry/ingest".to_string()
+}
+
+fn default_telemetry_heartbeat_interval_secs() -> u32 {
+    60
+}
+
+fn default_telemetry_flush_interval_secs() -> u32 {
+    600
+}
+
+fn default_telemetry_startup_flush_delay_secs() -> u32 {
+    45
+}
+
+fn default_telemetry_batch_size() -> u32 {
+    20
+}
+
 fn default_theme() -> String {
     "system".to_string()
 }
@@ -78,6 +118,21 @@ impl Default for UserPreferences {
             show_sync_notifications: true,
             remove_links_when_disabling_tool: false,
             github_token: None,
+        }
+    }
+}
+
+impl Default for TelemetryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            base_url: None,
+            ingest_path: default_telemetry_ingest_path(),
+            ingest_key: None,
+            heartbeat_interval_secs: default_telemetry_heartbeat_interval_secs(),
+            flush_interval_secs: default_telemetry_flush_interval_secs(),
+            startup_flush_delay_secs: default_telemetry_startup_flush_delay_secs(),
+            batch_size: default_telemetry_batch_size(),
         }
     }
 }
@@ -204,6 +259,7 @@ impl AppConfig {
 #[cfg(test)]
 mod tests {
     use super::default_marketplace_sources;
+    use super::AppConfig;
     use crate::models::SourceType;
 
     #[test]
@@ -214,5 +270,15 @@ mod tests {
         assert_eq!(sources[0].source_type, SourceType::Crawler);
         assert_eq!(sources[1].id, "src_composio_awesome_claude_skills");
         assert_eq!(sources[1].source_type, SourceType::Crawler);
+    }
+
+    #[test]
+    fn telemetry_config_is_not_serialized_into_default_app_config() {
+        let value = serde_json::to_value(AppConfig::default()).expect("config should serialize");
+        assert_eq!(
+            value.get("telemetry"),
+            None,
+            "telemetry runtime config should not be persisted into config.json"
+        );
     }
 }

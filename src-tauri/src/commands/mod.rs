@@ -6,6 +6,7 @@ pub mod marketplace;
 pub mod polls;
 pub mod skills;
 pub mod sync;
+pub mod telemetry;
 pub mod tools;
 pub mod updater;
 
@@ -29,6 +30,10 @@ pub use skills::{
     refresh_skills, scan_existing_skills,
 };
 pub use sync::{check_sync_status, fix_sync_issues};
+pub use telemetry::{
+    telemetry_end_session, telemetry_flush_pending, telemetry_initialize,
+    telemetry_record_heartbeat, telemetry_track_event,
+};
 pub use tools::{
     create_custom_tool, delete_custom_tool, detect_tools, get_tool_status, refresh_tools,
     set_tool_enabled, update_custom_tool, update_tool_paths,

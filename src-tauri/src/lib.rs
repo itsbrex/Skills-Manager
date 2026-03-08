@@ -14,8 +14,9 @@ use commands::{
     install_marketplace_skill, is_initialized, list_skills, mark_initialized, open_in_editor,
     read_directory_tree, read_file, refresh_editors, refresh_skills, refresh_tools, save_config,
     save_poll_client_state, scan_existing_skills, set_tool_enabled, submit_feedback, submit_poll_vote,
-    sync_marketplace_installed_skills, toggle_marketplace_source, update_custom_tool,
-    update_tool_paths, write_file,
+    sync_marketplace_installed_skills, telemetry_end_session, telemetry_flush_pending,
+    telemetry_initialize, telemetry_record_heartbeat, telemetry_track_event,
+    toggle_marketplace_source, update_custom_tool, update_tool_paths, write_file,
 };
 use services::{AppCache, MarketplaceCache};
 
@@ -72,6 +73,11 @@ pub fn run() {
             submit_poll_vote,
             get_poll_client_state,
             save_poll_client_state,
+            telemetry_initialize,
+            telemetry_record_heartbeat,
+            telemetry_end_session,
+            telemetry_flush_pending,
+            telemetry_track_event,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

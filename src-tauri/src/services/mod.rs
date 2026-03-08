@@ -6,6 +6,7 @@ pub mod file_ops;
 pub mod linker;
 pub mod marketplace;
 pub mod scanner;
+pub mod telemetry;
 pub mod updater;
 
 pub use cache::AppCache;
@@ -16,3 +17,4 @@ pub use file_ops::{read_directory_tree, read_file_content, write_file_content, F
 pub use linker::{is_symlink_or_junction, LinkReport, LinkStatus, LinkerService};
 pub use marketplace::{MarketplaceCache, MarketplaceService};
 pub use scanner::ScannerService;
+pub use telemetry::TelemetryService;
