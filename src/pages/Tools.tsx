@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
+
 import { Tool } from "@/types";
 import { useTranslation } from "@/i18n";
 import { getToolIconUrl, GenericToolIcon } from "@/assets/tools";
@@ -217,11 +218,13 @@ export function Tools() {
     }
   }, [addToast, bulkToggleMode, bulkToggleTargets, reloadTools, t]);
 
-  const handleEditConfigPath = useCallback(async (toolId: string) => {
+  // 修改配置路径（默认定位到当前路径）
+  const handleEditConfigPath = useCallback(async (toolId: string, currentPath?: string) => {
     const selected = await open({
       directory: true,
       multiple: false,
       title: t("tools.selectConfigPath"),
+      defaultPath: currentPath || undefined,
     });
 
     if (selected && typeof selected === "string") {
@@ -237,11 +240,13 @@ export function Tools() {
     }
   }, [reloadTools, t]);
 
-  const handleEditSkillsPath = useCallback(async (toolId: string) => {
+  // 修改技能路径（默认定位到当前路径）
+  const handleEditSkillsPath = useCallback(async (toolId: string, currentPath?: string) => {
     const selected = await open({
       directory: true,
       multiple: false,
       title: t("tools.selectSkillsPath"),
+      defaultPath: currentPath || undefined,
     });
 
     if (selected && typeof selected === "string") {
@@ -256,6 +261,7 @@ export function Tools() {
       }
     }
   }, [reloadTools, t]);
+
 
   const slugify = (value: string) =>
     value
@@ -689,13 +695,17 @@ export function Tools() {
             }}>
               {tool.config.config_path || t("tools.notSet")}
             </code>
+            {/* 打开路径选择器修改配置路径，默认定位到当前路径，仅启用的工具可点击 */}
             {!isCustom && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleEditConfigPath(tool.id);
+                  if (tool.config.enabled) {
+                    handleEditConfigPath(tool.id, tool.config.config_path);
+                  }
                 }}
-                title={t("tools.editPath")}
+                title={tool.config.enabled ? t("tools.editPath") : t("skills.toolNotDetected")}
+                disabled={!tool.config.enabled}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -706,12 +716,15 @@ export function Tools() {
                   border: 'none',
                   background: 'transparent',
                   color: 'var(--muted-foreground)',
-                  cursor: 'pointer',
+                  cursor: tool.config.enabled ? 'pointer' : 'not-allowed',
                   flexShrink: 0,
+                  opacity: tool.config.enabled ? 1 : 0.4,
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--muted)';
-                  e.currentTarget.style.color = 'var(--foreground)';
+                  if (tool.config.enabled) {
+                    e.currentTarget.style.backgroundColor = 'var(--muted)';
+                    e.currentTarget.style.color = 'var(--foreground)';
+                  }
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = 'transparent';
@@ -742,13 +755,17 @@ export function Tools() {
             }}>
               {tool.config.skills_path || t("tools.notSet")}
             </code>
+            {/* 打开路径选择器修改技能路径，默认定位到当前路径，仅启用的工具可点击 */}
             {!isCustom && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleEditSkillsPath(tool.id);
+                  if (tool.config.enabled) {
+                    handleEditSkillsPath(tool.id, tool.config.skills_path);
+                  }
                 }}
-                title={t("tools.editPath")}
+                title={tool.config.enabled ? t("tools.editPath") : t("skills.toolNotDetected")}
+                disabled={!tool.config.enabled}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -759,12 +776,15 @@ export function Tools() {
                   border: 'none',
                   background: 'transparent',
                   color: 'var(--muted-foreground)',
-                  cursor: 'pointer',
+                  cursor: tool.config.enabled ? 'pointer' : 'not-allowed',
                   flexShrink: 0,
+                  opacity: tool.config.enabled ? 1 : 0.4,
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--muted)';
-                  e.currentTarget.style.color = 'var(--foreground)';
+                  if (tool.config.enabled) {
+                    e.currentTarget.style.backgroundColor = 'var(--muted)';
+                    e.currentTarget.style.color = 'var(--foreground)';
+                  }
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = 'transparent';
