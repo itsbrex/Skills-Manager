@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildPollOptionStats } from "./buildPollOptionStats";
+import { buildPollOptionStats } from "./buildPollOptionStats.ts";
 
 test("buildPollOptionStats should calculate percentage and preserve order", () => {
   const stats = buildPollOptionStats([

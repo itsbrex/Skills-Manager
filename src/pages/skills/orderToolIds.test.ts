@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { orderToolIdsForSkill } from "./orderToolIds";
+import { orderToolIdsForSkill } from "./orderToolIds.ts";
 
 test("orderToolIdsForSkill puts enabled tools first while preserving base order", () => {
   const baseOrder = ["claude-code", "codex", "cursor", "my-tool"];

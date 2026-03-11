@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatInstallCountLabel } from "./formatInstallCount";
+import { formatInstallCountLabel } from "./formatInstallCount.ts";
 
 test("formatInstallCountLabel returns null when install count is missing or not positive", () => {
   assert.equal(formatInstallCountLabel(undefined), null);

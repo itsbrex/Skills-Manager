@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { getEnabledToolIds } from "./getEnabledToolIds";
+import { getEnabledToolIds } from "./getEnabledToolIds.ts";
 
 test("getEnabledToolIds filters out disabled tools", () => {
   const toolIds = getEnabledToolIds([

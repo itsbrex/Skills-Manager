@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { summarizeEnabledTools } from "./summarizeEnabledTools";
+import { summarizeEnabledTools } from "./summarizeEnabledTools.ts";
 
 test("summarizeEnabledTools returns none when no tools are enabled", () => {
   const summary = summarizeEnabledTools(["a", "b", "c"], {}, 2);

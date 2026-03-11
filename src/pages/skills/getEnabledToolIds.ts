@@ -1,4 +1,4 @@
-import { Tool } from "@/types";
+import type { Tool } from "../../types/index.ts";
 
 type ToolLike = Pick<Tool, "id" | "config">;
 

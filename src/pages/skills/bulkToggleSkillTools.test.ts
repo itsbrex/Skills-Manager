@@ -5,7 +5,7 @@ import {
   getSkillBulkToggleConfirmKey,
   getSkillBulkToggleMode,
   getSkillBulkToggleTargets,
-} from "./bulkToggleSkillTools";
+} from "./bulkToggleSkillTools.ts";
 
 function createTool(id: string, options: { detected: boolean; toolEnabled: boolean }): Tool {
   return {

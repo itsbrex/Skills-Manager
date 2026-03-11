@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Tool } from "../../types";
-import { sortToolsByEnabled } from "./sortTools";
+import { sortToolsByEnabled } from "./sortTools.ts";
 
 function createTool(id: string, enabled: boolean): Tool {
   return {

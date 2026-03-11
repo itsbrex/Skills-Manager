@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildMarketplaceMetaItems } from "./buildMarketplaceMetaItems";
+import { buildMarketplaceMetaItems } from "./buildMarketplaceMetaItems.ts";
 
 test("buildMarketplaceMetaItems puts install count to the right of author when author exists", () => {
   const items = buildMarketplaceMetaItems("来源: skills.sh", "作者: composiohq", "2");
