@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 
-import { Tool } from "@/types";
+import { Skill, Tool } from "@/types";
 import { useTranslation } from "@/i18n";
 import { getToolIconUrl, GenericToolIcon } from "@/assets/tools";
 import { FolderOpen, Pencil, Plus, Power, Trash2, X } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
+import { RelationToggleDialog } from "@/components/skills/RelationToggleDialog";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
@@ -20,10 +21,22 @@ import {
   getBulkToggleTargets,
   getNextBulkToggleMode,
 } from "./tools/bulkToggleTools";
+import { orderSkillIdsForTool } from "./tools/orderSkillIdsForTool";
+import {
+  getToolBulkToggleConfirmKey,
+  getToolBulkToggleMode,
+  getToolBulkToggleTargets,
+} from "./tools/bulkToggleToolSkills";
+
+function getSkillDisplayName(skillId: string, skills: Skill[]): string {
+  const skill = skills.find((item) => item.id === skillId);
+  return skill?.name ?? skillId;
+}
 
 export function Tools() {
   const { t } = useTranslation();
   const [tools, setTools] = useState<Tool[]>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -33,6 +46,11 @@ export function Tools() {
   const [editingToolId, setEditingToolId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [idManuallyEdited, setIdManuallyEdited] = useState(false);
+  const [toolEditorToolId, setToolEditorToolId] = useState<string | null>(null);
+  const [toolEditorQuery, setToolEditorQuery] = useState("");
+  const [toolEditorEnabledOnly, setToolEditorEnabledOnly] = useState(false);
+  const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
+  const [bulkTogglingToolId, setBulkTogglingToolId] = useState<string | null>(null);
   const [iconFallbackStage, setIconFallbackStage] = useState<Record<string, "asset" | "file" | "none">>({});
   const [form, setForm] = useState({
     name: "",
@@ -80,8 +98,12 @@ export function Tools() {
   const loadTools = useCallback(async () => {
     setError(null);
     try {
-      const result = await invoke<Tool[]>("detect_tools");
-      setTools(result);
+      const [toolsResult, skillsResult] = await Promise.all([
+        invoke<Tool[]>("detect_tools"),
+        invoke<Skill[]>("list_skills"),
+      ]);
+      setTools(toolsResult);
+      setSkills(skillsResult);
       setIconFallbackStage({});
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -95,8 +117,12 @@ export function Tools() {
     setRefreshing(true);
     setError(null);
     try {
-      const result = await invoke<Tool[]>("refresh_tools");
-      setTools(result);
+      const [toolsResult, skillsResult] = await Promise.all([
+        invoke<Tool[]>("refresh_tools"),
+        invoke<Skill[]>("refresh_skills"),
+      ]);
+      setTools(toolsResult);
+      setSkills(skillsResult);
       setIconFallbackStage({});
       addToast(t("common.refreshSuccess"), "success");
     } catch (err) {
@@ -110,8 +136,12 @@ export function Tools() {
   const reloadTools = useCallback(async () => {
     setError(null);
     try {
-      const result = await invoke<Tool[]>("refresh_tools");
-      setTools(result);
+      const [toolsResult, skillsResult] = await Promise.all([
+        invoke<Tool[]>("refresh_tools"),
+        invoke<Skill[]>("list_skills"),
+      ]);
+      setTools(toolsResult);
+      setSkills(skillsResult);
       setIconFallbackStage({});
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -143,6 +173,125 @@ export function Tools() {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, [t]);
+
+  const openToolSkillEditor = useCallback((toolId: string) => {
+    setToolEditorToolId(toolId);
+    setToolEditorQuery("");
+    setToolEditorEnabledOnly(false);
+  }, []);
+
+  const closeToolSkillEditor = useCallback(() => {
+    setToolEditorToolId(null);
+    setToolEditorQuery("");
+    setToolEditorEnabledOnly(false);
+  }, []);
+
+  const handleToggleSkillForTool = useCallback(async (tool: Tool, skillId: string, enabled: boolean) => {
+    const toggleKey = `${tool.id}:${skillId}`;
+    setTogglingSkill(toggleKey);
+
+    try {
+      if (enabled) {
+        await invoke("enable_skill", { skillId, toolId: tool.id });
+        addToast(
+          t("skills.enableSuccess")
+            .replace("{skill}", getSkillDisplayName(skillId, skills))
+            .replace("{tool}", tool.name),
+          "success",
+        );
+      } else {
+        await invoke("disable_skill", { skillId, toolId: tool.id });
+        addToast(
+          t("skills.disableSuccess")
+            .replace("{skill}", getSkillDisplayName(skillId, skills))
+            .replace("{tool}", tool.name),
+          "success",
+        );
+      }
+      await reloadTools();
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setTogglingSkill(null);
+    }
+  }, [addToast, reloadTools, skills, t]);
+
+  const handleBulkToggleToolSkills = useCallback(async (tool: Tool, visibleSkillIds: string[]) => {
+    const enabledMap: Record<string, boolean> = {};
+    skills.forEach((skill) => {
+      enabledMap[skill.id] = Boolean(skill.enabled[tool.id]);
+    });
+
+    const bulkMode = getToolBulkToggleMode(visibleSkillIds, enabledMap);
+    const targetSkillIds = getToolBulkToggleTargets(visibleSkillIds, enabledMap, bulkMode);
+
+    if (targetSkillIds.length === 0) {
+      return;
+    }
+
+    const enabled = bulkMode === "enable";
+    const confirmed = await confirm(
+      t(getToolBulkToggleConfirmKey(bulkMode)).replace("{count}", String(targetSkillIds.length)),
+      {
+        title: t("tools.bulkConfirmTitle"),
+        kind: "warning",
+      },
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setBulkTogglingToolId(tool.id);
+    setError(null);
+
+    // Optimistic update for immediate feedback.
+    setSkills((prev) =>
+      prev.map((skill) => {
+        if (!targetSkillIds.includes(skill.id)) {
+          return skill;
+        }
+        return {
+          ...skill,
+          enabled: {
+            ...skill.enabled,
+            [tool.id]: enabled,
+          },
+        };
+      }),
+    );
+
+    try {
+      const command = enabled ? "enable_skill" : "disable_skill";
+      const results = await Promise.allSettled(
+        targetSkillIds.map((skillId) => invoke(command, { skillId, toolId: tool.id })),
+      );
+
+      const failedCount = results.filter((result) => result.status === "rejected").length;
+      const changedCount = targetSkillIds.length - failedCount;
+
+      if (changedCount > 0) {
+        const successMessage = enabled
+          ? t("tools.bulkEnableSkillsSuccess")
+          : t("tools.bulkDisableSkillsSuccess");
+        addToast(successMessage.replace("{count}", String(changedCount)), "success");
+      }
+
+      if (failedCount > 0) {
+        const failedMessage = t("tools.bulkToggleSkillsPartialFailed").replace("{count}", String(failedCount));
+        addToast(failedMessage, "error");
+        setError(failedMessage);
+      }
+
+      await reloadTools();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      addToast(message, "error");
+      setError(message);
+      await reloadTools();
+    } finally {
+      setBulkTogglingToolId(null);
+    }
+  }, [addToast, reloadTools, skills, t]);
 
   const bulkToggleMode = useMemo(
     () => getNextBulkToggleMode(tools),
@@ -453,6 +602,131 @@ export function Tools() {
       ? t("tools.bulkEnable")
       : t("tools.bulkDisable");
 
+  const toolEditorTool = useMemo(
+    () => tools.find((tool) => tool.id === toolEditorToolId) ?? null,
+    [tools, toolEditorToolId],
+  );
+
+  const skillIds = useMemo(
+    () => skills.map((skill) => skill.id),
+    [skills],
+  );
+
+  const toolSkillEnabledMap = useMemo(() => {
+    if (!toolEditorTool) {
+      return {};
+    }
+    const enabledMap: Record<string, boolean> = {};
+    skills.forEach((skill) => {
+      enabledMap[skill.id] = Boolean(skill.enabled[toolEditorTool.id]);
+    });
+    return enabledMap;
+  }, [skills, toolEditorTool]);
+
+  const toolEditorOrderedSkillIds = useMemo(() => {
+    if (!toolEditorTool) {
+      return [];
+    }
+    return orderSkillIdsForTool(skillIds, toolSkillEnabledMap);
+  }, [skillIds, toolEditorTool, toolSkillEnabledMap]);
+
+  const toolEditorFilteredSkillIds = useMemo(() => {
+    if (!toolEditorTool) {
+      return [];
+    }
+
+    const normalizedQuery = toolEditorQuery.trim().toLowerCase();
+    return toolEditorOrderedSkillIds.filter((skillId) => {
+      if (toolEditorEnabledOnly && !toolSkillEnabledMap[skillId]) {
+        return false;
+      }
+
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      const displayName = getSkillDisplayName(skillId, skills).toLowerCase();
+      return displayName.includes(normalizedQuery) || skillId.toLowerCase().includes(normalizedQuery);
+    });
+  }, [
+    skills,
+    toolEditorEnabledOnly,
+    toolEditorOrderedSkillIds,
+    toolEditorQuery,
+    toolEditorTool,
+    toolSkillEnabledMap,
+  ]);
+
+  const toolEditorEnabledCount = useMemo(() => {
+    if (!toolEditorTool) {
+      return 0;
+    }
+    return toolEditorOrderedSkillIds.filter((skillId) => toolSkillEnabledMap[skillId]).length;
+  }, [toolEditorOrderedSkillIds, toolEditorTool, toolSkillEnabledMap]);
+
+  const toolEditorBulkToggleMode = useMemo(() => {
+    if (!toolEditorTool) {
+      return "enable";
+    }
+    return getToolBulkToggleMode(toolEditorFilteredSkillIds, toolSkillEnabledMap);
+  }, [toolEditorFilteredSkillIds, toolEditorTool, toolSkillEnabledMap]);
+
+  const toolEditorBulkToggleTargets = useMemo(() => {
+    if (!toolEditorTool) {
+      return [];
+    }
+    return getToolBulkToggleTargets(toolEditorFilteredSkillIds, toolSkillEnabledMap, toolEditorBulkToggleMode);
+  }, [toolEditorFilteredSkillIds, toolEditorTool, toolEditorBulkToggleMode, toolSkillEnabledMap]);
+
+  const toolEditorIsBulkToggling = toolEditorTool ? bulkTogglingToolId === toolEditorTool.id : false;
+  const toolEditorHasPendingSingleToggle = toolEditorTool
+    ? Boolean(togglingSkill?.startsWith(`${toolEditorTool.id}:`))
+    : false;
+  const toolEditorBulkToggleDisabled =
+    toolEditorIsBulkToggling || toolEditorHasPendingSingleToggle || toolEditorBulkToggleTargets.length === 0;
+  const toolEditorBulkToggleLabel = toolEditorIsBulkToggling
+    ? t("tools.bulkUpdatingSkills")
+    : toolEditorBulkToggleMode === "enable"
+      ? t("tools.bulkEnableSkills")
+      : t("tools.bulkDisableSkills");
+
+  const toolEditorItems = useMemo(() => {
+    if (!toolEditorTool) {
+      return [];
+    }
+
+    const shouldDisable = !toolEditorTool.detected || !toolEditorTool.config.enabled;
+
+    return toolEditorFilteredSkillIds.map((skillId) => {
+      const isEnabled = toolSkillEnabledMap[skillId] ?? false;
+      const toggleKey = `${toolEditorTool.id}:${skillId}`;
+      const isToggling = togglingSkill === toggleKey;
+      const isDisabled = toolEditorIsBulkToggling || isToggling || shouldDisable;
+      const tooltip = !toolEditorTool.detected
+        ? t("skills.toolNotDetected")
+        : !toolEditorTool.config.enabled
+          ? t("tools.skillsManageDisabled")
+          : undefined;
+
+      return {
+        id: skillId,
+        label: getSkillDisplayName(skillId, skills),
+        enabled: isEnabled,
+        disabled: isDisabled,
+        tooltip,
+        dimmed: !toolEditorTool.detected,
+      };
+    });
+  }, [
+    skills,
+    t,
+    togglingSkill,
+    toolEditorFilteredSkillIds,
+    toolEditorIsBulkToggling,
+    toolEditorTool,
+    toolSkillEnabledMap,
+  ]);
+
   const handleIconError = useCallback((toolId: string) => {
     setIconFallbackStage(prev => {
       const current = prev[toolId] ?? "asset";
@@ -491,6 +765,12 @@ export function Tools() {
           : null
       : null;
     const iconUrl = customIconSrc || getToolIconUrl(tool.id);
+    const manageSkillsDisabled = !tool.detected || !tool.config.enabled;
+    const manageSkillsTitle = !tool.detected
+      ? t("skills.toolNotDetected")
+      : !tool.config.enabled
+        ? t("tools.skillsManageDisabled")
+        : t("tools.manageSkills");
 
     return (
       <div
@@ -653,12 +933,53 @@ export function Tools() {
             </p>
           </div>
 
-          {/* Toggle Switch */}
+          {/* Skill Dialog + Toggle */}
           <div
             onClick={(e) => e.stopPropagation()}
-            style={{ marginTop: '2px' }}
-            title={!tool.detected && !tool.config.enabled ? t("skills.toolNotDetected") : undefined}
+            style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}
           >
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!manageSkillsDisabled) {
+                  openToolSkillEditor(tool.id);
+                }
+              }}
+              title={manageSkillsTitle}
+              disabled={manageSkillsDisabled}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '28px',
+                height: '28px',
+                borderRadius: '8px',
+                border: '1px solid var(--border)',
+                background: 'var(--background)',
+                color: 'var(--muted-foreground)',
+                cursor: manageSkillsDisabled ? 'not-allowed' : 'pointer',
+                opacity: manageSkillsDisabled ? 0.5 : 1,
+                transition: 'background-color 0.15s, color 0.15s, border-color 0.15s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                if (manageSkillsDisabled) {
+                  return;
+                }
+                e.currentTarget.style.backgroundColor = 'var(--muted)';
+                e.currentTarget.style.color = 'var(--foreground)';
+                e.currentTarget.style.borderColor = 'var(--ring)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--background)';
+                e.currentTarget.style.color = 'var(--muted-foreground)';
+                e.currentTarget.style.borderColor = 'var(--border)';
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 3L13.5 8.5L19 10L13.5 11.5L12 17L10.5 11.5L5 10L10.5 8.5L12 3Z"/>
+              </svg>
+            </button>
             <Toggle
               checked={tool.config.enabled}
               disabled={!tool.detected && !tool.config.enabled}
@@ -997,6 +1318,31 @@ export function Tools() {
           </section>
         </div>
       </main>
+
+      {toolEditorTool && (
+        <RelationToggleDialog
+          title={t("tools.configureSkillsTitle")}
+          description={t("tools.configureSkillsDesc")
+            .replace("{tool}", toolEditorTool.name)
+            .replace("{enabled}", String(toolEditorEnabledCount))
+            .replace("{total}", String(toolEditorOrderedSkillIds.length))}
+          query={toolEditorQuery}
+          enabledOnly={toolEditorEnabledOnly}
+          searchPlaceholder={t("tools.searchSkillsPlaceholder")}
+          enabledOnlyLabel={t("tools.enabledOnlySkills")}
+          bulkToggleLabel={toolEditorBulkToggleLabel}
+          bulkToggleDisabled={toolEditorBulkToggleDisabled}
+          bulkToggleTitle={toolEditorBulkToggleTargets.length === 0 ? t("tools.bulkNoSkillTarget") : undefined}
+          items={toolEditorItems}
+          emptyLabel={t("tools.noSkillsInFilter")}
+          doneLabel={t("common.done")}
+          onQueryChange={setToolEditorQuery}
+          onEnabledOnlyChange={setToolEditorEnabledOnly}
+          onToggle={(skillId, enabled) => handleToggleSkillForTool(toolEditorTool, skillId, enabled)}
+          onBulkToggle={() => handleBulkToggleToolSkills(toolEditorTool, toolEditorFilteredSkillIds)}
+          onClose={closeToolSkillEditor}
+        />
+      )}
 
       {formOpen && (
         <div
