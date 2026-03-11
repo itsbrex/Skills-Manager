@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
-import { Toggle } from "@/components/ui/toggle";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoader } from "@/components/ui/loading";
+import { RelationToggleDialog } from "@/components/skills/RelationToggleDialog";
 import {
   CREATE_SKILL_MODAL_WIDTH,
   MODAL_LAYER_Z_INDEX,
@@ -313,6 +313,71 @@ export function Skills() {
       return displayName.includes(normalizedQuery) || toolId.toLowerCase().includes(normalizedQuery);
     });
   }, [toolEditorEnabledOnly, toolEditorOrderedToolIds, toolEditorQuery, toolEditorSkill, tools]);
+
+  const toolEditorEnabledCount = useMemo(() => {
+    if (!toolEditorSkill) {
+      return 0;
+    }
+    return toolEditorOrderedToolIds.filter((toolId) => Boolean(toolEditorSkill.enabled[toolId])).length;
+  }, [toolEditorOrderedToolIds, toolEditorSkill]);
+
+  const toolEditorBulkToggleMode = useMemo(() => {
+    if (!toolEditorSkill) {
+      return "enable";
+    }
+
+    return getSkillBulkToggleMode(toolEditorFilteredToolIds, toolEditorSkill.enabled, tools);
+  }, [toolEditorFilteredToolIds, toolEditorSkill, tools]);
+
+  const toolEditorBulkToggleTargets = useMemo(() => {
+    if (!toolEditorSkill) {
+      return [];
+    }
+
+    return getSkillBulkToggleTargets(
+      toolEditorFilteredToolIds,
+      toolEditorSkill.enabled,
+      tools,
+      toolEditorBulkToggleMode,
+    );
+  }, [toolEditorFilteredToolIds, toolEditorSkill, tools, toolEditorBulkToggleMode]);
+
+  const toolEditorIsBulkToggling = toolEditorSkill ? bulkTogglingSkillId === toolEditorSkill.id : false;
+  const toolEditorHasPendingSingleToggle = toolEditorSkill
+    ? Boolean(togglingSkill?.startsWith(`${toolEditorSkill.id}:`))
+    : false;
+  const toolEditorBulkToggleDisabled =
+    toolEditorIsBulkToggling || toolEditorHasPendingSingleToggle || toolEditorBulkToggleTargets.length === 0;
+  const toolEditorBulkToggleLabel = toolEditorIsBulkToggling
+    ? t("skills.bulkUpdating")
+    : toolEditorBulkToggleMode === "enable"
+      ? t("skills.bulkEnable")
+      : t("skills.bulkDisable");
+
+  const toolEditorItems = useMemo(() => {
+    if (!toolEditorSkill) {
+      return [];
+    }
+
+    return toolEditorFilteredToolIds.map((toolId) => {
+      const isEnabled = toolEditorSkill.enabled[toolId] ?? false;
+      const toggleKey = `${toolEditorSkill.id}:${toolId}`;
+      const isToggling = togglingSkill === toggleKey;
+      const tool = tools.find((item) => item.id === toolId);
+      const isDetected = tool?.detected ?? false;
+      const isToolEnabled = tool?.config.enabled ?? false;
+      const isDisabled = toolEditorIsBulkToggling || isToggling || !isDetected || !isToolEnabled;
+
+      return {
+        id: toolId,
+        label: getToolDisplayName(toolId, tools),
+        enabled: isEnabled,
+        disabled: isDisabled,
+        tooltip: !isDetected ? t("skills.toolNotDetected") : undefined,
+        dimmed: !isDetected,
+      };
+    });
+  }, [toolEditorFilteredToolIds, toolEditorIsBulkToggling, toolEditorSkill, togglingSkill, tools, t]);
 
   const openToolEditor = useCallback((skillId: string) => {
     setToolEditorSkillId(skillId);
@@ -725,21 +790,27 @@ export function Skills() {
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {toolEditorSkill && (
-        <SkillToolsDialog
-          skill={toolEditorSkill}
-          tools={tools}
-          allToolIds={toolEditorOrderedToolIds}
-          visibleToolIds={toolEditorFilteredToolIds}
+        <RelationToggleDialog
+          title={t("skills.configureToolsTitle")}
+          description={t("skills.configureToolsDesc")
+            .replace("{skill}", toolEditorSkill.name)
+            .replace("{enabled}", String(toolEditorEnabledCount))
+            .replace("{total}", String(toolEditorOrderedToolIds.length))}
           query={toolEditorQuery}
           enabledOnly={toolEditorEnabledOnly}
-          togglingSkill={togglingSkill}
-          bulkTogglingSkillId={bulkTogglingSkillId}
+          searchPlaceholder={t("skills.searchToolsPlaceholder")}
+          enabledOnlyLabel={t("skills.enabledOnly")}
+          bulkToggleLabel={toolEditorBulkToggleLabel}
+          bulkToggleDisabled={toolEditorBulkToggleDisabled}
+          bulkToggleTitle={toolEditorBulkToggleTargets.length === 0 ? t("skills.bulkNoTarget") : undefined}
+          items={toolEditorItems}
+          emptyLabel={t("skills.noToolsInFilter")}
+          doneLabel={t("common.done")}
           onQueryChange={setToolEditorQuery}
           onEnabledOnlyChange={setToolEditorEnabledOnly}
-          onToggle={handleToggle}
-          onBulkToggle={handleBulkToggle}
+          onToggle={(toolId, enabled) => handleToggle(toolEditorSkill.id, toolEditorSkill.name, toolId, enabled)}
+          onBulkToggle={() => handleBulkToggle(toolEditorSkill, toolEditorFilteredToolIds)}
           onClose={closeToolEditor}
-          t={t}
         />
       )}
 
@@ -752,306 +823,6 @@ export function Skills() {
           t={t}
         />
       )}
-    </div>
-  );
-}
-
-function SkillToolsDialog({
-  skill,
-  tools,
-  allToolIds,
-  visibleToolIds,
-  query,
-  enabledOnly,
-  togglingSkill,
-  bulkTogglingSkillId,
-  onQueryChange,
-  onEnabledOnlyChange,
-  onToggle,
-  onBulkToggle,
-  onClose,
-  t,
-}: {
-  skill: Skill;
-  tools: Tool[];
-  allToolIds: string[];
-  visibleToolIds: string[];
-  query: string;
-  enabledOnly: boolean;
-  togglingSkill: string | null;
-  bulkTogglingSkillId: string | null;
-  onQueryChange: (query: string) => void;
-  onEnabledOnlyChange: (enabledOnly: boolean) => void;
-  onToggle: (skillId: string, skillName: string, toolId: string, enabled: boolean) => void;
-  onBulkToggle: (skill: Skill, visibleToolIds: string[]) => Promise<void> | void;
-  onClose: () => void;
-  t: (key: TranslationPath) => string;
-}) {
-  const enabledCount = allToolIds.filter((toolId) => Boolean(skill.enabled[toolId])).length;
-  const bulkToggleMode = useMemo(
-    () => getSkillBulkToggleMode(visibleToolIds, skill.enabled, tools),
-    [visibleToolIds, skill.enabled, tools],
-  );
-  const bulkToggleTargets = useMemo(
-    () => getSkillBulkToggleTargets(visibleToolIds, skill.enabled, tools, bulkToggleMode),
-    [visibleToolIds, skill.enabled, tools, bulkToggleMode],
-  );
-  const isBulkToggling = bulkTogglingSkillId === skill.id;
-  const hasPendingSingleToggle = Boolean(togglingSkill?.startsWith(`${skill.id}:`));
-  const isBulkToggleDisabled = isBulkToggling || hasPendingSingleToggle || bulkToggleTargets.length === 0;
-  const bulkToggleLabel = isBulkToggling
-    ? t("skills.bulkUpdating")
-    : bulkToggleMode === "enable"
-      ? t("skills.bulkEnable")
-      : t("skills.bulkDisable");
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: MODAL_OVERLAY_COLOR,
-        zIndex: MODAL_LAYER_Z_INDEX,
-      }}
-      onClick={onClose}
-    >
-      <div
-        style={{
-          width: "min(640px, calc(100vw - 48px))",
-          maxHeight: "calc(100vh - 72px)",
-          backgroundColor: "var(--background)",
-          borderRadius: "14px",
-          border: "1px solid var(--border)",
-          boxShadow: "0 20px 56px rgba(0,0,0,0.22)",
-          padding: "20px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "14px",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
-          <div style={{ minWidth: 0 }}>
-            <h3 style={{ margin: "0 0 6px 0", fontSize: "15px", fontWeight: 600, color: "var(--foreground)" }}>
-              {t("skills.configureToolsTitle")}
-            </h3>
-            <p style={{ margin: 0, fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
-              {t("skills.configureToolsDesc")
-                .replace("{skill}", skill.name)
-                .replace("{enabled}", String(enabledCount))
-                .replace("{total}", String(allToolIds.length))}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            style={{
-              width: "30px",
-              height: "30px",
-              borderRadius: "8px",
-              border: "1px solid var(--border)",
-              backgroundColor: "var(--secondary)",
-              color: "var(--muted-foreground)",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 0,
-              flexShrink: 0,
-            }}
-            title={t("common.cancel")}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-          <div style={{ position: "relative", flex: "1 1 280px", minWidth: "200px" }}>
-            <svg
-              style={{
-                position: "absolute",
-                left: "10px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: "var(--muted-foreground)",
-                pointerEvents: "none",
-              }}
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <path d="m21 21-4.3-4.3" />
-            </svg>
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => onQueryChange(e.target.value)}
-              placeholder={t("skills.searchToolsPlaceholder")}
-              style={{
-                width: "100%",
-                padding: "8px 10px 8px 32px",
-                fontSize: "12px",
-                border: "1px solid var(--border)",
-                borderRadius: "8px",
-                backgroundColor: "var(--secondary)",
-                color: "var(--foreground)",
-                outline: "none",
-                boxSizing: "border-box",
-              }}
-            />
-          </div>
-
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              fontSize: "12px",
-              color: "var(--muted-foreground)",
-              userSelect: "none",
-            }}
-          >
-            <Toggle
-              checked={enabledOnly}
-              onChange={(checked) => onEnabledOnlyChange(checked)}
-            />
-            {t("skills.enabledOnly")}
-          </label>
-
-          <button
-            type="button"
-            onClick={() => onBulkToggle(skill, visibleToolIds)}
-            disabled={isBulkToggleDisabled}
-            title={bulkToggleTargets.length === 0 ? t("skills.bulkNoTarget") : undefined}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "8px 10px",
-              fontSize: "12px",
-              fontWeight: 500,
-              color: "var(--foreground)",
-              backgroundColor: "var(--secondary)",
-              border: "1px solid var(--border)",
-              borderRadius: "8px",
-              cursor: isBulkToggleDisabled ? "not-allowed" : "pointer",
-              opacity: isBulkToggleDisabled ? 0.6 : 1,
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
-            </svg>
-            {bulkToggleLabel}
-          </button>
-        </div>
-
-        <div
-          style={{
-            border: "1px solid var(--border)",
-            borderRadius: "10px",
-            backgroundColor: "var(--secondary)",
-            overflow: "hidden",
-          }}
-        >
-          <div style={{ maxHeight: "360px", overflow: "auto", padding: "6px" }}>
-            {visibleToolIds.length === 0 ? (
-              <div
-                style={{
-                  padding: "30px 14px",
-                  textAlign: "center",
-                  fontSize: "12px",
-                  color: "var(--muted-foreground)",
-                }}
-              >
-                {t("skills.noToolsInFilter")}
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                  gap: "8px",
-                }}
-              >
-                {visibleToolIds.map((toolId) => {
-                  const isEnabled = skill.enabled[toolId] ?? false;
-                  const toggleKey = `${skill.id}:${toolId}`;
-                  const isToggling = togglingSkill === toggleKey;
-                  const tool = tools.find((item) => item.id === toolId);
-                  const isDetected = tool?.detected ?? false;
-                  const isToolEnabled = tool?.config.enabled ?? false;
-                  const isDisabled = isBulkToggling || isToggling || !isDetected || !isToolEnabled;
-
-                  return (
-                    <div
-                      key={toolId}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: "10px",
-                        minHeight: "48px",
-                        padding: "10px 12px",
-                        borderRadius: "8px",
-                        border: "1px solid var(--border)",
-                        backgroundColor: isEnabled ? "rgba(9, 105, 218, 0.08)" : "var(--background)",
-                        opacity: isDetected ? 1 : 0.6,
-                      }}
-                      title={!isDetected ? t("skills.toolNotDetected") : undefined}
-                    >
-                      <div
-                        style={{
-                          fontSize: "14px",
-                          fontWeight: 500,
-                          color: "var(--foreground)",
-                          lineHeight: 1.35,
-                          minWidth: 0,
-                          overflow: "hidden",
-                          whiteSpace: "nowrap",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {getToolDisplayName(toolId, tools)}
-                      </div>
-                      <Toggle
-                        checked={isEnabled}
-                        disabled={isDisabled}
-                        onChange={(checked) => onToggle(skill.id, skill.name, toolId, checked)}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button
-            onClick={onClose}
-            style={{
-              fontSize: "12px",
-              fontWeight: 500,
-              color: "var(--primary-foreground)",
-              backgroundColor: "var(--foreground)",
-              border: "none",
-              borderRadius: "8px",
-              padding: "7px 12px",
-              cursor: "pointer",
-            }}
-          >
-            {t("common.done")}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
