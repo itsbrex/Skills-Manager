@@ -227,7 +227,9 @@ fn exchange_google_auth_saves_session_and_returns_profile() {
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/yjw/code/projects/skills-manager/src-tauri && cargo test start_google_auth_returns_state_and_stores_pending exchange_google_auth_saves_session_and_returns_profile -- --nocapture`
+Run:
+1. `cd /Users/yjw/code/projects/skills-manager/src-tauri && cargo test start_google_auth_returns_state_and_stores_pending -- --nocapture`
+2. `cd /Users/yjw/code/projects/skills-manager/src-tauri && cargo test exchange_google_auth_saves_session_and_returns_profile -- --nocapture`
 Expected: FAIL（命令未实现/未注册）
 
 **Step 3: Write minimal implementation**
@@ -294,7 +296,9 @@ pub async fn exchange_google_auth(login_code: String, state: String) -> Result<A
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/yjw/code/projects/skills-manager/src-tauri && cargo test start_google_auth_returns_state_and_stores_pending exchange_google_auth_saves_session_and_returns_profile -- --nocapture`
+Run:
+1. `cd /Users/yjw/code/projects/skills-manager/src-tauri && cargo test start_google_auth_returns_state_and_stores_pending -- --nocapture`
+2. `cd /Users/yjw/code/projects/skills-manager/src-tauri && cargo test exchange_google_auth_saves_session_and_returns_profile -- --nocapture`
 Expected: PASS
 
 **Step 5: Commit**
@@ -374,7 +378,8 @@ git -C /Users/yjw/code/projects/skills-manager commit -m "feat: enable google oa
 
 Run:
 1. `cd /Users/yjw/code/projects/skills-market-api && npx vitest run test/auth.test.ts`
-2. `cd /Users/yjw/code/projects/skills-manager/src-tauri && cargo test start_google_auth_returns_state_and_stores_pending exchange_google_auth_saves_session_and_returns_profile -- --nocapture`
+2. `cd /Users/yjw/code/projects/skills-manager/src-tauri && cargo test start_google_auth_returns_state_and_stores_pending -- --nocapture`
+3. `cd /Users/yjw/code/projects/skills-manager/src-tauri && cargo test exchange_google_auth_saves_session_and_returns_profile -- --nocapture`
 3. `cd /Users/yjw/code/projects/skills-manager && npm run build`
 
 Expected: 全部 PASS。
