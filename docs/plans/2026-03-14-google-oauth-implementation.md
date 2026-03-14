@@ -232,26 +232,7 @@ Expected: FAIL（命令未实现/未注册）
 
 **Step 3: Write minimal implementation**
 
-在 `src-tauri/src/commands/auth.rs` 中新增：
-
-```rust
-#[tauri::command]
-pub async fn start_google_auth(debug: Option<bool>) -> Result<AuthStartResult, String> {
-    start_github_auth(debug)
-        .await
-        .map(|mut result| {
-            // 覆盖为 google 的 start URL
-            result
-        })
-}
-
-#[tauri::command]
-pub async fn exchange_google_auth(login_code: String, state: String) -> Result<AuthMeResponse, String> {
-    exchange_github_auth(login_code, state).await
-}
-```
-
-并将 `start_github_auth` 内部构造 URL 的 provider 从硬编码改为可传入（或新增私有 helper），确保 google 调用走 `/auth/google/start`。示例：
+在 `src-tauri/src/commands/auth.rs` 中新增通用 helper，并为 GitHub/Google 分别调用，确保 google 走 `/auth/google/start`：
 
 ```rust
 async fn start_oauth_auth(provider: &str, debug: Option<bool>) -> Result<AuthStartResult, String> {
@@ -299,6 +280,11 @@ pub async fn start_github_auth(debug: Option<bool>) -> Result<AuthStartResult, S
 #[tauri::command]
 pub async fn start_google_auth(debug: Option<bool>) -> Result<AuthStartResult, String> {
     start_oauth_auth("google", debug).await
+}
+
+#[tauri::command]
+pub async fn exchange_google_auth(login_code: String, state: String) -> Result<AuthMeResponse, String> {
+    exchange_github_auth(login_code, state).await
 }
 ```
 
