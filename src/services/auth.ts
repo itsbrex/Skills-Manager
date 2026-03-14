@@ -7,11 +7,27 @@ export async function startGithubAuth(): Promise<AuthStartResult> {
   });
 }
 
+export async function startGoogleAuth(): Promise<AuthStartResult> {
+  return invoke<AuthStartResult>("start_google_auth", {
+    debug: import.meta.env.DEV,
+  });
+}
+
 export async function exchangeGithubAuth(
   loginCode: string,
   state: string,
 ): Promise<AuthMeResponse> {
   return invoke<AuthMeResponse>("exchange_github_auth", {
+    loginCode,
+    state,
+  });
+}
+
+export async function exchangeGoogleAuth(
+  loginCode: string,
+  state: string,
+): Promise<AuthMeResponse> {
+  return invoke<AuthMeResponse>("exchange_google_auth", {
     loginCode,
     state,
   });

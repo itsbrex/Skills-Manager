@@ -5,7 +5,14 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { checkUpdate } from "@/services/updater";
-import { startGithubAuth, exchangeGithubAuth, getAuthProfile, logoutAuth } from "@/services/auth";
+import {
+  startGithubAuth,
+  exchangeGithubAuth,
+  startGoogleAuth,
+  exchangeGoogleAuth,
+  getAuthProfile,
+  logoutAuth,
+} from "@/services/auth";
 import { AuthMeResponse, UpdateInfo } from "@/types";
 import { MODAL_LAYER_Z_INDEX, MODAL_OVERLAY_COLOR } from "@/constants/modal";
 
@@ -64,6 +71,7 @@ export function Sidebar() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [pendingProvider, setPendingProvider] = useState<"github" | "google" | null>(null);
   const [devCallbackUrl, setDevCallbackUrl] = useState("");
 
   useEffect(() => {
@@ -94,7 +102,8 @@ export function Sidebar() {
     setAuthLoading(true);
     setAuthError(null);
     try {
-      const profile = await exchangeGithubAuth(loginCode, state);
+      const exchangeAuth = pendingProvider === "google" ? exchangeGoogleAuth : exchangeGithubAuth;
+      const profile = await exchangeAuth(loginCode, state);
       setAuthProfile(profile);
       setAuthModalOpen(false);
     } catch (err) {
@@ -102,8 +111,9 @@ export function Sidebar() {
       setAuthError(t("auth.loginFailed"));
     } finally {
       setAuthLoading(false);
+      setPendingProvider(null);
     }
-  }, [t]);
+  }, [pendingProvider, t]);
 
   const handleDevCallbackSubmit = useCallback(async () => {
     if (!devCallbackUrl.trim()) {
@@ -160,6 +170,7 @@ export function Sidebar() {
   const handleStartGithubAuth = useCallback(async () => {
     setAuthLoading(true);
     setAuthError(null);
+    setPendingProvider("github");
     try {
       const result = await startGithubAuth();
       console.info("OAuth auth_url:", result.auth_url);
@@ -167,6 +178,24 @@ export function Sidebar() {
     } catch (err) {
       console.warn("Failed to start github auth:", err);
       setAuthError(t("auth.loginFailed"));
+      setPendingProvider(null);
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [t]);
+
+  const handleStartGoogleAuth = useCallback(async () => {
+    setAuthLoading(true);
+    setAuthError(null);
+    setPendingProvider("google");
+    try {
+      const result = await startGoogleAuth();
+      console.info("OAuth auth_url:", result.auth_url);
+      await openUrl(result.auth_url);
+    } catch (err) {
+      console.warn("Failed to start google auth:", err);
+      setAuthError(t("auth.loginFailed"));
+      setPendingProvider(null);
     } finally {
       setAuthLoading(false);
     }
@@ -517,25 +546,25 @@ export function Sidebar() {
                 </button>
                 <button
                   type="button"
-                  disabled
+                  onClick={handleStartGoogleAuth}
+                  disabled={authLoading}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    justifyContent: "space-between",
+                    justifyContent: "center",
                     gap: "8px",
                     padding: "10px 12px",
                     fontSize: "13px",
                     fontWeight: 600,
-                    color: "var(--muted-foreground)",
+                    color: "var(--foreground)",
                     backgroundColor: "var(--secondary)",
                     border: "1px solid var(--border)",
                     borderRadius: "10px",
-                    opacity: 0.6,
-                    cursor: "not-allowed",
+                    cursor: authLoading ? "wait" : "pointer",
+                    opacity: authLoading ? 0.7 : 1,
                   }}
                 >
-                  <span>{t("auth.googleLogin")}</span>
-                  <span style={{ fontSize: "11px" }}>{t("auth.comingSoon")}</span>
+                  {authLoading ? t("auth.loggingIn") : t("auth.googleLogin")}
                 </button>
                 {import.meta.env.DEV && (
                   <div
