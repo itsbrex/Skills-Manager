@@ -134,12 +134,12 @@ export function Sidebar() {
         // ignore deep link check failures
       });
 
-    onOpenUrl((urls) => {
-      urls.forEach((url) => {
+    onOpenUrl((urls: string[]) => {
+      urls.forEach((url: string) => {
         void handleAuthCallback(url);
       });
     })
-      .then((stop) => {
+      .then((stop: () => void) => {
         unlisten = stop;
       })
       .catch(() => {
