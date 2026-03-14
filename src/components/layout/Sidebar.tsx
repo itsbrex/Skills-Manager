@@ -10,8 +10,11 @@ import {
   exchangeGithubAuth,
   startGoogleAuth,
   exchangeGoogleAuth,
+  clearPendingAuthProvider,
   getAuthProfile,
   logoutAuth,
+  setPendingAuthProvider,
+  takePendingAuthProvider,
 } from "@/services/auth";
 import { AuthMeResponse, UpdateInfo } from "@/types";
 import { MODAL_LAYER_Z_INDEX, MODAL_OVERLAY_COLOR } from "@/constants/modal";
@@ -102,7 +105,8 @@ export function Sidebar() {
     setAuthLoading(true);
     setAuthError(null);
     try {
-      const exchangeAuth = pendingProvider === "google" ? exchangeGoogleAuth : exchangeGithubAuth;
+      const resolvedProvider = pendingProvider ?? takePendingAuthProvider();
+      const exchangeAuth = resolvedProvider === "google" ? exchangeGoogleAuth : exchangeGithubAuth;
       const profile = await exchangeAuth(loginCode, state);
       setAuthProfile(profile);
       setAuthModalOpen(false);
@@ -112,6 +116,7 @@ export function Sidebar() {
     } finally {
       setAuthLoading(false);
       setPendingProvider(null);
+      clearPendingAuthProvider();
     }
   }, [pendingProvider, t]);
 
@@ -171,6 +176,7 @@ export function Sidebar() {
     setAuthLoading(true);
     setAuthError(null);
     setPendingProvider("github");
+    setPendingAuthProvider("github");
     try {
       const result = await startGithubAuth();
       console.info("OAuth auth_url:", result.auth_url);
@@ -179,6 +185,7 @@ export function Sidebar() {
       console.warn("Failed to start github auth:", err);
       setAuthError(t("auth.loginFailed"));
       setPendingProvider(null);
+      clearPendingAuthProvider();
     } finally {
       setAuthLoading(false);
     }
@@ -188,6 +195,7 @@ export function Sidebar() {
     setAuthLoading(true);
     setAuthError(null);
     setPendingProvider("google");
+    setPendingAuthProvider("google");
     try {
       const result = await startGoogleAuth();
       console.info("OAuth auth_url:", result.auth_url);
@@ -196,6 +204,7 @@ export function Sidebar() {
       console.warn("Failed to start google auth:", err);
       setAuthError(t("auth.loginFailed"));
       setPendingProvider(null);
+      clearPendingAuthProvider();
     } finally {
       setAuthLoading(false);
     }

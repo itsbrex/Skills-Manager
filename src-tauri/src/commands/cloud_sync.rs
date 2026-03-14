@@ -197,6 +197,12 @@ mod tests {
 
             let manager = ConfigManager::new();
             let mut config = manager.load().unwrap();
+            let local_device_id = config
+                .cloud_sync
+                .as_ref()
+                .expect("cloud sync state")
+                .device_id
+                .clone();
             config.auth_session = Some(AuthSession {
                 provider: "github".to_string(),
                 access_token: None,
@@ -211,9 +217,14 @@ mod tests {
             tauri::async_runtime::block_on(async {
                 let result = cloud_sync_push().await.expect("push");
                 match result {
-                    CloudSyncPushResult::Conflict { revision, payload } => {
+                    CloudSyncPushResult::Conflict {
+                        revision,
+                        payload,
+                        local_payload,
+                    } => {
                         assert_eq!(revision, 2);
                         assert_eq!(payload.device_id, "d1");
+                        assert_eq!(local_payload.device_id, local_device_id);
                     }
                     _ => panic!("expected conflict"),
                 }

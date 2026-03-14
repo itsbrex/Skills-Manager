@@ -18,7 +18,11 @@ pub struct CloudSyncSnapshot {
 pub enum CloudSyncPushResult {
     Synced { revision: i64 },
     Skipped { reason: String },
-    Conflict { revision: i64, payload: CloudSyncPayload },
+    Conflict {
+        revision: i64,
+        payload: CloudSyncPayload,
+        local_payload: CloudSyncPayload,
+    },
 }
 
 pub fn build_payload(config: &AppConfig, skills: &[Skill]) -> CloudSyncPayload {
@@ -141,6 +145,7 @@ pub async fn sync_push(
         return Ok(CloudSyncPushResult::Conflict {
             revision: conflict.revision,
             payload: conflict.payload,
+            local_payload: payload.clone(),
         });
     }
 

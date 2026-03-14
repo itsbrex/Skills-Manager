@@ -119,7 +119,12 @@ export interface CloudSyncSnapshot {
 export type CloudSyncPushResult =
   | { status: "synced"; revision: number }
   | { status: "skipped"; reason: string }
-  | { status: "conflict"; revision: number; payload: CloudSyncPayload };
+  | {
+      status: "conflict";
+      revision: number;
+      payload: CloudSyncPayload;
+      local_payload: CloudSyncPayload;
+    };
 
 export interface AppConfig {
   version: string;

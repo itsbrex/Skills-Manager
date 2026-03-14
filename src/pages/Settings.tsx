@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { AppConfig, UserPreferences, DetectedEditor, UpdateInfo, MarketplaceSource } from "@/types";
+import { startGithubAuth, startGoogleAuth, clearPendingAuthProvider, setPendingAuthProvider } from "@/services/auth";
 import { checkUpdate } from "@/services/updater";
 import { useTranslation, Language } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
+import { useCloudSync } from "@/hooks/useCloudSyncAgent";
 import { getEditorIcon } from "@/assets/editors";
 import wechatRewardCode from "@/assets/donation/wechat-reward-code.jpg";
 import alipayRewardCode from "@/assets/donation/alipay-reward-code.jpg";
@@ -41,6 +43,9 @@ export function Settings() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const { toasts, addToast, removeToast } = useToast();
+  const cloudSync = useCloudSync();
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const fetchConfig = useCallback(async () => {
     setError(null);
@@ -172,6 +177,56 @@ export function Settings() {
     }
   };
 
+  const handleStartGithubLogin = useCallback(async () => {
+    setAuthLoading(true);
+    setAuthError(null);
+    setPendingAuthProvider("github");
+    try {
+      const result = await startGithubAuth();
+      await openUrl(result.auth_url);
+    } catch (err) {
+      console.warn("Failed to start github auth:", err);
+      setAuthError(t("auth.loginFailed"));
+      clearPendingAuthProvider();
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [t]);
+
+  const handleStartGoogleLogin = useCallback(async () => {
+    setAuthLoading(true);
+    setAuthError(null);
+    setPendingAuthProvider("google");
+    try {
+      const result = await startGoogleAuth();
+      await openUrl(result.auth_url);
+    } catch (err) {
+      console.warn("Failed to start google auth:", err);
+      setAuthError(t("auth.loginFailed"));
+      clearPendingAuthProvider();
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [t]);
+
+  const handleLogout = useCallback(async () => {
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      await cloudSync.logout();
+    } catch (err) {
+      console.warn("Failed to logout:", err);
+      setAuthError(t("auth.logoutFailed"));
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [cloudSync, t]);
+
+  const handleManualSync = useCallback(async () => {
+    setAuthError(null);
+    await cloudSync.manualSync();
+  }, [cloudSync]);
+
   if (error) {
     return (
       <div style={{ padding: '24px 32px' }}>
@@ -195,6 +250,15 @@ export function Settings() {
   const FallbackEditorIcon = selectedEditor ? getEditorIcon(selectedEditor.id) : null;
   const marketplaceSources = config.marketplace_sources || [];
   const marketplaceRows = marketplaceSources;
+  const authProfile = cloudSync.authProfile;
+  const lastSyncedLabel = cloudSync.lastSyncedAt
+    ? t("cloudSync.lastSynced").replace("{time}", new Date(cloudSync.lastSyncedAt * 1000).toLocaleString())
+    : t("cloudSync.neverSynced");
+  const providerLabel = authProfile?.provider === "github"
+    ? "GitHub"
+    : authProfile?.provider === "google"
+      ? "Google"
+      : authProfile?.provider || "-";
 
   return (
     <div style={{
@@ -267,6 +331,156 @@ export function Settings() {
         padding: '32px',
       }}>
         <div style={{ maxWidth: '680px' }}>
+          {/* Account & Cloud Sync */}
+          <SectionTitle>{t("settings.account")}</SectionTitle>
+          <SettingsCard>
+            <SettingsRow
+              label={t("settings.accountStatus")}
+              description={t("settings.accountDesc")}
+              isLast={false}
+            >
+              {authProfile ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {authProfile.avatar_url ? (
+                    <img
+                      src={authProfile.avatar_url}
+                      alt={authProfile.username || "avatar"}
+                      style={{ width: 36, height: 36, borderRadius: '10px', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: '10px',
+                      backgroundColor: 'var(--secondary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '12px',
+                      color: 'var(--muted-foreground)',
+                    }}>
+                      {providerLabel.slice(0, 1)}
+                    </div>
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>
+                      {authProfile.username || authProfile.email || t("auth.login")}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                      {t("auth.provider")}: {providerLabel}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    disabled={authLoading}
+                    style={{
+                      marginLeft: 'auto',
+                      padding: '8px 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: 'var(--foreground)',
+                      backgroundColor: 'var(--secondary)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      cursor: authLoading ? 'wait' : 'pointer',
+                      opacity: authLoading ? 0.7 : 1,
+                    }}
+                  >
+                    {authLoading ? t("auth.loggingOut") : t("auth.logout")}
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={handleStartGithubLogin}
+                      disabled={authLoading}
+                      style={{
+                        padding: '8px 12px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: 'var(--foreground)',
+                        backgroundColor: 'var(--secondary)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '8px',
+                        cursor: authLoading ? 'wait' : 'pointer',
+                        opacity: authLoading ? 0.7 : 1,
+                      }}
+                    >
+                      {authLoading ? t("auth.loggingIn") : t("auth.githubLogin")}
+                    </button>
+                    <button
+                      onClick={handleStartGoogleLogin}
+                      disabled={authLoading}
+                      style={{
+                        padding: '8px 12px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: 'white',
+                        backgroundColor: 'var(--color-primary)',
+                        border: '1px solid var(--color-primary)',
+                        borderRadius: '8px',
+                        cursor: authLoading ? 'wait' : 'pointer',
+                        opacity: authLoading ? 0.7 : 1,
+                      }}
+                    >
+                      {authLoading ? t("auth.loggingIn") : t("auth.googleLogin")}
+                    </button>
+                  </div>
+                  {authError && (
+                    <div style={{ fontSize: '12px', color: 'var(--color-error)' }}>
+                      {authError}
+                    </div>
+                  )}
+                </div>
+              )}
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.cloudSync")}
+              description={t("settings.cloudSyncDesc")}
+              isLast={true}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                    {authProfile ? t("cloudSync.statusConnected") : t("cloudSync.statusDisconnected")}
+                  </span>
+                  <button
+                    onClick={handleManualSync}
+                    disabled={!authProfile || cloudSync.syncing}
+                    style={{
+                      padding: '8px 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: authProfile ? 'var(--foreground)' : 'var(--muted-foreground)',
+                      backgroundColor: 'var(--secondary)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      cursor: !authProfile || cloudSync.syncing ? 'not-allowed' : 'pointer',
+                      opacity: !authProfile || cloudSync.syncing ? 0.6 : 1,
+                    }}
+                  >
+                    {cloudSync.syncing ? t("cloudSync.syncing") : t("cloudSync.syncNow")}
+                  </button>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                  {authProfile ? lastSyncedLabel : t("cloudSync.notSignedIn")}
+                </div>
+                {cloudSync.conflict && (
+                  <div style={{ fontSize: '12px', color: 'var(--color-warning)' }}>
+                    {t("cloudSync.conflictNotice")}
+                  </div>
+                )}
+                {cloudSync.error && (
+                  <div style={{ fontSize: '12px', color: 'var(--color-error)' }}>
+                    {cloudSync.error}
+                  </div>
+                )}
+              </div>
+            </SettingsRow>
+          </SettingsCard>
+
           {/* General Section */}
           <SectionTitle>{t("settings.general")}</SectionTitle>
           <SettingsCard>

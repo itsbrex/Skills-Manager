@@ -13,10 +13,12 @@ import { EditorPage } from "@/pages/Editor";
 import { Welcome } from "@/pages/Welcome";
 import { useInitialization } from "@/hooks/useInitialization";
 import { ThemeProvider } from "@/hooks/useTheme";
+import { CloudSyncProvider } from "@/hooks/useCloudSyncAgent";
 import { I18nProvider, Language } from "@/i18n";
 import { registerTelemetryCloseHandler } from "@/telemetry/registerTelemetryCloseHandler";
 import { AppConfig, MarketplaceUpdateCheckResult } from "@/types";
 import { ToastContainer, useToast } from "@/components/ui/toast";
+import { CloudSyncConflictDialog } from "@/components/cloud/CloudSyncConflictDialog";
 
 type Theme = "light" | "dark" | "system";
 const TELEMETRY_HEARTBEAT_INTERVAL_MS = 60_000;
@@ -157,20 +159,23 @@ function App() {
   return (
     <ThemeProvider theme={theme} onThemeChange={handleThemeChange}>
       <I18nProvider language={language} onLanguageChange={handleLanguageChange}>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Skills />} />
-              <Route path="tools" element={<Tools />} />
-              <Route path="marketplace" element={<Marketplace />} />
-              <Route path="settings" element={<Settings />} />
-              <Route path="feedback" element={<Feedback />} />
-              <Route path="polls" element={<Polls />} />
-            </Route>
-            <Route path="/editor" element={<EditorPage />} />
-          </Routes>
-          <ToastContainer toasts={toasts} onRemove={removeToast} />
-        </BrowserRouter>
+        <CloudSyncProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Layout />}>
+                <Route index element={<Skills />} />
+                <Route path="tools" element={<Tools />} />
+                <Route path="marketplace" element={<Marketplace />} />
+                <Route path="settings" element={<Settings />} />
+                <Route path="feedback" element={<Feedback />} />
+                <Route path="polls" element={<Polls />} />
+              </Route>
+              <Route path="/editor" element={<EditorPage />} />
+            </Routes>
+            <ToastContainer toasts={toasts} onRemove={removeToast} />
+          </BrowserRouter>
+          <CloudSyncConflictDialog />
+        </CloudSyncProvider>
       </I18nProvider>
     </ThemeProvider>
   );

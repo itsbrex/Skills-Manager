@@ -1,6 +1,36 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AuthMeResponse, AuthStartResult } from "@/types";
 
+const PENDING_PROVIDER_KEY = "skills-manager:auth:pending-provider";
+
+export type PendingAuthProvider = "github" | "google";
+
+export function setPendingAuthProvider(provider: PendingAuthProvider) {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+  localStorage.setItem(PENDING_PROVIDER_KEY, provider);
+}
+
+export function takePendingAuthProvider(): PendingAuthProvider | null {
+  if (typeof localStorage === "undefined") {
+    return null;
+  }
+  const raw = localStorage.getItem(PENDING_PROVIDER_KEY);
+  localStorage.removeItem(PENDING_PROVIDER_KEY);
+  if (raw === "github" || raw === "google") {
+    return raw;
+  }
+  return null;
+}
+
+export function clearPendingAuthProvider() {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+  localStorage.removeItem(PENDING_PROVIDER_KEY);
+}
+
 export async function startGithubAuth(): Promise<AuthStartResult> {
   return invoke<AuthStartResult>("start_github_auth", {
     debug: import.meta.env.DEV,
