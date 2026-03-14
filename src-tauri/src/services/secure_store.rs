@@ -86,11 +86,17 @@ impl TokenStore for MemoryTokenStore {
 }
 
 static TOKEN_STORE: OnceLock<Arc<dyn TokenStore>> = OnceLock::new();
-static TEST_TOKEN_STORE: OnceLock<Arc<dyn TokenStore>> = OnceLock::new();
+static TEST_TOKEN_STORE: OnceLock<Mutex<Option<Arc<dyn TokenStore>>>> = OnceLock::new();
+
+fn test_store_cell() -> &'static Mutex<Option<Arc<dyn TokenStore>>> {
+    TEST_TOKEN_STORE.get_or_init(|| Mutex::new(None))
+}
 
 pub fn token_store() -> Arc<dyn TokenStore> {
-    if let Some(store) = TEST_TOKEN_STORE.get() {
-        return store.clone();
+    if let Ok(guard) = test_store_cell().lock() {
+        if let Some(store) = guard.as_ref() {
+            return store.clone();
+        }
     }
     TOKEN_STORE
         .get_or_init(|| Arc::new(KeychainTokenStore))
@@ -99,5 +105,14 @@ pub fn token_store() -> Arc<dyn TokenStore> {
 
 #[cfg(test)]
 pub fn set_token_store_for_tests<T: TokenStore + 'static>(store: T) {
-    let _ = TEST_TOKEN_STORE.set(Arc::new(store));
+    if let Ok(mut guard) = test_store_cell().lock() {
+        *guard = Some(Arc::new(store));
+    }
+}
+
+#[cfg(test)]
+pub fn clear_token_store_for_tests() {
+    if let Ok(mut guard) = test_store_cell().lock() {
+        *guard = None;
+    }
 }
