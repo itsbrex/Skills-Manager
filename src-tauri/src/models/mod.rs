@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod config;
 pub mod editor;
 pub mod marketplace;
@@ -5,6 +6,7 @@ pub mod skill;
 pub mod tool;
 pub mod update;
 
+pub use auth::{AuthProfile, AuthSession};
 pub use config::{AppConfig, CustomToolConfig, PollClientState, TelemetryConfig, ToolConfig};
 pub use editor::{DetectedEditor, EDITOR_DEFINITIONS};
 pub use marketplace::{

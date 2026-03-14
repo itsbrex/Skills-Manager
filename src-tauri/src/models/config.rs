@@ -1,3 +1,4 @@
+use crate::models::auth::AuthSession;
 use crate::models::marketplace::{MarketplaceSource, SourceType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -151,6 +152,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub poll_client_state: Option<PollClientState>,
     #[serde(default)]
+    pub auth_session: Option<AuthSession>,
+    #[serde(default)]
     pub initialized: bool,
 }
 
@@ -191,6 +194,7 @@ impl Default for AppConfig {
             preferences: Some(UserPreferences::default()),
             marketplace_sources: Some(default_marketplace_sources()),
             poll_client_state: Some(PollClientState::default()),
+            auth_session: None,
             initialized: false,
         }
     }
@@ -261,6 +265,7 @@ mod tests {
     use super::default_marketplace_sources;
     use super::AppConfig;
     use crate::models::SourceType;
+    use crate::models::auth::{AuthProfile, AuthSession};
 
     #[test]
     fn default_marketplace_sources_matches_remote_source_ids() {
@@ -280,5 +285,22 @@ mod tests {
             None,
             "telemetry runtime config should not be persisted into config.json"
         );
+    }
+
+    #[test]
+    fn auth_config_persists_session() {
+        let mut config = AppConfig::default();
+        config.auth_session = Some(AuthSession {
+            provider: "github".to_string(),
+            access_token: "a".to_string(),
+            refresh_token: "r".to_string(),
+            profile: AuthProfile {
+                username: "octo".to_string(),
+                avatar_url: Some("https://example.com/a.png".to_string()),
+            },
+        });
+        let json = serde_json::to_string(&config).unwrap();
+        let restored: AppConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.auth_session.unwrap().provider, "github");
     }
 }

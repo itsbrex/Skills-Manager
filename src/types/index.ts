@@ -50,6 +50,18 @@ export interface UserPreferences {
   github_token?: string | null;
 }
 
+export interface AuthProfile {
+  username: string;
+  avatar_url?: string | null;
+}
+
+export interface AuthSession {
+  provider: string;
+  access_token: string;
+  refresh_token: string;
+  profile: AuthProfile;
+}
+
 export interface AppConfig {
   version: string;
   skills_dir: string;
@@ -58,6 +70,7 @@ export interface AppConfig {
   preferences?: UserPreferences;
   marketplace_sources?: MarketplaceSource[];
   poll_client_state?: PollClientStateConfig | null;
+  auth_session?: AuthSession | null;
 }
 
 export interface PollClientStateConfig {
