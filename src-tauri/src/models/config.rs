@@ -296,8 +296,8 @@ mod tests {
         let mut config = AppConfig::default();
         config.auth_session = Some(AuthSession {
             provider: "github".to_string(),
-            access_token: "a".to_string(),
-            refresh_token: "r".to_string(),
+            access_token: Some("a".to_string()),
+            refresh_token: Some("r".to_string()),
             profile: AuthProfile {
                 username: "octo".to_string(),
                 avatar_url: Some("https://example.com/a.png".to_string()),

@@ -57,8 +57,8 @@ export interface AuthProfile {
 
 export interface AuthSession {
   provider: string;
-  access_token: string;
-  refresh_token: string;
+  access_token?: string | null;
+  refresh_token?: string | null;
   profile: AuthProfile;
 }
 

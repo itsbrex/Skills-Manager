@@ -10,7 +10,9 @@ pub struct AuthProfile {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthSession {
     pub provider: String,
-    pub access_token: String,
-    pub refresh_token: String,
+    #[serde(default)]
+    pub access_token: Option<String>,
+    #[serde(default)]
+    pub refresh_token: Option<String>,
     pub profile: AuthProfile,
 }
