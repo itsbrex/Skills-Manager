@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod cloud_sync;
 pub mod config;
 pub mod editor;
 pub mod marketplace;

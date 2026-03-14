@@ -75,6 +75,13 @@ export interface AuthMeResponse {
   email?: string | null;
 }
 
+export interface CloudSyncState {
+  device_id: string;
+  last_revision: number;
+  last_synced_at?: number | null;
+  last_payload_hash?: string | null;
+}
+
 export interface AppConfig {
   version: string;
   skills_dir: string;
@@ -84,6 +91,7 @@ export interface AppConfig {
   marketplace_sources?: MarketplaceSource[];
   poll_client_state?: PollClientStateConfig | null;
   auth_session?: AuthSession | null;
+  cloud_sync?: CloudSyncState | null;
 }
 
 export interface PollClientStateConfig {

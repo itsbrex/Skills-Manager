@@ -1,4 +1,5 @@
 use crate::models::auth::AuthSession;
+use crate::models::cloud_sync::CloudSyncState;
 use crate::models::marketplace::{MarketplaceSource, SourceType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -154,6 +155,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub auth_session: Option<AuthSession>,
     #[serde(default)]
+    pub cloud_sync: Option<CloudSyncState>,
+    #[serde(default)]
     pub initialized: bool,
 }
 
@@ -195,6 +198,7 @@ impl Default for AppConfig {
             marketplace_sources: Some(default_marketplace_sources()),
             poll_client_state: Some(PollClientState::default()),
             auth_session: None,
+            cloud_sync: Some(CloudSyncState::new()),
             initialized: false,
         }
     }
@@ -302,5 +306,21 @@ mod tests {
         let json = serde_json::to_string(&config).unwrap();
         let restored: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.auth_session.unwrap().provider, "github");
+    }
+
+    #[test]
+    fn cloud_sync_state_persists() {
+        let config = AppConfig::default();
+        let device_id = config
+            .cloud_sync
+            .as_ref()
+            .expect("cloud sync state")
+            .device_id
+            .clone();
+        let json = serde_json::to_string(&config).unwrap();
+        let restored: AppConfig = serde_json::from_str(&json).unwrap();
+        let state = restored.cloud_sync.expect("cloud sync restored");
+        assert_eq!(state.device_id, device_id);
+        assert_eq!(state.last_revision, 0);
     }
 }
