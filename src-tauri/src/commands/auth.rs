@@ -108,6 +108,7 @@ fn set_pending_state(state: &str, code_verifier: &str, nonce: &str) {
     );
 }
 
+#[tauri::command]
 pub async fn start_github_auth() -> Result<AuthStartResult, String> {
     let state = Uuid::new_v4().simple().to_string();
     let code_verifier = generate_code_verifier();
@@ -141,6 +142,7 @@ pub async fn start_github_auth() -> Result<AuthStartResult, String> {
     })
 }
 
+#[tauri::command]
 pub async fn exchange_github_auth(login_code: String, state: String) -> Result<AuthMeResponse, String> {
     let Some(pending) = take_pending_state(&state) else {
         return Err("登录状态已过期，请重试".to_string());
@@ -195,6 +197,7 @@ pub async fn exchange_github_auth(login_code: String, state: String) -> Result<A
     Ok(me)
 }
 
+#[tauri::command]
 pub async fn get_auth_profile() -> Result<Option<AuthMeResponse>, String> {
     let manager = ConfigManager::new();
     let mut config = manager.load()?;
@@ -244,6 +247,7 @@ pub async fn get_auth_profile() -> Result<Option<AuthMeResponse>, String> {
     }
 }
 
+#[tauri::command]
 pub async fn logout_auth() -> Result<(), String> {
     let manager = ConfigManager::new();
     let mut config = manager.load()?;
