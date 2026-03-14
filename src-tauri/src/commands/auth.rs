@@ -43,7 +43,9 @@ struct AuthStartResponse {
 struct AuthExchangeResponse {
     access_token: String,
     refresh_token: String,
+    #[allow(dead_code)]
     access_expires_at: Option<u64>,
+    #[allow(dead_code)]
     refresh_expires_at: Option<u64>,
 }
 
@@ -59,6 +61,7 @@ pub struct AuthMeResponse {
 #[derive(Debug, Deserialize)]
 struct AuthRefreshResponse {
     access_token: String,
+    #[allow(dead_code)]
     access_expires_at: Option<u64>,
 }
 
