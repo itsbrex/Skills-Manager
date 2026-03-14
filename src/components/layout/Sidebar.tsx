@@ -64,6 +64,7 @@ export function Sidebar() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [devCallbackUrl, setDevCallbackUrl] = useState("");
 
   useEffect(() => {
     checkUpdate().then((info) => {
@@ -103,6 +104,13 @@ export function Sidebar() {
       setAuthLoading(false);
     }
   }, [t]);
+
+  const handleDevCallbackSubmit = useCallback(async () => {
+    if (!devCallbackUrl.trim()) {
+      return;
+    }
+    await handleAuthCallback(devCallbackUrl.trim());
+  }, [devCallbackUrl, handleAuthCallback]);
 
   useEffect(() => {
     getAuthProfile()
@@ -154,6 +162,7 @@ export function Sidebar() {
     setAuthError(null);
     try {
       const result = await startGithubAuth();
+      console.info("OAuth auth_url:", result.auth_url);
       await openUrl(result.auth_url);
     } catch (err) {
       console.warn("Failed to start github auth:", err);
@@ -528,6 +537,62 @@ export function Sidebar() {
                   <span>{t("auth.googleLogin")}</span>
                   <span style={{ fontSize: "11px" }}>{t("auth.comingSoon")}</span>
                 </button>
+                {import.meta.env.DEV && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                      padding: "10px",
+                      borderRadius: "10px",
+                      border: "1px dashed var(--border)",
+                      backgroundColor: "var(--secondary)",
+                    }}
+                  >
+                    <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+                      {t("auth.devCallbackTip")}
+                    </div>
+                    <input
+                      type="text"
+                      value={devCallbackUrl}
+                      onChange={(e) => setDevCallbackUrl(e.target.value)}
+                      placeholder="skills-manager://auth/callback?login_code=...&state=..."
+                      style={{
+                        width: "100%",
+                        padding: "8px 10px",
+                        fontSize: "12px",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        backgroundColor: "var(--background)",
+                        color: "var(--foreground)",
+                        outline: "none",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleDevCallbackSubmit}
+                      disabled={authLoading}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                        padding: "8px 10px",
+                        fontSize: "12px",
+                        fontWeight: 600,
+                        color: "var(--foreground)",
+                        backgroundColor: "var(--secondary)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        cursor: authLoading ? "wait" : "pointer",
+                        opacity: authLoading ? 0.7 : 1,
+                      }}
+                    >
+                      {t("auth.devCallbackApply")}
+                    </button>
+                  </div>
+                )}
                 {authError && (
                   <div style={{ fontSize: "12px", color: "#dc2626" }}>
                     {authError}

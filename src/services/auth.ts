@@ -2,7 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AuthMeResponse, AuthStartResult } from "@/types";
 
 export async function startGithubAuth(): Promise<AuthStartResult> {
-  return invoke<AuthStartResult>("start_github_auth");
+  return invoke<AuthStartResult>("start_github_auth", {
+    debug: import.meta.env.DEV,
+  });
 }
 
 export async function exchangeGithubAuth(

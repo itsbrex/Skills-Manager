@@ -283,6 +283,8 @@ export const en = {
     email: "Email",
     loginFailed: "Sign in failed, please try again",
     logoutFailed: "Sign out failed, please try again",
+    devCallbackTip: "Dev only: paste callback URL to finish login without packaging.",
+    devCallbackApply: "Apply callback",
   },
   editors: {
     vscode: "VS Code",

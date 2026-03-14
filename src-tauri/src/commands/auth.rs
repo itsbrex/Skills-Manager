@@ -109,8 +109,12 @@ fn set_pending_state(state: &str, code_verifier: &str, nonce: &str) {
 }
 
 #[tauri::command]
-pub async fn start_github_auth() -> Result<AuthStartResult, String> {
-    let state = Uuid::new_v4().simple().to_string();
+pub async fn start_github_auth(debug: Option<bool>) -> Result<AuthStartResult, String> {
+    let state = if debug.unwrap_or(false) {
+        format!("debug-{}", Uuid::new_v4().simple())
+    } else {
+        Uuid::new_v4().simple().to_string()
+    };
     let code_verifier = generate_code_verifier();
     let code_challenge = pkce_challenge(&code_verifier);
     let nonce = Uuid::new_v4().simple().to_string();
@@ -365,8 +369,9 @@ mod tests {
                 .create();
 
             tauri::async_runtime::block_on(async {
-                let result = start_github_auth().await.expect("start auth");
+                let result = start_github_auth(Some(true)).await.expect("start auth");
                 assert_eq!(result.auth_url, "https://example.com/auth");
+                assert!(result.state.starts_with("debug-"));
                 assert!(has_pending_state(&result.state));
             });
         });

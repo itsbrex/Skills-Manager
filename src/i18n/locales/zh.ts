@@ -286,6 +286,8 @@ export const zh = {
     email: "邮箱",
     loginFailed: "登录失败，请重试",
     logoutFailed: "退出失败，请重试",
+    devCallbackTip: "开发模式：粘贴回调 URL 以完成登录（无需打包）",
+    devCallbackApply: "应用回调",
   },
   editors: {
     vscode: "VS Code",
