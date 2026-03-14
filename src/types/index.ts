@@ -82,6 +82,45 @@ export interface CloudSyncState {
   last_payload_hash?: string | null;
 }
 
+export interface CloudSyncSkill {
+  id: string;
+  name: string;
+  source: string;
+  version: string;
+}
+
+export interface CloudSyncToolState {
+  enabled: boolean;
+  enabled_skills: string[];
+}
+
+export interface CloudSyncCustomTool {
+  id: string;
+  name: string;
+  config_path: string;
+  skills_path: string;
+  enabled: boolean;
+}
+
+export interface CloudSyncPayload {
+  version: number;
+  updated_at: number;
+  device_id: string;
+  skills: CloudSyncSkill[];
+  tool_states: Record<string, CloudSyncToolState>;
+  custom_tools: CloudSyncCustomTool[];
+}
+
+export interface CloudSyncSnapshot {
+  revision: number;
+  payload: CloudSyncPayload | null;
+}
+
+export type CloudSyncPushResult =
+  | { status: "synced"; revision: number }
+  | { status: "skipped"; reason: string }
+  | { status: "conflict"; revision: number; payload: CloudSyncPayload };
+
 export interface AppConfig {
   version: string;
   skills_dir: string;

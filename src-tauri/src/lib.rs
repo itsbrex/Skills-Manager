@@ -5,9 +5,10 @@ mod services;
 mod test_support;
 
 use commands::{
-    check_marketplace_updates_if_stale, check_sync_status, check_update, create_custom_tool,
-    create_skill, delete_custom_tool, delete_skill, detect_available_editors, detect_tools,
-    disable_skill, enable_skill, exchange_github_auth, exchange_google_auth,
+    check_marketplace_updates_if_stale, check_sync_status, check_update, cloud_sync_pull,
+    cloud_sync_push, cloud_sync_resolve, create_custom_tool, create_skill, delete_custom_tool,
+    delete_skill, detect_available_editors, detect_tools, disable_skill, enable_skill,
+    exchange_github_auth, exchange_google_auth,
     fetch_marketplace_skill_descriptions,
     fetch_marketplace_skills, fetch_poll_results, fetch_polls, get_auth_profile,
     get_poll_client_state,
@@ -71,6 +72,9 @@ pub fn run() {
             get_marketplace_sources,
             toggle_marketplace_source,
             check_update,
+            cloud_sync_pull,
+            cloud_sync_push,
+            cloud_sync_resolve,
             submit_feedback,
             fetch_polls,
             fetch_poll_results,

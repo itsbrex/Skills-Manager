@@ -2,8 +2,24 @@ use crate::models::cloud_sync::{
     CloudSyncCustomTool, CloudSyncPayload, CloudSyncSkill, CloudSyncToolState,
 };
 use crate::models::{AppConfig, Skill, SkillSource};
+use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
+use reqwest::Client;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CloudSyncSnapshot {
+    pub revision: i64,
+    pub payload: Option<CloudSyncPayload>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum CloudSyncPushResult {
+    Synced { revision: i64 },
+    Skipped { reason: String },
+    Conflict { revision: i64, payload: CloudSyncPayload },
+}
 
 pub fn build_payload(config: &AppConfig, skills: &[Skill]) -> CloudSyncPayload {
     let device_id = config
@@ -66,6 +82,117 @@ pub fn build_payload(config: &AppConfig, skills: &[Skill]) -> CloudSyncPayload {
         tool_states,
         custom_tools,
     }
+}
+
+pub async fn sync_pull(_base_url: &str, _access_token: &str) -> Result<CloudSyncSnapshot, String> {
+    let client = Client::new();
+    let url = format!("{}/sync/pull", _base_url.trim_end_matches('/'));
+    let response = client
+        .get(url)
+        .header(AUTHORIZATION, format!("Bearer {_access_token}"))
+        .header(ACCEPT, "application/json")
+        .send()
+        .await
+        .map_err(|e| format!("Sync pull request failed: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Sync pull failed: HTTP {}", response.status()));
+    }
+
+    response
+        .json::<CloudSyncSnapshot>()
+        .await
+        .map_err(|e| format!("Failed to parse sync pull response: {e}"))
+}
+
+pub async fn sync_push(
+    base_url: &str,
+    access_token: &str,
+    base_revision: i64,
+    payload: &CloudSyncPayload,
+    request_id: &str,
+) -> Result<CloudSyncPushResult, String> {
+    let client = Client::new();
+    let url = format!("{}/sync/push", base_url.trim_end_matches('/'));
+    let response = client
+        .post(url)
+        .header(AUTHORIZATION, format!("Bearer {access_token}"))
+        .header(CONTENT_TYPE, "application/json")
+        .header(ACCEPT, "application/json")
+        .json(&serde_json::json!({
+            "base_revision": base_revision,
+            "payload": payload,
+            "request_id": request_id,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Sync push request failed: {e}"))?;
+
+    if response.status().as_u16() == 409 {
+        #[derive(serde::Deserialize)]
+        struct ConflictResponse {
+            revision: i64,
+            payload: CloudSyncPayload,
+        }
+        let conflict = response
+            .json::<ConflictResponse>()
+            .await
+            .map_err(|e| format!("Failed to parse sync conflict response: {e}"))?;
+        return Ok(CloudSyncPushResult::Conflict {
+            revision: conflict.revision,
+            payload: conflict.payload,
+        });
+    }
+
+    if !response.status().is_success() {
+        return Err(format!("Sync push failed: HTTP {}", response.status()));
+    }
+
+    #[derive(serde::Deserialize)]
+    struct PushResponse {
+        revision: i64,
+    }
+    let payload = response
+        .json::<PushResponse>()
+        .await
+        .map_err(|e| format!("Failed to parse sync push response: {e}"))?;
+    Ok(CloudSyncPushResult::Synced {
+        revision: payload.revision,
+    })
+}
+
+pub async fn sync_resolve(
+    base_url: &str,
+    access_token: &str,
+    payload: &CloudSyncPayload,
+) -> Result<i64, String> {
+    let client = Client::new();
+    let url = format!("{}/sync/resolve", base_url.trim_end_matches('/'));
+    let response = client
+        .post(url)
+        .header(AUTHORIZATION, format!("Bearer {access_token}"))
+        .header(CONTENT_TYPE, "application/json")
+        .header(ACCEPT, "application/json")
+        .json(&serde_json::json!({
+            "payload": payload,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Sync resolve request failed: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Sync resolve failed: HTTP {}", response.status()));
+    }
+
+    #[derive(serde::Deserialize)]
+    struct ResolveResponse {
+        revision: i64,
+    }
+    let payload = response
+        .json::<ResolveResponse>()
+        .await
+        .map_err(|e| format!("Failed to parse sync resolve response: {e}"))?;
+    Ok(payload.revision)
 }
 
 #[cfg(test)]
