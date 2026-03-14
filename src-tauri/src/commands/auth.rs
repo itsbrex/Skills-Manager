@@ -111,8 +111,7 @@ fn set_pending_state(state: &str, code_verifier: &str, nonce: &str) {
     );
 }
 
-#[tauri::command]
-pub async fn start_github_auth(debug: Option<bool>) -> Result<AuthStartResult, String> {
+async fn start_oauth_auth(provider: &str, debug: Option<bool>) -> Result<AuthStartResult, String> {
     let state = if debug.unwrap_or(false) {
         format!("debug-{}", Uuid::new_v4().simple())
     } else {
@@ -122,7 +121,7 @@ pub async fn start_github_auth(debug: Option<bool>) -> Result<AuthStartResult, S
     let code_challenge = pkce_challenge(&code_verifier);
     let nonce = Uuid::new_v4().simple().to_string();
     let base_url = auth_api_base_url();
-    let url = build_auth_start_url(&base_url, "github", &state, &code_challenge, &nonce)?;
+    let url = build_auth_start_url(&base_url, provider, &state, &code_challenge, &nonce)?;
 
     let client = Client::new();
     let response = client
@@ -147,6 +146,16 @@ pub async fn start_github_auth(debug: Option<bool>) -> Result<AuthStartResult, S
         auth_url: payload.auth_url,
         state,
     })
+}
+
+#[tauri::command]
+pub async fn start_github_auth(debug: Option<bool>) -> Result<AuthStartResult, String> {
+    start_oauth_auth("github", debug).await
+}
+
+#[tauri::command]
+pub async fn start_google_auth(debug: Option<bool>) -> Result<AuthStartResult, String> {
+    start_oauth_auth("google", debug).await
 }
 
 #[tauri::command]
@@ -202,6 +211,11 @@ pub async fn exchange_github_auth(login_code: String, state: String) -> Result<A
     })?;
 
     Ok(me)
+}
+
+#[tauri::command]
+pub async fn exchange_google_auth(login_code: String, state: String) -> Result<AuthMeResponse, String> {
+    exchange_github_auth(login_code, state).await
 }
 
 #[tauri::command]
@@ -430,6 +444,84 @@ mod tests {
             assert_eq!(session.access_token, "at1");
             assert_eq!(session.refresh_token, "rt1");
             assert_eq!(session.profile.username, "octo");
+        });
+    }
+
+    #[test]
+    fn start_google_auth_returns_state_and_stores_pending() {
+        crate::test_support::with_temp_home(|_| {
+            let mut server = mockito::Server::new();
+            std::env::set_var(
+                "SKILLS_MARKET_API_BASE",
+                format!("{}/api/v1", server.url()),
+            );
+            let _mock = server
+                .mock("GET", "/api/v1/auth/google/start")
+                .match_query(Matcher::Any)
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(r#"{"auth_url":"https://example.com/google"}"#)
+                .create();
+
+            tauri::async_runtime::block_on(async {
+                let result = start_google_auth(Some(true)).await.expect("start google auth");
+                assert_eq!(result.auth_url, "https://example.com/google");
+                assert!(result.state.starts_with("debug-"));
+                assert!(has_pending_state(&result.state));
+            });
+        });
+    }
+
+    #[test]
+    fn exchange_google_auth_saves_session_and_returns_profile() {
+        crate::test_support::with_temp_home(|_| {
+            let mut server = mockito::Server::new();
+            std::env::set_var(
+                "SKILLS_MARKET_API_BASE",
+                format!("{}/api/v1", server.url()),
+            );
+
+            let _exchange_mock = server
+                .mock("POST", "/api/v1/auth/exchange")
+                .match_header("content-type", "application/json")
+                .match_body(Matcher::Json(serde_json::json!({
+                    "login_code": "gcode1",
+                    "code_verifier": "verifier",
+                    "nonce": "nonce",
+                })))
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(
+                    r#"{"access_token":"gat1","refresh_token":"grt1","access_expires_at":1,"refresh_expires_at":2}"#,
+                )
+                .create();
+
+            let _me_mock = server
+                .mock("GET", "/api/v1/auth/me")
+                .match_header("authorization", "Bearer gat1")
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(
+                    r#"{"user_id":"u2","provider":"google","username":"guser","avatar_url":"https://img","email":"g@example.com"}"#,
+                )
+                .create();
+
+            set_pending_state("gs1", "verifier", "nonce");
+
+            tauri::async_runtime::block_on(async {
+                let profile = exchange_google_auth("gcode1".to_string(), "gs1".to_string())
+                    .await
+                    .expect("exchange google auth");
+                assert_eq!(profile.user_id, "u2");
+                assert_eq!(profile.username.as_deref(), Some("guser"));
+            });
+
+            let restored = ConfigManager::new().load().unwrap();
+            let session = restored.auth_session.expect("auth session saved");
+            assert_eq!(session.provider, "google");
+            assert_eq!(session.access_token, "gat1");
+            assert_eq!(session.refresh_token, "grt1");
+            assert_eq!(session.profile.username, "guser");
         });
     }
 
