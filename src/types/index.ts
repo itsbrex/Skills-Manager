@@ -62,6 +62,19 @@ export interface AuthSession {
   profile: AuthProfile;
 }
 
+export interface AuthStartResult {
+  auth_url: string;
+  state: string;
+}
+
+export interface AuthMeResponse {
+  user_id: string;
+  provider?: string | null;
+  username?: string | null;
+  avatar_url?: string | null;
+  email?: string | null;
+}
+
 export interface AppConfig {
   version: string;
   skills_dir: string;

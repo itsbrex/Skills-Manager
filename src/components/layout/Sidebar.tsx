@@ -1,10 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "@/i18n";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { checkUpdate } from "@/services/updater";
-import { UpdateInfo } from "@/types";
+import { startGithubAuth, exchangeGithubAuth, getAuthProfile, logoutAuth } from "@/services/auth";
+import { AuthMeResponse, UpdateInfo } from "@/types";
+import { MODAL_LAYER_Z_INDEX, MODAL_OVERLAY_COLOR } from "@/constants/modal";
 
 const navItems = [
   { path: "/", labelKey: "nav.skills" as const, icon: "sparkles" },
@@ -57,6 +60,10 @@ const icons: Record<string, React.ReactNode> = {
 export function Sidebar() {
   const { t } = useTranslation();
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [authProfile, setAuthProfile] = useState<AuthMeResponse | null>(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     checkUpdate().then((info) => {
@@ -68,11 +75,115 @@ export function Sidebar() {
     });
   }, []);
 
+  const handleAuthCallback = useCallback(async (url: string) => {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return;
+    }
+    if (parsed.protocol !== "skills-manager:" || parsed.host !== "auth" || parsed.pathname !== "/callback") {
+      return;
+    }
+    const loginCode = parsed.searchParams.get("login_code");
+    const state = parsed.searchParams.get("state");
+    if (!loginCode || !state) {
+      return;
+    }
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const profile = await exchangeGithubAuth(loginCode, state);
+      setAuthProfile(profile);
+      setAuthModalOpen(false);
+    } catch (err) {
+      console.warn("Failed to exchange auth code:", err);
+      setAuthError(t("auth.loginFailed"));
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    getAuthProfile()
+      .then((profile) => setAuthProfile(profile))
+      .catch((err) => {
+        console.warn("Failed to load auth profile:", err);
+      });
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    getCurrent()
+      .then((urls) => {
+        if (urls) {
+          urls.forEach((url) => {
+            void handleAuthCallback(url);
+          });
+        }
+      })
+      .catch(() => {
+        // ignore deep link check failures
+      });
+
+    onOpenUrl((urls) => {
+      urls.forEach((url) => {
+        void handleAuthCallback(url);
+      });
+    })
+      .then((stop) => {
+        unlisten = stop;
+      })
+      .catch(() => {
+        // ignore deep link listener failures
+      });
+
+    return () => {
+      unlisten?.();
+    };
+  }, [handleAuthCallback]);
+
   const handleUpdateClick = async () => {
     if (updateInfo?.download_url) {
       await openUrl(updateInfo.download_url);
     }
   };
+
+  const handleStartGithubAuth = useCallback(async () => {
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const result = await startGithubAuth();
+      await openUrl(result.auth_url);
+    } catch (err) {
+      console.warn("Failed to start github auth:", err);
+      setAuthError(t("auth.loginFailed"));
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [t]);
+
+  const handleLogout = useCallback(async () => {
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      await logoutAuth();
+      setAuthProfile(null);
+      setAuthModalOpen(false);
+    } catch (err) {
+      console.warn("Failed to logout:", err);
+      setAuthError(t("auth.logoutFailed"));
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [t]);
+
+  const displayName = authProfile?.username || authProfile?.email || t("auth.login");
+  const providerLabel = authProfile?.provider === "github"
+    ? "GitHub"
+    : authProfile?.provider === "google"
+      ? "Google"
+      : authProfile?.provider || "-";
 
   return (
     <aside
@@ -184,8 +295,11 @@ export function Sidebar() {
           borderTop: '1px solid var(--sidebar-border)',
         }}
       >
-        <div
+        <button
+          type="button"
+          onClick={() => setAuthModalOpen(true)}
           style={{
+            width: '100%',
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
@@ -193,6 +307,17 @@ export function Sidebar() {
             borderRadius: '8px',
             fontSize: '13px',
             color: 'var(--muted-foreground)',
+            background: 'transparent',
+            border: 'none',
+            textAlign: 'left',
+            cursor: 'pointer',
+            transition: 'background-color 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.04)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
           }}
         >
           <div
@@ -204,16 +329,215 @@ export function Sidebar() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              overflow: 'hidden',
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
+            {authProfile?.avatar_url ? (
+              <img
+                src={authProfile.avatar_url}
+                alt={displayName}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            )}
           </div>
-          <span>Personal</span>
-        </div>
+          <span style={{ color: 'var(--foreground)' }}>{displayName}</span>
+        </button>
       </div>
+
+      {authModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: MODAL_OVERLAY_COLOR,
+            zIndex: MODAL_LAYER_Z_INDEX,
+          }}
+          onClick={() => setAuthModalOpen(false)}
+        >
+          <div
+            style={{
+              width: "min(520px, calc(100vw - 48px))",
+              backgroundColor: "var(--background)",
+              borderRadius: "14px",
+              border: "1px solid var(--border)",
+              boxShadow: "0 20px 56px rgba(0,0,0,0.22)",
+              padding: "20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
+              <div style={{ minWidth: 0 }}>
+                <h3 style={{ margin: "0 0 6px 0", fontSize: "15px", fontWeight: 600, color: "var(--foreground)" }}>
+                  {authProfile ? t("auth.accountTitle") : t("auth.loginTitle")}
+                </h3>
+                <p style={{ margin: 0, fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
+                  {authProfile ? t("auth.accountDesc") : t("auth.loginDesc")}
+                </p>
+              </div>
+              <button
+                onClick={() => setAuthModalOpen(false)}
+                style={{
+                  width: "30px",
+                  height: "30px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--border)",
+                  backgroundColor: "var(--secondary)",
+                  color: "var(--muted-foreground)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 0,
+                  flexShrink: 0,
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {authProfile ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <div
+                    style={{
+                      width: "44px",
+                      height: "44px",
+                      borderRadius: "50%",
+                      backgroundColor: "var(--muted)",
+                      overflow: "hidden",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {authProfile.avatar_url ? (
+                      <img
+                        src={authProfile.avatar_url}
+                        alt={displayName}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                      </svg>
+                    )}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)" }}>
+                      {displayName}
+                    </div>
+                    {authProfile.email && (
+                      <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                        {authProfile.email}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                  {t("auth.provider")}: {providerLabel}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={authLoading}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "6px",
+                    padding: "10px 12px",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "var(--foreground)",
+                    backgroundColor: "var(--secondary)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "10px",
+                    cursor: authLoading ? "wait" : "pointer",
+                    opacity: authLoading ? 0.7 : 1,
+                  }}
+                >
+                  {authLoading ? t("auth.loggingOut") : t("auth.logout")}
+                </button>
+
+                {authError && (
+                  <div style={{ fontSize: "12px", color: "#dc2626" }}>
+                    {authError}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <button
+                  type="button"
+                  onClick={handleStartGithubAuth}
+                  disabled={authLoading}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    padding: "10px 12px",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "var(--primary-foreground)",
+                    backgroundColor: "var(--primary)",
+                    border: "1px solid var(--primary)",
+                    borderRadius: "10px",
+                    cursor: authLoading ? "wait" : "pointer",
+                    opacity: authLoading ? 0.7 : 1,
+                  }}
+                >
+                  {authLoading ? t("auth.loggingIn") : t("auth.githubLogin")}
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "8px",
+                    padding: "10px 12px",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "var(--muted-foreground)",
+                    backgroundColor: "var(--secondary)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "10px",
+                    opacity: 0.6,
+                    cursor: "not-allowed",
+                  }}
+                >
+                  <span>{t("auth.googleLogin")}</span>
+                  <span style={{ fontSize: "11px" }}>{t("auth.comingSoon")}</span>
+                </button>
+                {authError && (
+                  <div style={{ fontSize: "12px", color: "#dc2626" }}>
+                    {authError}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </aside>
   );
 }
