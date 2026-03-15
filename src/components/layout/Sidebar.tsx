@@ -74,6 +74,17 @@ export function Sidebar() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authDebug, setAuthDebug] = useState<{
+    url: string;
+    receivedAt: string;
+    status: "received" | "rejected" | "processed" | "failed";
+    reason?: string;
+    protocol?: string;
+    host?: string;
+    pathname?: string;
+    loginCode?: string | null;
+    state?: string | null;
+  } | null>(null);
   const [pendingProvider, setPendingProvider] = useState<"github" | "google" | null>(null);
   const [devCallbackUrl, setDevCallbackUrl] = useState("");
 
@@ -88,20 +99,61 @@ export function Sidebar() {
   }, []);
 
   const handleAuthCallback = useCallback(async (url: string) => {
+    const receivedAt = new Date().toISOString();
+    setAuthDebug({
+      url,
+      receivedAt,
+      status: "received",
+    });
     let parsed: URL;
     try {
       parsed = new URL(url);
     } catch {
+      setAuthDebug({
+        url,
+        receivedAt,
+        status: "rejected",
+        reason: "invalid_url",
+      });
       return;
     }
     if (parsed.protocol !== "skills-manager:" || parsed.host !== "auth" || parsed.pathname !== "/callback") {
+      setAuthDebug({
+        url,
+        receivedAt,
+        status: "rejected",
+        reason: `unexpected_route:${parsed.protocol}//${parsed.host}${parsed.pathname}`,
+        protocol: parsed.protocol,
+        host: parsed.host,
+        pathname: parsed.pathname,
+      });
       return;
     }
     const loginCode = parsed.searchParams.get("login_code");
     const state = parsed.searchParams.get("state");
     if (!loginCode || !state) {
+      setAuthDebug({
+        url,
+        receivedAt,
+        status: "rejected",
+        reason: "missing_login_code_or_state",
+        protocol: parsed.protocol,
+        host: parsed.host,
+        pathname: parsed.pathname,
+        loginCode,
+        state,
+      });
       return;
     }
+    const baseDebug = {
+      url,
+      receivedAt,
+      protocol: parsed.protocol,
+      host: parsed.host,
+      pathname: parsed.pathname,
+      loginCode,
+      state,
+    };
     setAuthLoading(true);
     setAuthError(null);
     try {
@@ -110,9 +162,18 @@ export function Sidebar() {
       const profile = await exchangeAuth(loginCode, state);
       setAuthProfileSnapshot(profile);
       setAuthModalOpen(false);
+      setAuthDebug({
+        ...baseDebug,
+        status: "processed",
+      });
     } catch (err) {
       console.warn("Failed to exchange auth code:", err);
       setAuthError(t("auth.loginFailed"));
+      setAuthDebug({
+        ...baseDebug,
+        status: "failed",
+        reason: String(err),
+      });
     } finally {
       setAuthLoading(false);
       setPendingProvider(null);
@@ -567,6 +628,37 @@ export function Sidebar() {
                 >
                   {authLoading ? t("auth.loggingIn") : t("auth.googleLogin")}
                 </button>
+                {authDebug && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
+                      padding: "10px",
+                      borderRadius: "10px",
+                      border: "1px dashed var(--border)",
+                      backgroundColor: "var(--secondary)",
+                    }}
+                  >
+                    <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--muted-foreground)" }}>
+                      OAuth 回调调试
+                    </div>
+                    <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+                      时间: {authDebug.receivedAt}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+                      状态: {authDebug.status}
+                    </div>
+                    {authDebug.reason && (
+                      <div style={{ fontSize: "11px", color: "#dc2626" }}>
+                        原因: {authDebug.reason}
+                      </div>
+                    )}
+                    <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+                      URL: {authDebug.url}
+                    </div>
+                  </div>
+                )}
                 {import.meta.env.DEV && (
                   <div
                     style={{
