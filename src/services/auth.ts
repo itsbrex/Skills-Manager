@@ -31,15 +31,17 @@ export function clearPendingAuthProvider() {
   localStorage.removeItem(PENDING_PROVIDER_KEY);
 }
 
-export async function startGithubAuth(): Promise<AuthStartResult> {
+export async function startGithubAuth(locale?: string): Promise<AuthStartResult> {
   return invoke<AuthStartResult>("start_github_auth", {
     debug: import.meta.env.DEV,
+    locale,
   });
 }
 
-export async function startGoogleAuth(): Promise<AuthStartResult> {
+export async function startGoogleAuth(locale?: string): Promise<AuthStartResult> {
   return invoke<AuthStartResult>("start_google_auth", {
     debug: import.meta.env.DEV,
+    locale,
   });
 }
 

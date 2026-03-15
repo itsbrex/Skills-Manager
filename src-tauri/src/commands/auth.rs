@@ -176,7 +176,11 @@ fn set_pending_state(state: &str, code_verifier: &str, nonce: &str) {
     );
 }
 
-async fn start_oauth_auth(provider: &str, debug: Option<bool>) -> Result<AuthStartResult, String> {
+async fn start_oauth_auth(
+    provider: &str,
+    debug: Option<bool>,
+    locale: Option<String>,
+) -> Result<AuthStartResult, String> {
     let state = if debug.unwrap_or(false) {
         format!("debug-{}", Uuid::new_v4().simple())
     } else {
@@ -186,7 +190,14 @@ async fn start_oauth_auth(provider: &str, debug: Option<bool>) -> Result<AuthSta
     let code_challenge = pkce_challenge(&code_verifier);
     let nonce = Uuid::new_v4().simple().to_string();
     let base_url = auth_api_base_url();
-    let url = build_auth_start_url(&base_url, provider, &state, &code_challenge, &nonce)?;
+    let url = build_auth_start_url(
+        &base_url,
+        provider,
+        &state,
+        &code_challenge,
+        &nonce,
+        locale.as_deref(),
+    )?;
 
     let client = Client::new();
     let response = client
@@ -214,13 +225,19 @@ async fn start_oauth_auth(provider: &str, debug: Option<bool>) -> Result<AuthSta
 }
 
 #[tauri::command]
-pub async fn start_github_auth(debug: Option<bool>) -> Result<AuthStartResult, String> {
-    start_oauth_auth("github", debug).await
+pub async fn start_github_auth(
+    debug: Option<bool>,
+    locale: Option<String>,
+) -> Result<AuthStartResult, String> {
+    start_oauth_auth("github", debug, locale).await
 }
 
 #[tauri::command]
-pub async fn start_google_auth(debug: Option<bool>) -> Result<AuthStartResult, String> {
-    start_oauth_auth("google", debug).await
+pub async fn start_google_auth(
+    debug: Option<bool>,
+    locale: Option<String>,
+) -> Result<AuthStartResult, String> {
+    start_oauth_auth("google", debug, locale).await
 }
 
 #[tauri::command]
@@ -461,7 +478,7 @@ mod tests {
                 .create();
 
             tauri::async_runtime::block_on(async {
-                let result = start_github_auth(Some(true)).await.expect("start auth");
+                let result = start_github_auth(Some(true), None).await.expect("start auth");
                 assert_eq!(result.auth_url, "https://example.com/auth");
                 assert!(result.state.starts_with("debug-"));
                 assert!(has_pending_state(&result.state));
@@ -539,7 +556,7 @@ mod tests {
                 .create();
 
             tauri::async_runtime::block_on(async {
-                let result = start_google_auth(Some(true)).await.expect("start google auth");
+                let result = start_google_auth(Some(true), None).await.expect("start google auth");
                 assert_eq!(result.auth_url, "https://example.com/google");
                 assert!(result.state.starts_with("debug-"));
                 assert!(has_pending_state(&result.state));

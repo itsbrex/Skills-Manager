@@ -176,7 +176,7 @@ export function Settings() {
     setAuthError(null);
     setPendingAuthProvider("github");
     try {
-      const result = await startGithubAuth();
+      const result = await startGithubAuth(language);
       await openUrl(result.auth_url);
     } catch (err) {
       console.warn("Failed to start github auth:", err);
@@ -185,14 +185,14 @@ export function Settings() {
     } finally {
       setAuthLoading(false);
     }
-  }, [t]);
+  }, [language, t]);
 
   const handleStartGoogleLogin = useCallback(async () => {
     setAuthLoading(true);
     setAuthError(null);
     setPendingAuthProvider("google");
     try {
-      const result = await startGoogleAuth();
+      const result = await startGoogleAuth(language);
       await openUrl(result.auth_url);
     } catch (err) {
       console.warn("Failed to start google auth:", err);
@@ -201,7 +201,7 @@ export function Settings() {
     } finally {
       setAuthLoading(false);
     }
-  }, [t]);
+  }, [language, t]);
 
   const handleLogout = useCallback(async () => {
     setAuthLoading(true);

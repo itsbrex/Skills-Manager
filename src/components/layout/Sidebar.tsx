@@ -70,7 +70,7 @@ const icons: Record<string, React.ReactNode> = {
 };
 
 export function Sidebar() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const cloudSync = useCloudSync();
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -345,7 +345,7 @@ export function Sidebar() {
     setPendingAuthProvider("github");
     appendAuthDebugLog("auth_start provider=github");
     try {
-      const result = await startGithubAuth();
+      const result = await startGithubAuth(language);
       console.info("OAuth auth_url:", result.auth_url);
       appendAuthDebugLog(`auth_start_success provider=github url=${result.auth_url} state=${result.state}`);
       await openUrl(result.auth_url);
@@ -359,7 +359,7 @@ export function Sidebar() {
     } finally {
       setAuthLoading(false);
     }
-  }, [appendAuthDebugLog, t]);
+  }, [appendAuthDebugLog, language, t]);
 
   const handleStartGoogleAuth = useCallback(async () => {
     setAuthLoading(true);
@@ -368,7 +368,7 @@ export function Sidebar() {
     setPendingAuthProvider("google");
     appendAuthDebugLog("auth_start provider=google");
     try {
-      const result = await startGoogleAuth();
+      const result = await startGoogleAuth(language);
       console.info("OAuth auth_url:", result.auth_url);
       appendAuthDebugLog(`auth_start_success provider=google url=${result.auth_url} state=${result.state}`);
       await openUrl(result.auth_url);
@@ -382,7 +382,7 @@ export function Sidebar() {
     } finally {
       setAuthLoading(false);
     }
-  }, [appendAuthDebugLog, t]);
+  }, [appendAuthDebugLog, language, t]);
 
   const handleLogout = useCallback(async () => {
     setAuthLoading(true);

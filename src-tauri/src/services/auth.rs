@@ -19,6 +19,7 @@ pub fn build_auth_start_url(
     state: &str,
     code_challenge: &str,
     nonce: &str,
+    locale: Option<&str>,
 ) -> Result<Url, String> {
     let base = base_url.trim_end_matches('/');
     let mut url = Url::parse(&format!("{base}/auth/{provider}/start"))
@@ -28,6 +29,9 @@ pub fn build_auth_start_url(
         query_pairs.append_pair("state", state);
         query_pairs.append_pair("code_challenge", code_challenge);
         query_pairs.append_pair("nonce", nonce);
+        if let Some(locale) = locale.map(str::trim).filter(|value| !value.is_empty()) {
+            query_pairs.append_pair("locale", locale);
+        }
     }
     Ok(url)
 }
@@ -44,11 +48,13 @@ mod tests {
             "s1",
             "cc1",
             "n1",
+            Some("en"),
         )
         .unwrap();
         let query: HashMap<_, _> = url.query_pairs().into_owned().collect();
         assert_eq!(query.get("state"), Some(&"s1".to_string()));
         assert_eq!(query.get("code_challenge"), Some(&"cc1".to_string()));
         assert_eq!(query.get("nonce"), Some(&"n1".to_string()));
+        assert_eq!(query.get("locale"), Some(&"en".to_string()));
     }
 }
