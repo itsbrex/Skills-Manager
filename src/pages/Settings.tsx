@@ -341,195 +341,6 @@ export function Settings() {
         padding: '32px',
       }}>
         <div style={{ maxWidth: '680px' }}>
-          {/* Account & Cloud Sync */}
-          <SectionTitle>{t("settings.account")}</SectionTitle>
-          <SettingsCard>
-            <SettingsRow
-              label={t("settings.accountStatus")}
-              description={t("settings.accountDesc")}
-              isLast={false}
-            >
-              {authProfile ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  {authProfile.avatar_url ? (
-                    <img
-                      src={authProfile.avatar_url}
-                      alt={authProfile.username || "avatar"}
-                      style={{ width: 36, height: 36, borderRadius: '10px', objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <div style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: '10px',
-                      backgroundColor: 'var(--secondary)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '12px',
-                      color: 'var(--muted-foreground)',
-                    }}>
-                      {providerLabel.slice(0, 1)}
-                    </div>
-                  )}
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>
-                      {authProfile.username || authProfile.email || t("auth.login")}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                      {t("auth.provider")}: {providerLabel}
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleLogout}
-                    disabled={authLoading}
-                    style={{
-                      marginLeft: 'auto',
-                      padding: '8px 12px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      color: 'var(--foreground)',
-                      backgroundColor: 'var(--secondary)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                      cursor: authLoading ? 'wait' : 'pointer',
-                      opacity: authLoading ? 0.7 : 1,
-                    }}
-                  >
-                    {authLoading ? t("auth.loggingOut") : t("auth.logout")}
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      onClick={handleStartGithubLogin}
-                      disabled={authLoading}
-                      style={{
-                        padding: '8px 12px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        color: 'var(--foreground)',
-                        backgroundColor: 'var(--secondary)',
-                        border: '1px solid var(--border)',
-                        borderRadius: '8px',
-                        cursor: authLoading ? 'wait' : 'pointer',
-                        opacity: authLoading ? 0.7 : 1,
-                      }}
-                    >
-                      {authLoading ? t("auth.loggingIn") : t("auth.githubLogin")}
-                    </button>
-                    <button
-                      onClick={handleStartGoogleLogin}
-                      disabled={authLoading}
-                      style={{
-                        padding: '8px 12px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        color: 'white',
-                        backgroundColor: 'var(--color-primary)',
-                        border: '1px solid var(--color-primary)',
-                        borderRadius: '8px',
-                        cursor: authLoading ? 'wait' : 'pointer',
-                        opacity: authLoading ? 0.7 : 1,
-                      }}
-                    >
-                      {authLoading ? t("auth.loggingIn") : t("auth.googleLogin")}
-                    </button>
-                  </div>
-                  {authError && (
-                    <div style={{ fontSize: '12px', color: 'var(--color-error)' }}>
-                      {authError}
-                    </div>
-                  )}
-                </div>
-              )}
-            </SettingsRow>
-
-            <SettingsRow
-              label={t("settings.cloudSync")}
-              description={t("settings.cloudSyncDesc")}
-              isLast={false}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                    {authProfile ? t("cloudSync.statusConnected") : t("cloudSync.statusDisconnected")}
-                  </span>
-                  <button
-                    onClick={handleManualSync}
-                    disabled={!authProfile || cloudSync.syncing}
-                    style={{
-                      padding: '8px 12px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      color: authProfile ? 'var(--foreground)' : 'var(--muted-foreground)',
-                      backgroundColor: 'var(--secondary)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                      cursor: !authProfile || cloudSync.syncing ? 'not-allowed' : 'pointer',
-                      opacity: !authProfile || cloudSync.syncing ? 0.6 : 1,
-                    }}
-                  >
-                    {cloudSync.syncing ? t("cloudSync.syncing") : t("cloudSync.syncNow")}
-                  </button>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                  {authProfile ? lastSyncedLabel : t("cloudSync.notSignedIn")}
-                </div>
-                {cloudSync.conflict && (
-                  <div style={{ fontSize: '12px', color: 'var(--color-warning)' }}>
-                    {t("cloudSync.conflictNotice")}
-                  </div>
-                )}
-                {cloudSync.error && (
-                  <div style={{ fontSize: '12px', color: 'var(--color-error)' }}>
-                    {cloudSync.error}
-                  </div>
-                )}
-              </div>
-            </SettingsRow>
-
-            <SettingsRow
-              label={t("settings.cloudSyncAuto")}
-              description={t("settings.cloudSyncAutoDesc")}
-              isLast={false}
-            >
-              <Toggle
-                checked={prefs.cloud_sync_auto}
-                onChange={(v) => updatePreference("cloud_sync_auto", v)}
-              />
-            </SettingsRow>
-
-            <SettingsRow
-              label={t("settings.cloudSyncInterval")}
-              description={t("settings.cloudSyncIntervalDesc")}
-              isLast={true}
-            >
-              <select
-                value={prefs.cloud_sync_interval_minutes}
-                disabled={!prefs.cloud_sync_auto}
-                onChange={(e) => updatePreference("cloud_sync_interval_minutes", Number(e.target.value))}
-                style={{
-                  padding: '8px 10px',
-                  fontSize: '12px',
-                  color: 'var(--foreground)',
-                  backgroundColor: 'var(--secondary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  opacity: prefs.cloud_sync_auto ? 1 : 0.6,
-                  cursor: prefs.cloud_sync_auto ? 'pointer' : 'not-allowed',
-                }}
-              >
-                {cloudSyncIntervals.map((minutes) => (
-                  <option key={minutes} value={minutes}>
-                    {t("settings.cloudSyncIntervalOption").replace("{minutes}", String(minutes))}
-                  </option>
-                ))}
-              </select>
-            </SettingsRow>
-          </SettingsCard>
-
           {/* General Section */}
           <SectionTitle>{t("settings.general")}</SectionTitle>
           <SettingsCard>
@@ -792,6 +603,195 @@ export function Settings() {
                   { value: "zh", label: "中文" },
                 ]}
               />
+            </SettingsRow>
+          </SettingsCard>
+
+          {/* Account & Cloud Sync */}
+          <SectionTitle>{t("settings.account")}</SectionTitle>
+          <SettingsCard>
+            <SettingsRow
+              label={t("settings.accountStatus")}
+              description={t("settings.accountDesc")}
+              isLast={false}
+            >
+              {authProfile ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {authProfile.avatar_url ? (
+                    <img
+                      src={authProfile.avatar_url}
+                      alt={authProfile.username || "avatar"}
+                      style={{ width: 36, height: 36, borderRadius: '10px', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: '10px',
+                      backgroundColor: 'var(--secondary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '12px',
+                      color: 'var(--muted-foreground)',
+                    }}>
+                      {providerLabel.slice(0, 1)}
+                    </div>
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>
+                      {authProfile.username || authProfile.email || t("auth.login")}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                      {t("auth.provider")}: {providerLabel}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    disabled={authLoading}
+                    style={{
+                      marginLeft: 'auto',
+                      padding: '8px 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: 'var(--foreground)',
+                      backgroundColor: 'var(--secondary)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      cursor: authLoading ? 'wait' : 'pointer',
+                      opacity: authLoading ? 0.7 : 1,
+                    }}
+                  >
+                    {authLoading ? t("auth.loggingOut") : t("auth.logout")}
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={handleStartGithubLogin}
+                      disabled={authLoading}
+                      style={{
+                        padding: '8px 12px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: 'var(--foreground)',
+                        backgroundColor: 'var(--secondary)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '8px',
+                        cursor: authLoading ? 'wait' : 'pointer',
+                        opacity: authLoading ? 0.7 : 1,
+                      }}
+                    >
+                      {authLoading ? t("auth.loggingIn") : t("auth.githubLogin")}
+                    </button>
+                    <button
+                      onClick={handleStartGoogleLogin}
+                      disabled={authLoading}
+                      style={{
+                        padding: '8px 12px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: 'white',
+                        backgroundColor: 'var(--color-primary)',
+                        border: '1px solid var(--color-primary)',
+                        borderRadius: '8px',
+                        cursor: authLoading ? 'wait' : 'pointer',
+                        opacity: authLoading ? 0.7 : 1,
+                      }}
+                    >
+                      {authLoading ? t("auth.loggingIn") : t("auth.googleLogin")}
+                    </button>
+                  </div>
+                  {authError && (
+                    <div style={{ fontSize: '12px', color: 'var(--color-error)' }}>
+                      {authError}
+                    </div>
+                  )}
+                </div>
+              )}
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.cloudSync")}
+              description={t("settings.cloudSyncDesc")}
+              isLast={false}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                    {authProfile ? t("cloudSync.statusConnected") : t("cloudSync.statusDisconnected")}
+                  </span>
+                  <button
+                    onClick={handleManualSync}
+                    disabled={!authProfile || cloudSync.syncing}
+                    style={{
+                      padding: '8px 12px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: authProfile ? 'var(--foreground)' : 'var(--muted-foreground)',
+                      backgroundColor: 'var(--secondary)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      cursor: !authProfile || cloudSync.syncing ? 'not-allowed' : 'pointer',
+                      opacity: !authProfile || cloudSync.syncing ? 0.6 : 1,
+                    }}
+                  >
+                    {cloudSync.syncing ? t("cloudSync.syncing") : t("cloudSync.syncNow")}
+                  </button>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                  {authProfile ? lastSyncedLabel : t("cloudSync.notSignedIn")}
+                </div>
+                {cloudSync.conflict && (
+                  <div style={{ fontSize: '12px', color: 'var(--color-warning)' }}>
+                    {t("cloudSync.conflictNotice")}
+                  </div>
+                )}
+                {cloudSync.error && (
+                  <div style={{ fontSize: '12px', color: 'var(--color-error)' }}>
+                    {cloudSync.error}
+                  </div>
+                )}
+              </div>
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.cloudSyncAuto")}
+              description={t("settings.cloudSyncAutoDesc")}
+              isLast={false}
+            >
+              <Toggle
+                checked={prefs.cloud_sync_auto}
+                onChange={(v) => updatePreference("cloud_sync_auto", v)}
+              />
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.cloudSyncInterval")}
+              description={t("settings.cloudSyncIntervalDesc")}
+              isLast={true}
+            >
+              <select
+                value={prefs.cloud_sync_interval_minutes}
+                disabled={!prefs.cloud_sync_auto}
+                onChange={(e) => updatePreference("cloud_sync_interval_minutes", Number(e.target.value))}
+                style={{
+                  padding: '8px 10px',
+                  fontSize: '12px',
+                  color: 'var(--foreground)',
+                  backgroundColor: 'var(--secondary)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  opacity: prefs.cloud_sync_auto ? 1 : 0.6,
+                  cursor: prefs.cloud_sync_auto ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {cloudSyncIntervals.map((minutes) => (
+                  <option key={minutes} value={minutes}>
+                    {t("settings.cloudSyncIntervalOption").replace("{minutes}", String(minutes))}
+                  </option>
+                ))}
+              </select>
             </SettingsRow>
           </SettingsCard>
 
