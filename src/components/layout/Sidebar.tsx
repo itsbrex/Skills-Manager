@@ -154,7 +154,7 @@ export function Sidebar() {
     }
   }, [pendingProvider, t]);
 
-  const handleAuthUrl = useCallback((url: string, source: string) => {
+  const handleAuthUrl = useCallback((url: string) => {
     const normalized = normalizeAuthUrl(url);
     if (!normalized) {
       return;
@@ -182,7 +182,7 @@ export function Sidebar() {
       .then((urls) => {
         if (urls) {
           urls.forEach((url) => {
-            handleAuthUrl(url, "get_current");
+            handleAuthUrl(url);
           });
         }
       })
@@ -192,7 +192,7 @@ export function Sidebar() {
 
     onOpenUrl((urls: string[]) => {
       urls.forEach((url: string) => {
-        handleAuthUrl(url, "event");
+        handleAuthUrl(url);
       });
     })
       .then((stop: () => void) => {
@@ -216,7 +216,7 @@ export function Sidebar() {
         return;
       }
       urls.forEach((url) => {
-        handleAuthUrl(url, "argv");
+        handleAuthUrl(url);
       });
     })
       .then((stop) => {
