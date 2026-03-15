@@ -52,6 +52,38 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
+        .setup(|app| {
+            #[cfg(desktop)]
+            {
+                let _ = crate::commands::auth::append_auth_debug_log_line("setup: deep-link register_all start");
+                match app.deep_link().register_all() {
+                    Ok(_) => {
+                        let _ = crate::commands::auth::append_auth_debug_log_line("setup: deep-link register_all ok");
+                    }
+                    Err(err) => {
+                        let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
+                            "setup: deep-link register_all error={}",
+                            err
+                        ));
+                    }
+                }
+                match app.deep_link().is_registered("skills-manager") {
+                    Ok(is_registered) => {
+                        let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
+                            "setup: deep-link is_registered={} scheme=skills-manager",
+                            is_registered
+                        ));
+                    }
+                    Err(err) => {
+                        let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
+                            "setup: deep-link is_registered error={}",
+                            err
+                        ));
+                    }
+                }
+            }
+            Ok(())
+        })
         .manage(AppCache::default())
         .manage(MarketplaceCache::default())
         .invoke_handler(tauri::generate_handler![
