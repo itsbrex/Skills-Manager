@@ -17,6 +17,10 @@ import type {
 } from "@/types";
 import { cloudSyncPull, cloudSyncPush, cloudSyncResolve } from "@/services/cloudSync";
 import { getAuthProfile, logoutAuth } from "@/services/auth";
+import {
+  setAuthProfileSnapshot,
+  subscribeAuthProfile,
+} from "@/services/authProfileStore";
 
 type CloudSyncConflict = {
   revision: number;
@@ -77,10 +81,16 @@ function useCloudSyncAgent(): CloudSyncContextValue {
   const refreshAuthProfile = useCallback(async () => {
     try {
       const profile = await getAuthProfile();
-      setAuthProfile(profile);
+      setAuthProfileSnapshot(profile);
     } catch (err) {
       console.warn("Failed to refresh auth profile:", err);
     }
+  }, []);
+
+  useEffect(() => {
+    return subscribeAuthProfile((profile) => {
+      setAuthProfile(profile);
+    });
   }, []);
 
   useEffect(() => {
@@ -296,7 +306,7 @@ function useCloudSyncAgent(): CloudSyncContextValue {
     await runSyncTask(async () => {
       try {
         await logoutAuth();
-        setAuthProfile(null);
+        setAuthProfileSnapshot(null);
         setConflict(null);
         setLastSyncedAt(null);
       } catch (err) {

@@ -204,6 +204,141 @@ pub async fn sync_resolve(
 mod tests {
     use super::*;
     use crate::models::{CustomToolConfig, ToolConfig};
+    use std::collections::HashMap;
+
+    #[test]
+    fn sync_pull_accepts_missing_skills() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("GET", "/sync/pull")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{"revision":1,"payload":{"version":1,"updated_at":1,"device_id":"d1","tool_states":{},"custom_tools":[]}}"#,
+            )
+            .create();
+
+        tauri::async_runtime::block_on(async {
+            let result = sync_pull(&server.url(), "token").await;
+            assert!(
+                result.is_ok(),
+                "expected sync_pull to succeed, got: {result:?}"
+            );
+            let snapshot = result.unwrap();
+            assert_eq!(snapshot.revision, 1);
+            let payload = snapshot.payload.expect("payload");
+            assert!(payload.skills.is_empty());
+        });
+    }
+
+    #[test]
+    fn sync_push_conflict_accepts_missing_tool_states() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("POST", "/sync/push")
+            .with_status(409)
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{"error":{"code":"SYNC_CONFLICT","message":"conflict"},"revision":2,"payload":{"version":1,"updated_at":1,"device_id":"d1","skills":[],"custom_tools":[]}}"#,
+            )
+            .create();
+
+        tauri::async_runtime::block_on(async {
+            let payload = CloudSyncPayload {
+                version: 1,
+                updated_at: 1,
+                device_id: "d1".to_string(),
+                skills: Vec::new(),
+                tool_states: HashMap::new(),
+                custom_tools: Vec::new(),
+            };
+            let result = sync_push(&server.url(), "token", 1, &payload, "req1").await;
+            assert!(
+                result.is_ok(),
+                "expected sync_push to succeed, got: {result:?}"
+            );
+            let conflict = result.unwrap();
+            match conflict {
+                CloudSyncPushResult::Conflict { payload, .. } => {
+                    assert!(payload.tool_states.is_empty());
+                }
+                other => panic!("expected conflict, got: {other:?}"),
+            }
+        });
+    }
+
+    #[test]
+    fn sync_push_conflict_accepts_missing_custom_tools() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("POST", "/sync/push")
+            .with_status(409)
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{"error":{"code":"SYNC_CONFLICT","message":"conflict"},"revision":2,"payload":{"version":1,"updated_at":1,"device_id":"d1","skills":[],"tool_states":{}}}"#,
+            )
+            .create();
+
+        tauri::async_runtime::block_on(async {
+            let payload = CloudSyncPayload {
+                version: 1,
+                updated_at: 1,
+                device_id: "d1".to_string(),
+                skills: Vec::new(),
+                tool_states: HashMap::new(),
+                custom_tools: Vec::new(),
+            };
+            let result = sync_push(&server.url(), "token", 1, &payload, "req1").await;
+            assert!(
+                result.is_ok(),
+                "expected sync_push to succeed, got: {result:?}"
+            );
+            let conflict = result.unwrap();
+            match conflict {
+                CloudSyncPushResult::Conflict { payload, .. } => {
+                    assert!(payload.custom_tools.is_empty());
+                }
+                other => panic!("expected conflict, got: {other:?}"),
+            }
+        });
+    }
+
+    #[test]
+    fn sync_push_conflict_accepts_missing_enabled_skills() {
+        let mut server = mockito::Server::new();
+        let _mock = server
+            .mock("POST", "/sync/push")
+            .with_status(409)
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{"error":{"code":"SYNC_CONFLICT","message":"conflict"},"revision":2,"payload":{"version":1,"updated_at":1,"device_id":"d1","skills":[],"tool_states":{"codex":{"enabled":true}},"custom_tools":[]}}"#,
+            )
+            .create();
+
+        tauri::async_runtime::block_on(async {
+            let payload = CloudSyncPayload {
+                version: 1,
+                updated_at: 1,
+                device_id: "d1".to_string(),
+                skills: Vec::new(),
+                tool_states: HashMap::new(),
+                custom_tools: Vec::new(),
+            };
+            let result = sync_push(&server.url(), "token", 1, &payload, "req1").await;
+            assert!(
+                result.is_ok(),
+                "expected sync_push to succeed, got: {result:?}"
+            );
+            let conflict = result.unwrap();
+            match conflict {
+                CloudSyncPushResult::Conflict { payload, .. } => {
+                    let state = payload.tool_states.get("codex").expect("codex");
+                    assert!(state.enabled_skills.is_empty());
+                }
+                other => panic!("expected conflict, got: {other:?}"),
+            }
+        });
+    }
 
     #[test]
     fn build_payload_includes_enabled_skills_and_custom_tools() {

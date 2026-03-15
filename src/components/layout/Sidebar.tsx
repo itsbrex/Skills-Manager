@@ -11,12 +11,12 @@ import {
   startGoogleAuth,
   exchangeGoogleAuth,
   clearPendingAuthProvider,
-  getAuthProfile,
-  logoutAuth,
   setPendingAuthProvider,
   takePendingAuthProvider,
 } from "@/services/auth";
-import { AuthMeResponse, UpdateInfo } from "@/types";
+import { setAuthProfileSnapshot } from "@/services/authProfileStore";
+import { useCloudSync } from "@/hooks/useCloudSyncAgent";
+import { UpdateInfo } from "@/types";
 import { MODAL_LAYER_Z_INDEX, MODAL_OVERLAY_COLOR } from "@/constants/modal";
 
 const navItems = [
@@ -69,8 +69,8 @@ const icons: Record<string, React.ReactNode> = {
 
 export function Sidebar() {
   const { t } = useTranslation();
+  const cloudSync = useCloudSync();
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [authProfile, setAuthProfile] = useState<AuthMeResponse | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -108,7 +108,7 @@ export function Sidebar() {
       const resolvedProvider = pendingProvider ?? takePendingAuthProvider();
       const exchangeAuth = resolvedProvider === "google" ? exchangeGoogleAuth : exchangeGithubAuth;
       const profile = await exchangeAuth(loginCode, state);
-      setAuthProfile(profile);
+      setAuthProfileSnapshot(profile);
       setAuthModalOpen(false);
     } catch (err) {
       console.warn("Failed to exchange auth code:", err);
@@ -126,14 +126,6 @@ export function Sidebar() {
     }
     await handleAuthCallback(devCallbackUrl.trim());
   }, [devCallbackUrl, handleAuthCallback]);
-
-  useEffect(() => {
-    getAuthProfile()
-      .then((profile) => setAuthProfile(profile))
-      .catch((err) => {
-        console.warn("Failed to load auth profile:", err);
-      });
-  }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -214,8 +206,7 @@ export function Sidebar() {
     setAuthLoading(true);
     setAuthError(null);
     try {
-      await logoutAuth();
-      setAuthProfile(null);
+      await cloudSync.logout();
       setAuthModalOpen(false);
     } catch (err) {
       console.warn("Failed to logout:", err);
@@ -223,8 +214,9 @@ export function Sidebar() {
     } finally {
       setAuthLoading(false);
     }
-  }, [t]);
+  }, [cloudSync, t]);
 
+  const authProfile = cloudSync.authProfile;
   const displayName = authProfile?.username || authProfile?.email || t("auth.login");
   const providerLabel = authProfile?.provider === "github"
     ? "GitHub"

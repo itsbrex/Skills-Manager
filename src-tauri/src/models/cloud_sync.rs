@@ -33,6 +33,7 @@ pub struct CloudSyncSkill {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloudSyncToolState {
     pub enabled: bool,
+    #[serde(default)]
     pub enabled_skills: Vec<String>,
 }
 
@@ -50,7 +51,10 @@ pub struct CloudSyncPayload {
     pub version: u8,
     pub updated_at: i64,
     pub device_id: String,
+    #[serde(default)]
     pub skills: Vec<CloudSyncSkill>,
+    #[serde(default)]
     pub tool_states: HashMap<String, CloudSyncToolState>,
+    #[serde(default)]
     pub custom_tools: Vec<CloudSyncCustomTool>,
 }
