@@ -5,7 +5,6 @@ mod services;
 mod test_support;
 
 use commands::{
-    append_auth_debug_log,
     check_marketplace_updates_if_stale, check_sync_status, check_update, cloud_sync_pull,
     cloud_sync_push, cloud_sync_resolve, create_custom_tool, create_skill, delete_custom_tool,
     delete_skill, detect_available_editors, detect_tools, disable_skill, enable_skill,
@@ -31,17 +30,9 @@ use tauri_plugin_deep_link::DeepLinkExt;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, mut argv, _cwd| {
-            let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
-                "single_instance argv(raw): {:?}",
-                argv
-            ));
             if matches!(argv.first(), Some(arg) if arg.contains("://")) {
                 argv.insert(0, String::new());
             }
-            let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
-                "single_instance argv(norm): {:?}",
-                argv
-            ));
             let _ = app.emit("auth:deep-link-argv", argv.clone());
             app.deep_link().handle_cli_arguments(argv.into_iter());
             if let Some(window) = app.get_webview_window("main") {
@@ -55,43 +46,14 @@ pub fn run() {
         .setup(|app| {
             #[cfg(desktop)]
             {
-                let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
-                    "setup: current_exe={}",
-                    std::env::current_exe()
-                        .ok()
-                        .map(|path| path.display().to_string())
-                        .unwrap_or_else(|| "unknown".to_string())
-                ));
-                let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
-                    "setup: argv={:?}",
-                    std::env::args().collect::<Vec<_>>()
-                ));
-                let _ = crate::commands::auth::append_auth_debug_log_line("setup: deep-link register_all start");
                 match app.deep_link().register_all() {
-                    Ok(_) => {
-                        let _ = crate::commands::auth::append_auth_debug_log_line("setup: deep-link register_all ok");
-                    }
-                    Err(err) => {
-                        let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
-                            "setup: deep-link register_all error={}",
-                            err
-                        ));
-                    }
+                    Ok(_) => {}
+                    Err(_err) => {}
                 }
                 for scheme in ["skills-manager", "skillsmanager"] {
                     match app.deep_link().is_registered(scheme) {
-                        Ok(is_registered) => {
-                            let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
-                                "setup: deep-link is_registered={} scheme={}",
-                                is_registered, scheme
-                            ));
-                        }
-                        Err(err) => {
-                            let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
-                                "setup: deep-link is_registered error={} scheme={}",
-                                err, scheme
-                            ));
-                        }
+                        Ok(_is_registered) => {}
+                        Err(_err) => {}
                     }
                 }
             }
@@ -148,7 +110,6 @@ pub fn run() {
             submit_poll_vote,
             get_poll_client_state,
             save_poll_client_state,
-            append_auth_debug_log,
             start_github_auth,
             exchange_github_auth,
             start_google_auth,

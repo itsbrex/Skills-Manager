@@ -1,9 +1,5 @@
 use std::collections::HashMap;
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use reqwest::Client;
@@ -30,35 +26,6 @@ fn pending_auth_states() -> &'static Mutex<HashMap<String, PendingAuthState>> {
 
 fn auth_api_base_url() -> String {
     std::env::var("SKILLS_MARKET_API_BASE").unwrap_or_else(|_| DEFAULT_AUTH_API_BASE.to_string())
-}
-
-fn auth_debug_log_path() -> Result<PathBuf, String> {
-    let home_dir = dirs::home_dir().ok_or_else(|| "Failed to resolve home directory".to_string())?;
-    let log_dir = home_dir.join(".skills-manager");
-    std::fs::create_dir_all(&log_dir)
-        .map_err(|e| format!("Failed to create debug log dir: {e}"))?;
-    Ok(log_dir.join("auth-debug.log"))
-}
-
-pub(crate) fn append_auth_debug_log_line(entry: &str) -> Result<(), String> {
-    let log_path = auth_debug_log_path()?;
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-        .map_err(|e| format!("Failed to open auth debug log: {e}"))?;
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    writeln!(file, "[{ts}] {entry}")
-        .map_err(|e| format!("Failed to write auth debug log: {e}"))?;
-    Ok(())
-}
-
-#[tauri::command]
-pub fn append_auth_debug_log(entry: String) -> Result<(), String> {
-    append_auth_debug_log_line(&entry)
 }
 
 fn build_auth_api_url(base_url: &str, path: &str) -> Result<reqwest::Url, String> {

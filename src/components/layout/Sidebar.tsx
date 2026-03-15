@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "@/i18n";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
@@ -76,28 +75,9 @@ export function Sidebar() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [authDebug, setAuthDebug] = useState<{
-    url: string;
-    receivedAt: string;
-    status: "received" | "rejected" | "processed" | "failed";
-    reason?: string;
-    protocol?: string;
-    host?: string;
-    pathname?: string;
-    loginCode?: string | null;
-    state?: string | null;
-  } | null>(null);
-  const [authDebugArgv, setAuthDebugArgv] = useState<string[] | null>(null);
-  const [authDebugArgvAt, setAuthDebugArgvAt] = useState<string | null>(null);
   const [pendingProvider, setPendingProvider] = useState<"github" | "google" | null>(null);
   const [devCallbackUrl, setDevCallbackUrl] = useState("");
   const handledAuthUrlsRef = useRef<Set<string>>(new Set());
-
-  const appendAuthDebugLog = useCallback((message: string) => {
-    void invoke("append_auth_debug_log", { entry: message }).catch(() => {
-      // ignore debug log failures
-    });
-  }, []);
 
   const normalizeAuthUrl = useCallback((value: string) => value.trim(), []);
 
@@ -136,119 +116,43 @@ export function Sidebar() {
   }, []);
 
   const handleAuthCallback = useCallback(async (url: string) => {
-    const receivedAt = new Date().toISOString();
-    appendAuthDebugLog(`callback_received url=${url}`);
-    setAuthDebug({
-      url,
-      receivedAt,
-      status: "received",
-    });
     let parsed: URL;
     try {
       parsed = new URL(url);
     } catch {
-      appendAuthDebugLog("callback_rejected reason=invalid_url");
-      setAuthDebug({
-        url,
-        receivedAt,
-        status: "rejected",
-        reason: "invalid_url",
-      });
       return;
     }
     const protocol = parsed.protocol.replace(":", "");
     const isCustomScheme = ["skills-manager", "skillsmanager"].includes(protocol);
     if (isCustomScheme) {
       if (parsed.host !== "auth" || parsed.pathname !== "/callback") {
-        appendAuthDebugLog(
-          `callback_rejected reason=unexpected_route protocol=${parsed.protocol} host=${parsed.host} path=${parsed.pathname}`,
-        );
-        setAuthDebug({
-          url,
-          receivedAt,
-          status: "rejected",
-          reason: `unexpected_route:${parsed.protocol}//${parsed.host}${parsed.pathname}`,
-          protocol: parsed.protocol,
-          host: parsed.host,
-          pathname: parsed.pathname,
-        });
         return;
       }
-    } else {
-      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-        appendAuthDebugLog(
-          `callback_rejected reason=unexpected_protocol protocol=${parsed.protocol} host=${parsed.host} path=${parsed.pathname}`,
-        );
-        setAuthDebug({
-          url,
-          receivedAt,
-          status: "rejected",
-          reason: `unexpected_protocol:${parsed.protocol}`,
-          protocol: parsed.protocol,
-          host: parsed.host,
-          pathname: parsed.pathname,
-        });
-        return;
-      }
-      appendAuthDebugLog(
-        `callback_accept_non_custom_scheme protocol=${parsed.protocol} host=${parsed.host} path=${parsed.pathname}`,
-      );
+    } else if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return;
     }
     const loginCode = parsed.searchParams.get("login_code");
     const state = parsed.searchParams.get("state");
     if (!loginCode || !state) {
-      appendAuthDebugLog("callback_rejected reason=missing_login_code_or_state");
-      setAuthDebug({
-        url,
-        receivedAt,
-        status: "rejected",
-        reason: "missing_login_code_or_state",
-        protocol: parsed.protocol,
-        host: parsed.host,
-        pathname: parsed.pathname,
-        loginCode,
-        state,
-      });
       return;
     }
-    const baseDebug = {
-      url,
-      receivedAt,
-      protocol: parsed.protocol,
-      host: parsed.host,
-      pathname: parsed.pathname,
-      loginCode,
-      state,
-    };
     setAuthLoading(true);
     setAuthError(null);
     try {
       const resolvedProvider = pendingProvider ?? takePendingAuthProvider();
       const exchangeAuth = resolvedProvider === "google" ? exchangeGoogleAuth : exchangeGithubAuth;
-      appendAuthDebugLog(`exchange_start provider=${resolvedProvider ?? "unknown"} state=${state}`);
       const profile = await exchangeAuth(loginCode, state);
       setAuthProfileSnapshot(profile);
       setAuthModalOpen(false);
-      appendAuthDebugLog(`exchange_success provider=${resolvedProvider ?? "unknown"}`);
-      setAuthDebug({
-        ...baseDebug,
-        status: "processed",
-      });
     } catch (err) {
       console.warn("Failed to exchange auth code:", err);
       setAuthError(t("auth.loginFailed"));
-      appendAuthDebugLog(`exchange_failed error=${String(err)}`);
-      setAuthDebug({
-        ...baseDebug,
-        status: "failed",
-        reason: String(err),
-      });
     } finally {
       setAuthLoading(false);
       setPendingProvider(null);
       clearPendingAuthProvider();
     }
-  }, [appendAuthDebugLog, pendingProvider, t]);
+  }, [pendingProvider, t]);
 
   const handleAuthUrl = useCallback((url: string, source: string) => {
     const normalized = normalizeAuthUrl(url);
@@ -256,17 +160,14 @@ export function Sidebar() {
       return;
     }
     if (!isExpectedAuthUrl(normalized)) {
-      appendAuthDebugLog(`callback_ignored reason=unexpected_url source=${source} url=${normalized}`);
       return;
     }
     if (handledAuthUrlsRef.current.has(normalized)) {
-      appendAuthDebugLog(`callback_ignored reason=duplicate source=${source} url=${normalized}`);
       return;
     }
     handledAuthUrlsRef.current.add(normalized);
-    appendAuthDebugLog(`callback_enqueue source=${source} url=${normalized}`);
     void handleAuthCallback(normalized);
-  }, [appendAuthDebugLog, handleAuthCallback, isExpectedAuthUrl, normalizeAuthUrl]);
+  }, [handleAuthCallback, isExpectedAuthUrl, normalizeAuthUrl]);
 
   const handleDevCallbackSubmit = useCallback(async () => {
     if (!devCallbackUrl.trim()) {
@@ -285,8 +186,8 @@ export function Sidebar() {
           });
         }
       })
-      .catch((err) => {
-        appendAuthDebugLog(`callback_get_current_failed error=${String(err)}`);
+      .catch(() => {
+        // ignore deep link lookup failures
       });
 
     onOpenUrl((urls: string[]) => {
@@ -304,17 +205,14 @@ export function Sidebar() {
     return () => {
       unlisten?.();
     };
-  }, [appendAuthDebugLog, handleAuthUrl]);
+  }, [handleAuthUrl]);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     listen<string[]>("auth:deep-link-argv", (event) => {
       const argv = event.payload;
-      setAuthDebugArgv(argv);
-      setAuthDebugArgvAt(new Date().toISOString());
       const urls = extractDeepLinkUrlsFromArgv(argv);
       if (urls.length === 0) {
-        appendAuthDebugLog(`callback_argv_no_url argv=${argv.join(" ")}`);
         return;
       }
       urls.forEach((url) => {
@@ -330,7 +228,7 @@ export function Sidebar() {
     return () => {
       unlisten?.();
     };
-  }, [appendAuthDebugLog, extractDeepLinkUrlsFromArgv, handleAuthUrl]);
+  }, [extractDeepLinkUrlsFromArgv, handleAuthUrl]);
 
   const handleUpdateClick = async () => {
     if (updateInfo?.download_url) {
@@ -343,46 +241,38 @@ export function Sidebar() {
     setAuthError(null);
     setPendingProvider("github");
     setPendingAuthProvider("github");
-    appendAuthDebugLog("auth_start provider=github");
     try {
       const result = await startGithubAuth(language);
       console.info("OAuth auth_url:", result.auth_url);
-      appendAuthDebugLog(`auth_start_success provider=github url=${result.auth_url} state=${result.state}`);
       await openUrl(result.auth_url);
-      appendAuthDebugLog("auth_start_open_url_ok provider=github");
     } catch (err) {
       console.warn("Failed to start github auth:", err);
-      appendAuthDebugLog(`auth_start_failed provider=github error=${String(err)}`);
       setAuthError(t("auth.loginFailed"));
       setPendingProvider(null);
       clearPendingAuthProvider();
     } finally {
       setAuthLoading(false);
     }
-  }, [appendAuthDebugLog, language, t]);
+  }, [language, t]);
 
   const handleStartGoogleAuth = useCallback(async () => {
     setAuthLoading(true);
     setAuthError(null);
     setPendingProvider("google");
     setPendingAuthProvider("google");
-    appendAuthDebugLog("auth_start provider=google");
     try {
       const result = await startGoogleAuth(language);
       console.info("OAuth auth_url:", result.auth_url);
-      appendAuthDebugLog(`auth_start_success provider=google url=${result.auth_url} state=${result.state}`);
       await openUrl(result.auth_url);
-      appendAuthDebugLog("auth_start_open_url_ok provider=google");
     } catch (err) {
       console.warn("Failed to start google auth:", err);
-      appendAuthDebugLog(`auth_start_failed provider=google error=${String(err)}`);
       setAuthError(t("auth.loginFailed"));
       setPendingProvider(null);
       clearPendingAuthProvider();
     } finally {
       setAuthLoading(false);
     }
-  }, [appendAuthDebugLog, language, t]);
+  }, [language, t]);
 
   const handleLogout = useCallback(async () => {
     setAuthLoading(true);
@@ -749,97 +639,6 @@ export function Sidebar() {
                 >
                   {authLoading ? t("auth.loggingIn") : t("auth.googleLogin")}
                 </button>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "6px",
-                    padding: "10px",
-                    borderRadius: "10px",
-                    border: "1px dashed var(--border)",
-                    backgroundColor: "var(--secondary)",
-                  }}
-                >
-                  <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--muted-foreground)" }}>
-                    OAuth 回调调试（临时）
-                  </div>
-                  <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
-                    回调状态: {authDebug ? authDebug.status : "未收到回调"}
-                  </div>
-                  {authDebug?.reason && (
-                    <div style={{ fontSize: "11px", color: "#dc2626" }}>
-                      原因: {authDebug.reason}
-                    </div>
-                  )}
-                  {authDebug ? (
-                    <>
-                      <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
-                        时间: {authDebug.receivedAt}
-                      </div>
-                      <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
-                        URL: {authDebug.url}
-                      </div>
-                    </>
-                  ) : null}
-                  <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
-                    单实例 argv: {authDebugArgv ? authDebugArgv.join(" ") : "无"}
-                  </div>
-                  {authDebugArgvAt && (
-                    <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
-                      argv 时间: {authDebugArgvAt}
-                    </div>
-                  )}
-                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        appendAuthDebugLog("debug_test protocol=skills-manager");
-                        void openUrl("skills-manager://auth/callback?login_code=test&state=test")
-                          .then(() => {
-                            appendAuthDebugLog("debug_test_open_url_ok protocol=skills-manager");
-                          })
-                          .catch((err) => {
-                            appendAuthDebugLog(`debug_test_open_url_failed protocol=skills-manager error=${String(err)}`);
-                          });
-                      }}
-                      style={{
-                        padding: "6px 8px",
-                        fontSize: "11px",
-                        borderRadius: "8px",
-                        border: "1px solid var(--border)",
-                        backgroundColor: "var(--background)",
-                        color: "var(--foreground)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      测试 skills-manager
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        appendAuthDebugLog("debug_test protocol=skillsmanager");
-                        void openUrl("skillsmanager://auth/callback?login_code=test&state=test")
-                          .then(() => {
-                            appendAuthDebugLog("debug_test_open_url_ok protocol=skillsmanager");
-                          })
-                          .catch((err) => {
-                            appendAuthDebugLog(`debug_test_open_url_failed protocol=skillsmanager error=${String(err)}`);
-                          });
-                      }}
-                      style={{
-                        padding: "6px 8px",
-                        fontSize: "11px",
-                        borderRadius: "8px",
-                        border: "1px solid var(--border)",
-                        backgroundColor: "var(--background)",
-                        color: "var(--foreground)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      测试 skillsmanager
-                    </button>
-                  </div>
-                </div>
                 <div
                   style={{
                     display: "flex",
