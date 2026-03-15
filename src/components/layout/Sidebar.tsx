@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "@/i18n";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -91,11 +91,38 @@ export function Sidebar() {
   const [authDebugArgvAt, setAuthDebugArgvAt] = useState<string | null>(null);
   const [pendingProvider, setPendingProvider] = useState<"github" | "google" | null>(null);
   const [devCallbackUrl, setDevCallbackUrl] = useState("");
+  const handledAuthUrlsRef = useRef<Set<string>>(new Set());
 
   const appendAuthDebugLog = useCallback((message: string) => {
     void invoke("append_auth_debug_log", { entry: message }).catch(() => {
       // ignore debug log failures
     });
+  }, []);
+
+  const normalizeAuthUrl = useCallback((value: string) => value.trim(), []);
+
+  const isExpectedAuthUrl = useCallback((value: string) => {
+    return value.startsWith("skills-manager://") || value.startsWith("skillsmanager://");
+  }, []);
+
+  const extractDeepLinkUrlsFromArgv = useCallback((argv: string[]) => {
+    const urls: string[] = [];
+    for (const raw of argv) {
+      if (!raw) {
+        continue;
+      }
+      const arg = raw.trim();
+      for (const scheme of ["skills-manager://", "skillsmanager://"]) {
+        const idx = arg.indexOf(scheme);
+        if (idx >= 0) {
+          const candidate = arg.slice(idx).replace(/^["']|["']$/g, "");
+          if (candidate) {
+            urls.push(candidate);
+          }
+        }
+      }
+    }
+    return urls;
   }, []);
 
   useEffect(() => {
@@ -201,6 +228,24 @@ export function Sidebar() {
     }
   }, [appendAuthDebugLog, pendingProvider, t]);
 
+  const handleAuthUrl = useCallback((url: string, source: string) => {
+    const normalized = normalizeAuthUrl(url);
+    if (!normalized) {
+      return;
+    }
+    if (!isExpectedAuthUrl(normalized)) {
+      appendAuthDebugLog(`callback_ignored reason=unexpected_url source=${source} url=${normalized}`);
+      return;
+    }
+    if (handledAuthUrlsRef.current.has(normalized)) {
+      appendAuthDebugLog(`callback_ignored reason=duplicate source=${source} url=${normalized}`);
+      return;
+    }
+    handledAuthUrlsRef.current.add(normalized);
+    appendAuthDebugLog(`callback_enqueue source=${source} url=${normalized}`);
+    void handleAuthCallback(normalized);
+  }, [appendAuthDebugLog, handleAuthCallback, isExpectedAuthUrl, normalizeAuthUrl]);
+
   const handleDevCallbackSubmit = useCallback(async () => {
     if (!devCallbackUrl.trim()) {
       return;
@@ -214,17 +259,17 @@ export function Sidebar() {
       .then((urls) => {
         if (urls) {
           urls.forEach((url) => {
-            void handleAuthCallback(url);
+            handleAuthUrl(url, "get_current");
           });
         }
       })
-      .catch(() => {
-        // ignore deep link check failures
+      .catch((err) => {
+        appendAuthDebugLog(`callback_get_current_failed error=${String(err)}`);
       });
 
     onOpenUrl((urls: string[]) => {
       urls.forEach((url: string) => {
-        void handleAuthCallback(url);
+        handleAuthUrl(url, "event");
       });
     })
       .then((stop: () => void) => {
@@ -237,13 +282,22 @@ export function Sidebar() {
     return () => {
       unlisten?.();
     };
-  }, [handleAuthCallback]);
+  }, [appendAuthDebugLog, handleAuthUrl]);
 
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     listen<string[]>("auth:deep-link-argv", (event) => {
-      setAuthDebugArgv(event.payload);
+      const argv = event.payload;
+      setAuthDebugArgv(argv);
       setAuthDebugArgvAt(new Date().toISOString());
+      const urls = extractDeepLinkUrlsFromArgv(argv);
+      if (urls.length === 0) {
+        appendAuthDebugLog(`callback_argv_no_url argv=${argv.join(" ")}`);
+        return;
+      }
+      urls.forEach((url) => {
+        handleAuthUrl(url, "argv");
+      });
     })
       .then((stop) => {
         unlisten = stop;
@@ -254,7 +308,7 @@ export function Sidebar() {
     return () => {
       unlisten?.();
     };
-  }, []);
+  }, [appendAuthDebugLog, extractDeepLinkUrlsFromArgv, handleAuthUrl]);
 
   const handleUpdateClick = async () => {
     if (updateInfo?.download_url) {
