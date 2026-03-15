@@ -14,5 +14,5 @@ pub use marketplace::{
     MarketplaceSource, MarketplaceSyncResult, MarketplaceUpdateCheckResult, SkillFileNode,
     SourceType,
 };
-pub use skill::{Skill, SkillSource};
+pub use skill::{MarketplaceMeta, Skill, SkillSource, VaultMeta};
 pub use tool::{Tool, ToolDefinition, ToolSource, SUPPORTED_TOOLS};

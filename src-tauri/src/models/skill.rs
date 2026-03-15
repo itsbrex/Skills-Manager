@@ -9,8 +9,31 @@ pub struct Skill {
     pub description: Option<String>,
     pub version: String,
     pub source: SkillSource,
+    pub marketplace_meta: Option<MarketplaceMeta>,
+    pub vault_meta: Option<VaultMeta>,
     pub enabled: HashMap<String, bool>,
     pub path: PathBuf,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MarketplaceMeta {
+    pub marketplace_source_id: Option<String>,
+    pub marketplace_skill_id: Option<String>,
+    pub marketplace_skill_slug: Option<String>,
+    pub repo_url: Option<String>,
+    pub skill_path: Option<String>,
+    pub remote_revision: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct VaultMeta {
+    pub provider: Option<String>,
+    pub user_id: Option<String>,
+    pub skill_id: Option<String>,
+    pub version: Option<String>,
+    pub hash: Option<String>,
+    pub size: Option<u64>,
+    pub updated_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -18,6 +41,8 @@ pub struct Skill {
 pub enum SkillSource {
     Local,
     Imported,
+    Marketplace,
+    Vault,
 }
 
 impl Skill {
@@ -29,6 +54,8 @@ impl Skill {
             description: None,
             version: "1.0".to_string(),
             source: SkillSource::Local,
+            marketplace_meta: None,
+            vault_meta: None,
             enabled: HashMap::new(),
             path,
         }

@@ -62,15 +62,17 @@ pub fn build_payload(config: &AppConfig, skills: &[Skill]) -> CloudSyncPayload {
 
     let skills_payload = skills
         .iter()
-        .map(|skill| CloudSyncSkill {
-            id: skill.id.clone(),
-            name: skill.name.clone(),
-            source: match skill.source {
-                SkillSource::Local => "local".to_string(),
-                SkillSource::Imported => "imported".to_string(),
-            },
-            version: skill.version.clone(),
-        })
+            .map(|skill| CloudSyncSkill {
+                id: skill.id.clone(),
+                name: skill.name.clone(),
+                source: match skill.source {
+                    SkillSource::Local => "local".to_string(),
+                    SkillSource::Imported => "imported".to_string(),
+                    SkillSource::Marketplace => "marketplace".to_string(),
+                    SkillSource::Vault => "vault".to_string(),
+                },
+                version: skill.version.clone(),
+            })
         .collect();
 
     let updated_at = SystemTime::now()
