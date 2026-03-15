@@ -8,6 +8,7 @@ pub mod linker;
 pub mod marketplace;
 pub mod scanner;
 pub mod cloud_sync;
+pub mod vault;
 pub mod telemetry;
 pub mod updater;
 
