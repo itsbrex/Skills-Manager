@@ -129,7 +129,8 @@ export function Sidebar() {
       });
       return;
     }
-    if (parsed.protocol !== "skills-manager:" || parsed.host !== "auth" || parsed.pathname !== "/callback") {
+    const protocol = parsed.protocol.replace(":", "");
+    if (!["skills-manager", "skillsmanager"].includes(protocol) || parsed.host !== "auth" || parsed.pathname !== "/callback") {
       appendAuthDebugLog(
         `callback_rejected reason=unexpected_route protocol=${parsed.protocol} host=${parsed.host} path=${parsed.pathname}`,
       );

@@ -67,18 +67,20 @@ pub fn run() {
                         ));
                     }
                 }
-                match app.deep_link().is_registered("skills-manager") {
-                    Ok(is_registered) => {
-                        let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
-                            "setup: deep-link is_registered={} scheme=skills-manager",
-                            is_registered
-                        ));
-                    }
-                    Err(err) => {
-                        let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
-                            "setup: deep-link is_registered error={}",
-                            err
-                        ));
+                for scheme in ["skills-manager", "skillsmanager"] {
+                    match app.deep_link().is_registered(scheme) {
+                        Ok(is_registered) => {
+                            let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
+                                "setup: deep-link is_registered={} scheme={}",
+                                is_registered, scheme
+                            ));
+                        }
+                        Err(err) => {
+                            let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
+                                "setup: deep-link is_registered error={} scheme={}",
+                                err, scheme
+                            ));
+                        }
                     }
                 }
             }
