@@ -277,7 +277,7 @@ function useCloudSyncAgent(): CloudSyncContextValue {
   }, [authProfile?.user_id, performPull, runSyncTask]);
 
   useEffect(() => {
-    if (!authProfile || !autoSyncEnabled) {
+    if (!authProfile?.user_id || !autoSyncEnabled) {
       return;
     }
     if (autoSyncIntervalMs <= 0) {
@@ -297,7 +297,7 @@ function useCloudSyncAgent(): CloudSyncContextValue {
     }, autoSyncIntervalMs);
 
     return () => window.clearInterval(timer);
-  }, [authProfile, autoSyncEnabled, autoSyncIntervalMs, performPush, runSyncTask]);
+  }, [authProfile?.user_id, autoSyncEnabled, autoSyncIntervalMs, performPush, runSyncTask]);
 
   const manualSync = useCallback(async () => {
     await runSyncTask(async () => {

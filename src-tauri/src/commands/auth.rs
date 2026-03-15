@@ -9,7 +9,6 @@ use uuid::Uuid;
 use crate::models::auth::{AuthProfile, AuthSession};
 use crate::services::auth::{build_auth_start_url, generate_code_verifier, pkce_challenge};
 use crate::services::ConfigManager;
-use crate::services::secure_store::{token_store, AuthTokens};
 
 const DEFAULT_AUTH_API_BASE: &str = "https://skills-market-api.guardssl.info/api/v1";
 
@@ -66,26 +65,45 @@ struct AuthRefreshResponse {
     access_expires_at: Option<u64>,
 }
 
+async fn refresh_access_token(
+    client: &Client,
+    base_url: &str,
+    refresh_token: &str,
+) -> Result<String, String> {
+    let refresh_url = build_auth_api_url(base_url, "/auth/refresh")?;
+    let refresh_response = client
+        .post(refresh_url)
+        .header(CONTENT_TYPE, "application/json")
+        .header(ACCEPT, "application/json")
+        .json(&serde_json::json!({
+            "refresh_token": refresh_token,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to refresh auth token: {e}"))?;
+
+    if !refresh_response.status().is_success() {
+        return Err(format!(
+            "Auth refresh failed: HTTP {}",
+            refresh_response.status()
+        ));
+    }
+
+    let refresh_payload = refresh_response
+        .json::<AuthRefreshResponse>()
+        .await
+        .map_err(|e| format!("Failed to parse auth refresh response: {e}"))?;
+
+    Ok(refresh_payload.access_token)
+}
+
 #[derive(Debug, Serialize)]
 pub struct AuthStartResult {
     pub auth_url: String,
     pub state: String,
 }
 
-pub fn save_auth_session(mut session: AuthSession) -> Result<(), String> {
-    if let (Some(access), Some(refresh)) =
-        (session.access_token.clone(), session.refresh_token.clone())
-    {
-        token_store().save_tokens(
-            &session.provider,
-            AuthTokens {
-                access_token: access,
-                refresh_token: refresh,
-            },
-        )?;
-        session.access_token = None;
-        session.refresh_token = None;
-    }
+pub fn save_auth_session(session: AuthSession) -> Result<(), String> {
     let manager = ConfigManager::new();
     let mut config = manager.load()?;
     config.auth_session = Some(session);
@@ -240,73 +258,39 @@ pub async fn get_auth_profile() -> Result<Option<AuthMeResponse>, String> {
         return Ok(None);
     };
 
-    let provider = session.provider.clone();
-    let mut tokens = token_store().load_tokens(&provider)?;
-    if tokens.is_none() {
-        if let (Some(access), Some(refresh)) =
-            (session.access_token.clone(), session.refresh_token.clone())
-        {
-            token_store().save_tokens(
-                &provider,
-                AuthTokens {
-                    access_token: access.clone(),
-                    refresh_token: refresh.clone(),
-                },
-            )?;
-            tokens = Some(AuthTokens {
-                access_token: access,
-                refresh_token: refresh,
-            });
-            session.access_token = None;
-            session.refresh_token = None;
-            config.auth_session = Some(session.clone());
-            manager.save(&config)?;
-        } else {
-            config.auth_session = None;
-            manager.save(&config)?;
-            return Ok(None);
-        }
-    }
-
-    let tokens = tokens.expect("tokens resolved");
     let client = Client::new();
     let base_url = auth_api_base_url();
-    match fetch_auth_me(&client, &base_url, &tokens.access_token).await {
+
+    let access_token = match session.access_token.clone() {
+        Some(token) => token,
+        None => {
+            let Some(refresh_token) = session.refresh_token.clone() else {
+                config.auth_session = None;
+                manager.save(&config)?;
+                return Ok(None);
+            };
+            let new_access = refresh_access_token(&client, &base_url, &refresh_token).await?;
+            session.access_token = Some(new_access.clone());
+            config.auth_session = Some(session.clone());
+            manager.save(&config)?;
+            new_access
+        }
+    };
+
+    match fetch_auth_me(&client, &base_url, &access_token).await {
         Ok(profile) => Ok(Some(profile)),
         Err(AuthApiError::Unauthorized) => {
-            let refresh_url = build_auth_api_url(&base_url, "/auth/refresh")?;
-            let refresh_response = client
-                .post(refresh_url)
-                .header(CONTENT_TYPE, "application/json")
-                .header(ACCEPT, "application/json")
-                .json(&serde_json::json!({
-                    "refresh_token": tokens.refresh_token,
-                }))
-                .send()
-                .await
-                .map_err(|e| format!("Failed to refresh auth token: {e}"))?;
+            let Some(refresh_token) = session.refresh_token.clone() else {
+                config.auth_session = None;
+                manager.save(&config)?;
+                return Ok(None);
+            };
+            let new_access = refresh_access_token(&client, &base_url, &refresh_token).await?;
+            session.access_token = Some(new_access.clone());
+            config.auth_session = Some(session.clone());
+            manager.save(&config)?;
 
-            if !refresh_response.status().is_success() {
-                return Err(format!(
-                    "Auth refresh failed: HTTP {}",
-                    refresh_response.status()
-                ));
-            }
-
-            let refresh_payload = refresh_response
-                .json::<AuthRefreshResponse>()
-                .await
-                .map_err(|e| format!("Failed to parse auth refresh response: {e}"))?;
-
-            token_store().save_tokens(
-                &provider,
-                AuthTokens {
-                    access_token: refresh_payload.access_token.clone(),
-                    refresh_token: tokens.refresh_token,
-                },
-            )?;
-
-            let profile = fetch_auth_me(&client, &base_url, &refresh_payload.access_token)
+            let profile = fetch_auth_me(&client, &base_url, &new_access)
                 .await
                 .map_err(|e| e.to_string())?;
             Ok(Some(profile))
@@ -323,11 +307,7 @@ pub async fn logout_auth() -> Result<(), String> {
         return Ok(());
     };
 
-    let provider = session.provider.clone();
-    let refresh_token = token_store()
-        .load_tokens(&provider)?
-        .map(|tokens| tokens.refresh_token)
-        .or(session.refresh_token.clone());
+    let refresh_token = session.refresh_token.clone();
 
     if refresh_token.is_none() {
         config.auth_session = None;
@@ -353,7 +333,6 @@ pub async fn logout_auth() -> Result<(), String> {
         return Err(format!("Auth logout failed: HTTP {}", response.status()));
     }
 
-    token_store().clear_tokens(&provider)?;
     config.auth_session = None;
     manager.save(&config)
 }
@@ -409,15 +388,11 @@ async fn fetch_auth_me(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::secure_store::TokenStore;
     use mockito::Matcher;
 
     #[test]
     fn auth_session_persists_to_config() {
         crate::test_support::with_temp_home(|_| {
-            let store = crate::services::secure_store::MemoryTokenStore::default();
-            crate::services::secure_store::set_token_store_for_tests(store);
-
             let session = AuthSession {
                 provider: "github".to_string(),
                 access_token: Some("a".to_string()),
@@ -431,8 +406,8 @@ mod tests {
             let restored = ConfigManager::new().load().unwrap();
             let stored = restored.auth_session.unwrap();
             assert_eq!(stored.provider, "github");
-            assert!(stored.access_token.is_none());
-            assert!(stored.refresh_token.is_none());
+            assert_eq!(stored.access_token.as_deref(), Some("a"));
+            assert_eq!(stored.refresh_token.as_deref(), Some("r"));
         });
     }
 
@@ -464,9 +439,6 @@ mod tests {
     #[test]
     fn exchange_github_auth_saves_session_and_returns_profile() {
         crate::test_support::with_temp_home(|_| {
-            let store = crate::services::secure_store::MemoryTokenStore::default();
-            crate::services::secure_store::set_token_store_for_tests(store.clone());
-
             let mut server = mockito::Server::new();
             std::env::set_var(
                 "SKILLS_MARKET_API_BASE",
@@ -511,16 +483,9 @@ mod tests {
             let restored = ConfigManager::new().load().unwrap();
             let session = restored.auth_session.expect("auth session saved");
             assert_eq!(session.provider, "github");
-            assert!(session.access_token.is_none());
-            assert!(session.refresh_token.is_none());
+            assert_eq!(session.access_token.as_deref(), Some("at1"));
+            assert_eq!(session.refresh_token.as_deref(), Some("rt1"));
             assert_eq!(session.profile.username, "octo");
-
-            let tokens = store
-                .load_tokens("github")
-                .unwrap()
-                .expect("tokens stored");
-            assert_eq!(tokens.access_token, "at1");
-            assert_eq!(tokens.refresh_token, "rt1");
         });
     }
 
@@ -552,9 +517,6 @@ mod tests {
     #[test]
     fn exchange_google_auth_saves_session_and_returns_profile() {
         crate::test_support::with_temp_home(|_| {
-            let store = crate::services::secure_store::MemoryTokenStore::default();
-            crate::services::secure_store::set_token_store_for_tests(store.clone());
-
             let mut server = mockito::Server::new();
             std::env::set_var(
                 "SKILLS_MARKET_API_BASE",
@@ -599,25 +561,15 @@ mod tests {
             let restored = ConfigManager::new().load().unwrap();
             let session = restored.auth_session.expect("auth session saved");
             assert_eq!(session.provider, "google");
-            assert!(session.access_token.is_none());
-            assert!(session.refresh_token.is_none());
+            assert_eq!(session.access_token.as_deref(), Some("gat1"));
+            assert_eq!(session.refresh_token.as_deref(), Some("grt1"));
             assert_eq!(session.profile.username, "guser");
-
-            let tokens = store
-                .load_tokens("google")
-                .unwrap()
-                .expect("tokens stored");
-            assert_eq!(tokens.access_token, "gat1");
-            assert_eq!(tokens.refresh_token, "grt1");
         });
     }
 
     #[test]
-    fn auth_tokens_persist_to_secure_store() {
+    fn auth_tokens_persist_to_config() {
         crate::test_support::with_temp_home(|_| {
-            let store = crate::services::secure_store::MemoryTokenStore::default();
-            crate::services::secure_store::set_token_store_for_tests(store.clone());
-
             let session = AuthSession {
                 provider: "github".to_string(),
                 access_token: Some("at".to_string()),
@@ -631,21 +583,14 @@ mod tests {
 
             let restored = ConfigManager::new().load().unwrap();
             let stored = restored.auth_session.expect("auth session exists");
-            assert!(stored.access_token.is_none());
-            assert!(stored.refresh_token.is_none());
-
-            let tokens = store.load_tokens("github").unwrap().expect("tokens stored");
-            assert_eq!(tokens.access_token, "at");
-            assert_eq!(tokens.refresh_token, "rt");
+            assert_eq!(stored.access_token.as_deref(), Some("at"));
+            assert_eq!(stored.refresh_token.as_deref(), Some("rt"));
         });
     }
 
     #[test]
     fn logout_auth_clears_session() {
         crate::test_support::with_temp_home(|_| {
-            let store = crate::services::secure_store::MemoryTokenStore::default();
-            crate::services::secure_store::set_token_store_for_tests(store.clone());
-
             let mut server = mockito::Server::new();
             std::env::set_var(
                 "SKILLS_MARKET_API_BASE",
@@ -676,9 +621,6 @@ mod tests {
 
             let restored = ConfigManager::new().load().unwrap();
             assert!(restored.auth_session.is_none());
-
-            let tokens = store.load_tokens("github").unwrap();
-            assert!(tokens.is_none());
         });
     }
 

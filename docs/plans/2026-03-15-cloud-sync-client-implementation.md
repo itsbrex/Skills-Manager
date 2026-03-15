@@ -2,11 +2,11 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** 在 Skills Manager 客户端完成云同步闭环：安全存储 OAuth token、构建/应用同步 payload、自动同步与冲突处理。
+**Goal:** 在 Skills Manager 客户端完成云同步闭环：在本地配置中持久化 OAuth token（明文）、构建/应用同步 payload、自动同步与冲突处理。
 
-**Architecture:** 客户端通过 Tauri 命令调用 skills-market-api 的 `/auth/*` 与 `/sync/*` 接口；OAuth token 存入 OS Keychain，仅在内存中使用；同步 payload 由本地配置 + skills 扫描生成，并在本地保存 revision/hash 用于去抖与冲突检测。
+**Architecture:** 客户端通过 Tauri 命令调用 skills-market-api 的 `/auth/*` 与 `/sync/*` 接口；OAuth token 存入本地 `config.json`（明文持久化）；同步 payload 由本地配置 + skills 扫描生成，并在本地保存 revision/hash 用于去抖与冲突检测。
 
-**Tech Stack:** Tauri 2 (Rust), React + TypeScript, reqwest, keyring (OS Keychain), serde, mockito
+**Tech Stack:** Tauri 2 (Rust), React + TypeScript, reqwest, serde, mockito
 
 相关技能：@superpowers:executing-plans @superpowers:verification-before-completion
 
@@ -172,12 +172,9 @@ git commit -m "feat: add cloud sync state model"
 
 ---
 
-### Task 2: OAuth token 安全存储与迁移
+### Task 2: OAuth token 配置存储（明文）
 
 **Files:**
-- Modify: `/Users/yjw/code/projects/skills-manager/src-tauri/Cargo.toml`
-- Create: `/Users/yjw/code/projects/skills-manager/src-tauri/src/services/secure_store.rs`
-- Modify: `/Users/yjw/code/projects/skills-manager/src-tauri/src/services/mod.rs`
 - Modify: `/Users/yjw/code/projects/skills-manager/src-tauri/src/models/auth.rs`
 - Modify: `/Users/yjw/code/projects/skills-manager/src-tauri/src/models/config.rs`
 - Modify: `/Users/yjw/code/projects/skills-manager/src-tauri/src/commands/auth.rs`
@@ -189,11 +186,8 @@ git commit -m "feat: add cloud sync state model"
 
 ```rust
 #[test]
-fn auth_tokens_persist_to_secure_store() {
+fn auth_tokens_persist_to_config() {
     crate::test_support::with_temp_home(|_| {
-        let store = crate::services::secure_store::MemoryTokenStore::default();
-        crate::services::secure_store::set_token_store_for_tests(store.clone());
-
         let session = AuthSession {
             provider: "github".to_string(),
             access_token: Some("at".to_string()),
@@ -207,125 +201,21 @@ fn auth_tokens_persist_to_secure_store() {
 
         let restored = ConfigManager::new().load().unwrap();
         let stored = restored.auth_session.expect("auth session exists");
-        assert!(stored.access_token.is_none());
-        assert!(stored.refresh_token.is_none());
-
-        let tokens = store.load_tokens("github").unwrap().expect("tokens stored");
-        assert_eq!(tokens.access_token, "at");
-        assert_eq!(tokens.refresh_token, "rt");
+        assert_eq!(stored.access_token.as_deref(), Some("at"));
+        assert_eq!(stored.refresh_token.as_deref(), Some("rt"));
     });
 }
 ```
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/yjw/code/projects/skills-manager/src-tauri && cargo test auth_tokens_persist_to_secure_store -- --nocapture`
+Run: `cd /Users/yjw/code/projects/skills-manager/src-tauri && cargo test auth_tokens_persist_to_config -- --nocapture`
 
-Expected: FAIL（安全存储与可选 token 未实现）
+Expected: FAIL（token 尚未持久化到 config）
 
 **Step 3: Write minimal implementation**
 
-1) `Cargo.toml` 增加依赖：
-
-```toml
-keyring = "2"
-```
-
-2) 新增安全存储模块：
-
-```rust
-// src-tauri/src/services/secure_store.rs
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuthTokens {
-    pub access_token: String,
-    pub refresh_token: String,
-}
-
-pub trait TokenStore: Send + Sync {
-    fn save_tokens(&self, provider: &str, tokens: AuthTokens) -> Result<(), String>;
-    fn load_tokens(&self, provider: &str) -> Result<Option<AuthTokens>, String>;
-    fn clear_tokens(&self, provider: &str) -> Result<(), String>;
-}
-
-pub struct KeychainTokenStore;
-
-impl KeychainTokenStore {
-    fn entry(provider: &str) -> Result<keyring::Entry, String> {
-        keyring::Entry::new("skills-manager", &format!("auth:{provider}"))
-            .map_err(|e| format!("keyring init failed: {e}"))
-    }
-}
-
-impl TokenStore for KeychainTokenStore {
-    fn save_tokens(&self, provider: &str, tokens: AuthTokens) -> Result<(), String> {
-        let entry = Self::entry(provider)?;
-        let payload = serde_json::to_string(&tokens).map_err(|e| e.to_string())?;
-        entry.set_password(&payload).map_err(|e| format!("save keychain failed: {e}"))
-    }
-
-    fn load_tokens(&self, provider: &str) -> Result<Option<AuthTokens>, String> {
-        let entry = Self::entry(provider)?;
-        match entry.get_password() {
-            Ok(raw) => Ok(Some(serde_json::from_str(&raw).map_err(|e| e.to_string())?)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(err) => Err(format!("load keychain failed: {err}")),
-        }
-    }
-
-    fn clear_tokens(&self, provider: &str) -> Result<(), String> {
-        let entry = Self::entry(provider)?;
-        match entry.delete_password() {
-            Ok(_) => Ok(()),
-            Err(keyring::Error::NoEntry) => Ok(()),
-            Err(err) => Err(format!("clear keychain failed: {err}")),
-        }
-    }
-}
-
-#[derive(Default, Clone)]
-pub struct MemoryTokenStore {
-    inner: Arc<Mutex<HashMap<String, AuthTokens>>>,
-}
-
-impl TokenStore for MemoryTokenStore {
-    fn save_tokens(&self, provider: &str, tokens: AuthTokens) -> Result<(), String> {
-        self.inner.lock().map_err(|_| "lock".to_string())?.insert(provider.to_string(), tokens);
-        Ok(())
-    }
-
-    fn load_tokens(&self, provider: &str) -> Result<Option<AuthTokens>, String> {
-        Ok(self.inner.lock().map_err(|_| "lock".to_string())?.get(provider).cloned())
-    }
-
-    fn clear_tokens(&self, provider: &str) -> Result<(), String> {
-        self.inner.lock().map_err(|_| "lock".to_string())?.remove(provider);
-        Ok(())
-    }
-}
-
-static TOKEN_STORE: OnceLock<Arc<dyn TokenStore>> = OnceLock::new();
-static TEST_TOKEN_STORE: OnceLock<Arc<dyn TokenStore>> = OnceLock::new();
-
-pub fn token_store() -> Arc<dyn TokenStore> {
-    if let Some(store) = TEST_TOKEN_STORE.get() {
-        return store.clone();
-    }
-    TOKEN_STORE
-        .get_or_init(|| Arc::new(KeychainTokenStore))
-        .clone()
-}
-
-#[cfg(test)]
-pub fn set_token_store_for_tests<T: TokenStore + 'static>(store: T) {
-    let _ = TEST_TOKEN_STORE.set(Arc::new(store));
-}
-```
-
-3) 更新模型与保存逻辑：
+1) 更新模型与保存逻辑：
 
 ```rust
 // src-tauri/src/models/auth.rs
@@ -342,19 +232,7 @@ pub struct AuthSession {
 
 ```rust
 // src-tauri/src/commands/auth.rs (save_auth_session)
-use crate::services::secure_store::{token_store, AuthTokens};
-
-pub fn save_auth_session(mut session: AuthSession) -> Result<(), String> {
-    if let (Some(access), Some(refresh)) =
-        (session.access_token.clone(), session.refresh_token.clone())
-    {
-        token_store().save_tokens(
-            &session.provider,
-            AuthTokens { access_token: access, refresh_token: refresh },
-        )?;
-        session.access_token = None;
-        session.refresh_token = None;
-    }
+pub fn save_auth_session(session: AuthSession) -> Result<(), String> {
     let manager = ConfigManager::new();
     let mut config = manager.load()?;
     config.auth_session = Some(session);
@@ -362,9 +240,9 @@ pub fn save_auth_session(mut session: AuthSession) -> Result<(), String> {
 }
 ```
 
-4) `src-tauri/src/commands/auth.rs` 的 `get_auth_profile` / `logout_auth` / `exchange_*` 改为从 `token_store()` 读取/清除 token。
+2) `src-tauri/src/commands/auth.rs` 的 `get_auth_profile` / `logout_auth` / `exchange_*` 改为从 `config.auth_session` 读取/持久化 token（不使用安全存储）。
 
-5) `src/types/index.ts` 更新 `AuthSession`：
+3) `src/types/index.ts` 更新 `AuthSession`：
 
 ```ts
 export interface AuthSession {
@@ -377,22 +255,19 @@ export interface AuthSession {
 
 **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/yjw/code/projects/skills-manager/src-tauri && cargo test auth_tokens_persist_to_secure_store -- --nocapture`
+Run: `cd /Users/yjw/code/projects/skills-manager/src-tauri && cargo test auth_tokens_persist_to_config -- --nocapture`
 
 Expected: PASS
 
 **Step 5: Commit**
 
 ```bash
-git add /Users/yjw/code/projects/skills-manager/src-tauri/Cargo.toml \
-  /Users/yjw/code/projects/skills-manager/src-tauri/src/services/secure_store.rs \
-  /Users/yjw/code/projects/skills-manager/src-tauri/src/services/mod.rs \
-  /Users/yjw/code/projects/skills-manager/src-tauri/src/models/auth.rs \
+git add /Users/yjw/code/projects/skills-manager/src-tauri/src/models/auth.rs \
   /Users/yjw/code/projects/skills-manager/src-tauri/src/models/config.rs \
   /Users/yjw/code/projects/skills-manager/src-tauri/src/commands/auth.rs \
   /Users/yjw/code/projects/skills-manager/src/types/index.ts
 
-git commit -m "feat: store auth tokens in keychain"
+git commit -m "feat: store auth tokens in config"
 ```
 
 ---
@@ -559,18 +434,18 @@ fn cloud_sync_push_returns_conflict_payload() {
             )
             .create();
 
-        crate::services::secure_store::set_token_store_for_tests(
-            crate::services::secure_store::MemoryTokenStore::default(),
-        );
-        crate::services::secure_store::token_store()
-            .save_tokens(
-                "github",
-                crate::services::secure_store::AuthTokens {
-                    access_token: "at".to_string(),
-                    refresh_token: "rt".to_string(),
-                },
-            )
-            .unwrap();
+        let manager = ConfigManager::new();
+        let mut config = manager.load().unwrap();
+        config.auth_session = Some(AuthSession {
+            provider: "github".to_string(),
+            access_token: Some("at".to_string()),
+            refresh_token: Some("rt".to_string()),
+            profile: AuthProfile {
+                username: "octo".to_string(),
+                avatar_url: None,
+            },
+        });
+        manager.save(&config).unwrap();
 
         tauri::async_runtime::block_on(async {
             let result = cloud_sync_push().await.expect("push");
@@ -635,11 +510,10 @@ pub async fn sync_resolve(
 // src-tauri/src/commands/cloud_sync.rs
 use crate::models::cloud_sync::CloudSyncPayload;
 use crate::services::cloud_sync::{build_payload, sync_pull, sync_push, sync_resolve, CloudSyncPushResult};
-use crate::services::secure_store::{token_store, AuthTokens};
 use crate::services::{ConfigManager, ScannerService};
 
 #[tauri::command]
-pub async fn cloud_sync_pull() -> Result<CloudSyncSnapshot, String> { /* 使用 token_store + sync_pull */ }
+pub async fn cloud_sync_pull() -> Result<CloudSyncSnapshot, String> { /* 使用 config.auth_session + sync_pull */ }
 
 #[tauri::command]
 pub async fn cloud_sync_push() -> Result<CloudSyncPushResult, String> { /* 计算 hash 去抖 */ }

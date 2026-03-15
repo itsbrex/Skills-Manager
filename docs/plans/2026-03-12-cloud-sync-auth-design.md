@@ -28,7 +28,7 @@
 - 采用 OAuth PKCE + 自定义 URL Scheme 回调。
 - Workers 作为 OAuth Broker：存 client secret，完成 code 换 token，并签发自有会话 token。
 - D1 保存用户、身份绑定、会话与同步快照。
-- 客户端安全存储 token（Stronghold/Keychain）。
+- 客户端将 token 持久化到本地 `config.json`（明文）。
 - 同步使用“单用户单快照 + revision”策略，冲突时提示用户选择。
 
 ## 5. 认证流程（方案 A）
@@ -97,7 +97,7 @@
 
 - Settings 新增“账号/云同步”区块：登录、登出、同步状态、手动同步入口。
 - 处理 `skills-manager://auth/callback` 深链回调。
-- 增加安全存储 token（Stronghold 或 OS Keychain）。
+- 将 token 持久化到本地 `config.json`（明文）。
 - 增加后台同步引擎：检测技能/工具变化并触发 push。
 - 冲突弹窗 UI：对比本地/云端摘要并决策。
 
@@ -127,4 +127,3 @@
 - 自定义工具路径跨设备处理策略与 UX。
 - 是否保留历史快照数量与清理策略。
 - 设备级别管理（是否允许多设备强制登出）。
-

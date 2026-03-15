@@ -37,7 +37,7 @@
 
 ## 存储策略
 
-- MVP 阶段将 `access_token / refresh_token / provider` 持久化到本地配置（与现有 `github_token` 类似），后续可迁移到安全存储（Keychain/Stronghold）。
+- 当前将 `access_token / refresh_token / provider` 持久化到本地配置（明文，类似 `github_token`），不再依赖安全存储；如需提升安全性需另行实现。
 
 ## API 端点
 
