@@ -55,6 +55,17 @@ pub fn run() {
         .setup(|app| {
             #[cfg(desktop)]
             {
+                let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
+                    "setup: current_exe={}",
+                    std::env::current_exe()
+                        .ok()
+                        .map(|path| path.display().to_string())
+                        .unwrap_or_else(|| "unknown".to_string())
+                ));
+                let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
+                    "setup: argv={:?}",
+                    std::env::args().collect::<Vec<_>>()
+                ));
                 let _ = crate::commands::auth::append_auth_debug_log_line("setup: deep-link register_all start");
                 match app.deep_link().register_all() {
                     Ok(_) => {

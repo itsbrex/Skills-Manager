@@ -273,6 +273,7 @@ export function Sidebar() {
       console.info("OAuth auth_url:", result.auth_url);
       appendAuthDebugLog(`auth_start_success provider=github url=${result.auth_url} state=${result.state}`);
       await openUrl(result.auth_url);
+      appendAuthDebugLog("auth_start_open_url_ok provider=github");
     } catch (err) {
       console.warn("Failed to start github auth:", err);
       appendAuthDebugLog(`auth_start_failed provider=github error=${String(err)}`);
@@ -295,6 +296,7 @@ export function Sidebar() {
       console.info("OAuth auth_url:", result.auth_url);
       appendAuthDebugLog(`auth_start_success provider=google url=${result.auth_url} state=${result.state}`);
       await openUrl(result.auth_url);
+      appendAuthDebugLog("auth_start_open_url_ok provider=google");
     } catch (err) {
       console.warn("Failed to start google auth:", err);
       appendAuthDebugLog(`auth_start_failed provider=google error=${String(err)}`);
@@ -716,7 +718,13 @@ export function Sidebar() {
                       type="button"
                       onClick={() => {
                         appendAuthDebugLog("debug_test protocol=skills-manager");
-                        void openUrl("skills-manager://auth/callback?login_code=test&state=test");
+                        void openUrl("skills-manager://auth/callback?login_code=test&state=test")
+                          .then(() => {
+                            appendAuthDebugLog("debug_test_open_url_ok protocol=skills-manager");
+                          })
+                          .catch((err) => {
+                            appendAuthDebugLog(`debug_test_open_url_failed protocol=skills-manager error=${String(err)}`);
+                          });
                       }}
                       style={{
                         padding: "6px 8px",
@@ -734,7 +742,13 @@ export function Sidebar() {
                       type="button"
                       onClick={() => {
                         appendAuthDebugLog("debug_test protocol=skillsmanager");
-                        void openUrl("skillsmanager://auth/callback?login_code=test&state=test");
+                        void openUrl("skillsmanager://auth/callback?login_code=test&state=test")
+                          .then(() => {
+                            appendAuthDebugLog("debug_test_open_url_ok protocol=skillsmanager");
+                          })
+                          .catch((err) => {
+                            appendAuthDebugLog(`debug_test_open_url_failed protocol=skillsmanager error=${String(err)}`);
+                          });
                       }}
                       style={{
                         padding: "6px 8px",
