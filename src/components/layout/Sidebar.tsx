@@ -711,6 +711,44 @@ export function Sidebar() {
                       argv 时间: {authDebugArgvAt}
                     </div>
                   )}
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        appendAuthDebugLog("debug_test protocol=skills-manager");
+                        void openUrl("skills-manager://auth/callback?login_code=test&state=test");
+                      }}
+                      style={{
+                        padding: "6px 8px",
+                        fontSize: "11px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--border)",
+                        backgroundColor: "var(--background)",
+                        color: "var(--foreground)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      测试 skills-manager
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        appendAuthDebugLog("debug_test protocol=skillsmanager");
+                        void openUrl("skillsmanager://auth/callback?login_code=test&state=test");
+                      }}
+                      style={{
+                        padding: "6px 8px",
+                        fontSize: "11px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--border)",
+                        backgroundColor: "var(--background)",
+                        color: "var(--foreground)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      测试 skillsmanager
+                    </button>
+                  </div>
                 </div>
                 {import.meta.env.DEV && (
                   <div
