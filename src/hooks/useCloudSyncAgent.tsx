@@ -15,7 +15,14 @@ import type {
   CloudSyncPushResult,
   Skill,
 } from "@/types";
-import { cloudSyncPull, cloudSyncPush, cloudSyncResolve } from "@/services/cloudSync";
+import {
+  cloudSyncPull,
+  cloudSyncPush,
+  cloudSyncResolve,
+  installMarketplaceSkillByRef,
+  vaultDownload,
+} from "@/services/cloudSync";
+import { buildMissingSkillRestores } from "@/services/cloudSyncUtils";
 import { getAuthProfile, logoutAuth } from "@/services/auth";
 import {
   setAuthProfileSnapshot,
@@ -186,7 +193,43 @@ function useCloudSyncAgent(): CloudSyncContextValue {
       ...Object.keys(refreshed.custom_tools || {}),
     ]);
 
-    const skills = await invoke<Skill[]>("list_skills");
+    let skills = await invoke<Skill[]>("list_skills");
+    const restorePlan = buildMissingSkillRestores(payload.skills, skills);
+    const missingErrors: string[] = [];
+    if (restorePlan.length > 0) {
+      for (const restore of restorePlan) {
+        const missing = restore.skill;
+        try {
+          if (restore.type === "marketplace") {
+            const marketplace = missing.marketplace;
+            if (!marketplace) {
+              continue;
+            }
+            await installMarketplaceSkillByRef({
+              name: missing.name,
+              marketplace_source_id: marketplace.marketplace_source_id ?? undefined,
+              marketplace_skill_id:
+                marketplace.marketplace_skill_id ?? missing.id,
+              marketplace_skill_slug: marketplace.marketplace_skill_slug ?? undefined,
+              repo_url: marketplace.repo_url,
+              skill_path: marketplace.skill_path,
+              remote_revision: marketplace.remote_revision ?? undefined,
+            });
+            continue;
+          }
+          if (restore.type === "vault") {
+            const skillId = missing.vault?.skill_id ?? missing.id;
+            await vaultDownload(skillId);
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          missingErrors.push(`${missing.id}: ${message}`);
+        }
+      }
+
+      await invoke("refresh_skills");
+      skills = await invoke<Skill[]>("list_skills");
+    }
 
     for (const [toolId, toolState] of Object.entries(payload.tool_states)) {
       if (!toolIds.has(toolId)) {
@@ -211,6 +254,10 @@ function useCloudSyncAgent(): CloudSyncContextValue {
 
     await invoke("refresh_tools");
     await invoke("refresh_skills");
+
+    if (missingErrors.length > 0) {
+      throw new Error(`Restore failed: ${missingErrors.join("; ")}`);
+    }
   }, []);
 
   const runSyncTask = useCallback(async (task: () => Promise<void>) => {
@@ -254,9 +301,10 @@ function useCloudSyncAgent(): CloudSyncContextValue {
     setError(null);
     const snapshot = await cloudSyncPull();
     if (snapshot.payload) {
+      await applyCloudPayload(snapshot.payload);
       updateLastSynced();
     }
-  }, [updateLastSynced]);
+  }, [applyCloudPayload, updateLastSynced]);
 
   useEffect(() => {
     if (!authProfile?.user_id) {

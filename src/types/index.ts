@@ -6,7 +6,7 @@ export interface Skill {
   name: string;
   description: string | null;
   version: string;
-  source: "local" | "imported";
+  source: "local" | "imported" | "marketplace" | "vault";
   enabled: Record<string, boolean>;
   path: string;
 }
@@ -87,8 +87,29 @@ export interface CloudSyncState {
 export interface CloudSyncSkill {
   id: string;
   name: string;
-  source: string;
+  source: "local" | "imported" | "marketplace" | "vault";
   version: string;
+  marketplace?: CloudSyncMarketplaceMeta | null;
+  vault?: CloudSyncVaultMeta | null;
+}
+
+export interface CloudSyncMarketplaceMeta {
+  marketplace_source_id?: string | null;
+  marketplace_skill_id?: string | null;
+  marketplace_skill_slug?: string | null;
+  repo_url?: string | null;
+  skill_path?: string | null;
+  remote_revision?: string | null;
+}
+
+export interface CloudSyncVaultMeta {
+  provider?: string | null;
+  user_id?: string | null;
+  skill_id?: string | null;
+  version?: string | null;
+  hash?: string | null;
+  size?: number | null;
+  updated_at?: number | null;
 }
 
 export interface CloudSyncToolState {

@@ -24,7 +24,8 @@ pub use files::{read_directory_tree, read_file, write_file};
 pub use marketplace::{
     check_marketplace_updates_if_stale, fetch_marketplace_skill_descriptions,
     fetch_marketplace_skills, fetch_skill_file_content, fetch_skill_files, get_marketplace_sources,
-    install_marketplace_skill, sync_marketplace_installed_skills, toggle_marketplace_source,
+    install_marketplace_skill, install_marketplace_skill_by_ref, sync_marketplace_installed_skills,
+    toggle_marketplace_source,
 };
 pub use polls::{
     fetch_poll_results, fetch_polls, get_poll_client_state, save_poll_client_state,

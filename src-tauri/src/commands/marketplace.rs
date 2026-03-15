@@ -19,6 +19,17 @@ pub struct MarketplaceSkillDescriptionRequest {
     pub skill_path: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct MarketplaceSkillReference {
+    pub name: String,
+    pub marketplace_source_id: Option<String>,
+    pub marketplace_skill_id: Option<String>,
+    pub marketplace_skill_slug: Option<String>,
+    pub repo_url: Option<String>,
+    pub skill_path: Option<String>,
+    pub remote_revision: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PersistedMarketplaceUpdateCheckState {
     last_checked_at_unix_secs: u64,
@@ -49,6 +60,70 @@ fn normalize_source_filter(source_ids: Option<Vec<String>>) -> Option<Vec<String
     } else {
         Some(ids)
     }
+}
+
+fn build_marketplace_skill_from_reference(
+    reference: MarketplaceSkillReference,
+) -> Result<MarketplaceSkill, String> {
+    let repo_url = reference
+        .repo_url
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if repo_url.is_empty() {
+        return Err("repo_url is required".to_string());
+    }
+    let skill_path = reference
+        .skill_path
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if skill_path.is_empty() {
+        return Err("skill_path is required".to_string());
+    }
+    let source_id = reference
+        .marketplace_source_id
+        .unwrap_or_else(|| "marketplace".to_string());
+    let slug = reference
+        .marketplace_skill_slug
+        .clone()
+        .or_else(|| Some(skill_path.clone()));
+    let fallback_id = format!(
+        "{}-{}",
+        source_id,
+        slug.as_deref().unwrap_or(skill_path.as_str())
+    );
+    let name = reference.name.trim().to_string();
+    let name = if name.is_empty() {
+        slug.as_deref()
+            .and_then(|value| value.rsplit('/').next())
+            .unwrap_or("skill")
+            .to_string()
+    } else {
+        name
+    };
+
+    Ok(MarketplaceSkill {
+        id: reference
+            .marketplace_skill_id
+            .clone()
+            .unwrap_or(fallback_id),
+        slug,
+        name,
+        description: None,
+        author: None,
+        source_id: source_id.clone(),
+        source_name: source_id,
+        install_count: None,
+        install_url: None,
+        created_at: None,
+        repo_url: Some(repo_url),
+        skill_path: Some(skill_path),
+        external_url: None,
+        remote_revision: reference.remote_revision,
+        tags: Vec::new(),
+        install_status: InstallStatus::NotInstalled,
+    })
 }
 
 fn resolve_cache_source_scope(
@@ -328,6 +403,27 @@ pub async fn install_marketplace_skill(
 }
 
 #[tauri::command]
+pub async fn install_marketplace_skill_by_ref(
+    reference: MarketplaceSkillReference,
+    marketplace_cache: State<'_, MarketplaceCache>,
+    app_cache: State<'_, AppCache>,
+) -> Result<InstallResult, String> {
+    let manager = ConfigManager::new();
+    let config = manager.load()?;
+    let github_token = github_token_from_config(&config);
+
+    let skill = build_marketplace_skill_from_reference(reference)?;
+    let result =
+        MarketplaceService::install_skill(&skill, &config.skills_dir, github_token.as_deref())
+            .await?;
+
+    app_cache.invalidate_skills();
+    marketplace_cache.invalidate();
+
+    Ok(result)
+}
+
+#[tauri::command]
 pub async fn sync_marketplace_installed_skills(
     source_ids: Option<Vec<String>>,
     marketplace_cache: State<'_, MarketplaceCache>,
@@ -477,8 +573,10 @@ mod tests {
     use crate::test_support::with_temp_home;
 
     use super::{
-        load_last_update_check_time, persist_update_check_time, resolve_cache_source_scope,
-        should_run_marketplace_update_check, MARKETPLACE_UPDATE_CHECK_INTERVAL,
+        build_marketplace_skill_from_reference, load_last_update_check_time,
+        persist_update_check_time, resolve_cache_source_scope,
+        should_run_marketplace_update_check, MarketplaceSkillReference,
+        MARKETPLACE_UPDATE_CHECK_INTERVAL,
     };
 
     fn make_source(id: &str, enabled: bool) -> MarketplaceSource {
@@ -562,5 +660,21 @@ mod tests {
             Some(vec!["src_skills".to_string()]),
             "explicit filter should drop disabled source ids and deduplicate"
         );
+    }
+
+    #[test]
+    fn build_marketplace_skill_from_reference_requires_repo_url() {
+        let reference = MarketplaceSkillReference {
+            name: "S1".to_string(),
+            marketplace_source_id: Some("source-1".to_string()),
+            marketplace_skill_id: Some("source-1::s1".to_string()),
+            marketplace_skill_slug: Some("s1".to_string()),
+            repo_url: None,
+            skill_path: Some(".claude/skills/s1".to_string()),
+            remote_revision: None,
+        };
+
+        let err = build_marketplace_skill_from_reference(reference).unwrap_err();
+        assert!(err.contains("repo_url"));
     }
 }
