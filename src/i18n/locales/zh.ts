@@ -239,6 +239,11 @@ export const zh = {
     accountDesc: "登录后可跨设备同步设置",
     cloudSync: "云同步",
     cloudSyncDesc: "同步状态与手动控制",
+    cloudSyncAuto: "自动云同步",
+    cloudSyncAutoDesc: "定时将本地配置推送到云端",
+    cloudSyncInterval: "同步间隔",
+    cloudSyncIntervalDesc: "设置自动同步的时间间隔",
+    cloudSyncIntervalOption: "{minutes} 分钟",
     // Marketplace
     marketplace: "市场",
     marketplaceEmpty: "暂无可配置的市场源",

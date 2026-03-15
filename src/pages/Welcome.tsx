@@ -9,6 +9,7 @@ import { SunIcon, MoonIcon, MonitorIcon } from "@/components/icons/theme-icons";
 import { useTranslation } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
 import { AppConfig } from "@/types";
+import { setCloudSyncSettingsSnapshot } from "@/services/cloudSyncSettingsStore";
 
 type WizardStep = "welcome" | "tools" | "directory" | "import";
 
@@ -38,6 +39,13 @@ export function Welcome({ onComplete }: WelcomeProps) {
           },
         };
         await invoke("save_config", { config: updatedConfig });
+        const prefs = updatedConfig.preferences;
+        if (prefs) {
+          setCloudSyncSettingsSnapshot({
+            auto: prefs.cloud_sync_auto,
+            intervalMinutes: prefs.cloud_sync_interval_minutes,
+          });
+        }
       } catch (error) {
         // Error handled silently - preferences will be saved on next attempt
       }
@@ -228,4 +236,3 @@ function LangButton({ active, onClick, label }: { active: boolean; onClick: () =
     </button>
   );
 }
-

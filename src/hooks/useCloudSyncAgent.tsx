@@ -21,6 +21,11 @@ import {
   setAuthProfileSnapshot,
   subscribeAuthProfile,
 } from "@/services/authProfileStore";
+import {
+  getCloudSyncSettingsSnapshot,
+  setCloudSyncSettingsSnapshot,
+  subscribeCloudSyncSettings,
+} from "@/services/cloudSyncSettingsStore";
 
 type CloudSyncConflict = {
   revision: number;
@@ -43,7 +48,6 @@ type CloudSyncContextValue = {
 };
 
 const CloudSyncContext = createContext<CloudSyncContextValue | null>(null);
-const AUTO_SYNC_INTERVAL_MS = 30_000;
 const AUTH_REFRESH_INTERVAL_MS = 30_000;
 
 export function CloudSyncProvider({ children }: { children: React.ReactNode }) {
@@ -65,6 +69,11 @@ export function useCloudSync() {
 
 function useCloudSyncAgent(): CloudSyncContextValue {
   const [authProfile, setAuthProfile] = useState<AuthMeResponse | null>(null);
+  const initialSettings = getCloudSyncSettingsSnapshot();
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(initialSettings.auto);
+  const [autoSyncIntervalMs, setAutoSyncIntervalMs] = useState(
+    initialSettings.intervalMinutes * 60_000,
+  );
   const [syncing, setSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [conflict, setConflict] = useState<CloudSyncConflict | null>(null);
@@ -77,6 +86,34 @@ function useCloudSyncAgent(): CloudSyncContextValue {
   useEffect(() => {
     conflictRef.current = conflict;
   }, [conflict]);
+
+  useEffect(() => {
+    invoke<AppConfig>("get_config")
+      .then((config) => {
+        const prefs = config.preferences;
+        if (!prefs) {
+          return;
+        }
+        setCloudSyncSettingsSnapshot({
+          auto: prefs.cloud_sync_auto,
+          intervalMinutes: prefs.cloud_sync_interval_minutes,
+        });
+      })
+      .catch(() => {
+        // ignore config load failures for auto sync settings
+      });
+  }, []);
+
+  useEffect(() => {
+    return subscribeCloudSyncSettings((settings) => {
+      setAutoSyncEnabled(settings.auto);
+      const normalizedMinutes =
+        Number.isFinite(settings.intervalMinutes) && settings.intervalMinutes > 0
+          ? settings.intervalMinutes
+          : 10;
+      setAutoSyncIntervalMs(normalizedMinutes * 60_000);
+    });
+  }, []);
 
   const refreshAuthProfile = useCallback(async () => {
     try {
@@ -240,7 +277,10 @@ function useCloudSyncAgent(): CloudSyncContextValue {
   }, [authProfile?.user_id, performPull, runSyncTask]);
 
   useEffect(() => {
-    if (!authProfile) {
+    if (!authProfile || !autoSyncEnabled) {
+      return;
+    }
+    if (autoSyncIntervalMs <= 0) {
       return;
     }
     const timer = window.setInterval(() => {
@@ -254,10 +294,10 @@ function useCloudSyncAgent(): CloudSyncContextValue {
           setError(err instanceof Error ? err.message : String(err));
         }
       });
-    }, AUTO_SYNC_INTERVAL_MS);
+    }, autoSyncIntervalMs);
 
     return () => window.clearInterval(timer);
-  }, [authProfile, performPush, runSyncTask]);
+  }, [authProfile, autoSyncEnabled, autoSyncIntervalMs, performPush, runSyncTask]);
 
   const manualSync = useCallback(async () => {
     await runSyncTask(async () => {
