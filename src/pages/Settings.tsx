@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { AppConfig, UserPreferences, DetectedEditor, UpdateInfo, MarketplaceSource } from "@/types";
+import { defaultPreferences } from "@/constants/preferences";
 import { startGithubAuth, startGoogleAuth, clearPendingAuthProvider, setPendingAuthProvider } from "@/services/auth";
 import { checkUpdate } from "@/services/updater";
 import { useTranslation, Language } from "@/i18n";
@@ -17,22 +18,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { SunIcon, MoonIcon, MonitorIcon } from "@/components/icons/theme-icons";
-
-// Default preferences
-const defaultPreferences: UserPreferences = {
-  theme: "system",
-  language: "en",
-  auto_sync: true,
-  sync_on_save: true,
-  cloud_sync_auto: true,
-  cloud_sync_interval_minutes: 10,
-  default_editor: "system",
-  tab_size: 2,
-  show_sync_notifications: true,
-  remove_links_when_disabling_tool: false,
-  github_token: "",
-};
-
 
 export function Settings() {
   const { t, language, setLanguage } = useTranslation();
