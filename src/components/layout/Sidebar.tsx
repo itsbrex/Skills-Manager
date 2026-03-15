@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "@/i18n";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { checkUpdate } from "@/services/updater";
@@ -85,8 +87,16 @@ export function Sidebar() {
     loginCode?: string | null;
     state?: string | null;
   } | null>(null);
+  const [authDebugArgv, setAuthDebugArgv] = useState<string[] | null>(null);
+  const [authDebugArgvAt, setAuthDebugArgvAt] = useState<string | null>(null);
   const [pendingProvider, setPendingProvider] = useState<"github" | "google" | null>(null);
   const [devCallbackUrl, setDevCallbackUrl] = useState("");
+
+  const appendAuthDebugLog = useCallback((message: string) => {
+    void invoke("append_auth_debug_log", { entry: message }).catch(() => {
+      // ignore debug log failures
+    });
+  }, []);
 
   useEffect(() => {
     checkUpdate().then((info) => {
@@ -100,6 +110,7 @@ export function Sidebar() {
 
   const handleAuthCallback = useCallback(async (url: string) => {
     const receivedAt = new Date().toISOString();
+    appendAuthDebugLog(`callback_received url=${url}`);
     setAuthDebug({
       url,
       receivedAt,
@@ -109,6 +120,7 @@ export function Sidebar() {
     try {
       parsed = new URL(url);
     } catch {
+      appendAuthDebugLog("callback_rejected reason=invalid_url");
       setAuthDebug({
         url,
         receivedAt,
@@ -118,6 +130,9 @@ export function Sidebar() {
       return;
     }
     if (parsed.protocol !== "skills-manager:" || parsed.host !== "auth" || parsed.pathname !== "/callback") {
+      appendAuthDebugLog(
+        `callback_rejected reason=unexpected_route protocol=${parsed.protocol} host=${parsed.host} path=${parsed.pathname}`,
+      );
       setAuthDebug({
         url,
         receivedAt,
@@ -132,6 +147,7 @@ export function Sidebar() {
     const loginCode = parsed.searchParams.get("login_code");
     const state = parsed.searchParams.get("state");
     if (!loginCode || !state) {
+      appendAuthDebugLog("callback_rejected reason=missing_login_code_or_state");
       setAuthDebug({
         url,
         receivedAt,
@@ -159,9 +175,11 @@ export function Sidebar() {
     try {
       const resolvedProvider = pendingProvider ?? takePendingAuthProvider();
       const exchangeAuth = resolvedProvider === "google" ? exchangeGoogleAuth : exchangeGithubAuth;
+      appendAuthDebugLog(`exchange_start provider=${resolvedProvider ?? "unknown"} state=${state}`);
       const profile = await exchangeAuth(loginCode, state);
       setAuthProfileSnapshot(profile);
       setAuthModalOpen(false);
+      appendAuthDebugLog(`exchange_success provider=${resolvedProvider ?? "unknown"}`);
       setAuthDebug({
         ...baseDebug,
         status: "processed",
@@ -169,6 +187,7 @@ export function Sidebar() {
     } catch (err) {
       console.warn("Failed to exchange auth code:", err);
       setAuthError(t("auth.loginFailed"));
+      appendAuthDebugLog(`exchange_failed error=${String(err)}`);
       setAuthDebug({
         ...baseDebug,
         status: "failed",
@@ -179,7 +198,7 @@ export function Sidebar() {
       setPendingProvider(null);
       clearPendingAuthProvider();
     }
-  }, [pendingProvider, t]);
+  }, [appendAuthDebugLog, pendingProvider, t]);
 
   const handleDevCallbackSubmit = useCallback(async () => {
     if (!devCallbackUrl.trim()) {
@@ -219,6 +238,23 @@ export function Sidebar() {
     };
   }, [handleAuthCallback]);
 
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    listen<string[]>("auth:deep-link-argv", (event) => {
+      setAuthDebugArgv(event.payload);
+      setAuthDebugArgvAt(new Date().toISOString());
+    })
+      .then((stop) => {
+        unlisten = stop;
+      })
+      .catch(() => {
+        // ignore listen failures
+      });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
   const handleUpdateClick = async () => {
     if (updateInfo?.download_url) {
       await openUrl(updateInfo.download_url);
@@ -230,38 +266,44 @@ export function Sidebar() {
     setAuthError(null);
     setPendingProvider("github");
     setPendingAuthProvider("github");
+    appendAuthDebugLog("auth_start provider=github");
     try {
       const result = await startGithubAuth();
       console.info("OAuth auth_url:", result.auth_url);
+      appendAuthDebugLog(`auth_start_success provider=github url=${result.auth_url} state=${result.state}`);
       await openUrl(result.auth_url);
     } catch (err) {
       console.warn("Failed to start github auth:", err);
+      appendAuthDebugLog(`auth_start_failed provider=github error=${String(err)}`);
       setAuthError(t("auth.loginFailed"));
       setPendingProvider(null);
       clearPendingAuthProvider();
     } finally {
       setAuthLoading(false);
     }
-  }, [t]);
+  }, [appendAuthDebugLog, t]);
 
   const handleStartGoogleAuth = useCallback(async () => {
     setAuthLoading(true);
     setAuthError(null);
     setPendingProvider("google");
     setPendingAuthProvider("google");
+    appendAuthDebugLog("auth_start provider=google");
     try {
       const result = await startGoogleAuth();
       console.info("OAuth auth_url:", result.auth_url);
+      appendAuthDebugLog(`auth_start_success provider=google url=${result.auth_url} state=${result.state}`);
       await openUrl(result.auth_url);
     } catch (err) {
       console.warn("Failed to start google auth:", err);
+      appendAuthDebugLog(`auth_start_failed provider=google error=${String(err)}`);
       setAuthError(t("auth.loginFailed"));
       setPendingProvider(null);
       clearPendingAuthProvider();
     } finally {
       setAuthLoading(false);
     }
-  }, [t]);
+  }, [appendAuthDebugLog, t]);
 
   const handleLogout = useCallback(async () => {
     setAuthLoading(true);
@@ -628,37 +670,47 @@ export function Sidebar() {
                 >
                   {authLoading ? t("auth.loggingIn") : t("auth.googleLogin")}
                 </button>
-                {authDebug && (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
-                      padding: "10px",
-                      borderRadius: "10px",
-                      border: "1px dashed var(--border)",
-                      backgroundColor: "var(--secondary)",
-                    }}
-                  >
-                    <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--muted-foreground)" }}>
-                      OAuth 回调调试
-                    </div>
-                    <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
-                      时间: {authDebug.receivedAt}
-                    </div>
-                    <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
-                      状态: {authDebug.status}
-                    </div>
-                    {authDebug.reason && (
-                      <div style={{ fontSize: "11px", color: "#dc2626" }}>
-                        原因: {authDebug.reason}
-                      </div>
-                    )}
-                    <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
-                      URL: {authDebug.url}
-                    </div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
+                    padding: "10px",
+                    borderRadius: "10px",
+                    border: "1px dashed var(--border)",
+                    backgroundColor: "var(--secondary)",
+                  }}
+                >
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--muted-foreground)" }}>
+                    OAuth 回调调试（临时）
                   </div>
-                )}
+                  <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+                    回调状态: {authDebug ? authDebug.status : "未收到回调"}
+                  </div>
+                  {authDebug?.reason && (
+                    <div style={{ fontSize: "11px", color: "#dc2626" }}>
+                      原因: {authDebug.reason}
+                    </div>
+                  )}
+                  {authDebug ? (
+                    <>
+                      <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+                        时间: {authDebug.receivedAt}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+                        URL: {authDebug.url}
+                      </div>
+                    </>
+                  ) : null}
+                  <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+                    单实例 argv: {authDebugArgv ? authDebugArgv.join(" ") : "无"}
+                  </div>
+                  {authDebugArgvAt && (
+                    <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+                      argv 时间: {authDebugArgvAt}
+                    </div>
+                  )}
+                </div>
                 {import.meta.env.DEV && (
                   <div
                     style={{

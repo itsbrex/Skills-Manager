@@ -13,8 +13,8 @@ pub mod tools;
 pub mod updater;
 
 pub use auth::{
-    exchange_github_auth, exchange_google_auth, get_auth_profile, logout_auth, start_github_auth,
-    start_google_auth,
+    append_auth_debug_log, exchange_github_auth, exchange_google_auth, get_auth_profile, logout_auth,
+    start_github_auth, start_google_auth,
 };
 pub use cloud_sync::{cloud_sync_pull, cloud_sync_push, cloud_sync_resolve};
 pub use config::{get_config, is_initialized, mark_initialized, save_config};

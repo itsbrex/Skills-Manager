@@ -5,6 +5,7 @@ mod services;
 mod test_support;
 
 use commands::{
+    append_auth_debug_log,
     check_marketplace_updates_if_stale, check_sync_status, check_update, cloud_sync_pull,
     cloud_sync_push, cloud_sync_resolve, create_custom_tool, create_skill, delete_custom_tool,
     delete_skill, detect_available_editors, detect_tools, disable_skill, enable_skill,
@@ -23,16 +24,25 @@ use commands::{
     toggle_marketplace_source, update_custom_tool, update_tool_paths, write_file,
 };
 use services::{AppCache, MarketplaceCache};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, mut argv, _cwd| {
+            let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
+                "single_instance argv(raw): {:?}",
+                argv
+            ));
             if matches!(argv.first(), Some(arg) if arg.contains("://")) {
                 argv.insert(0, String::new());
             }
+            let _ = crate::commands::auth::append_auth_debug_log_line(&format!(
+                "single_instance argv(norm): {:?}",
+                argv
+            ));
+            let _ = app.emit("auth:deep-link-argv", argv.clone());
             app.deep_link().handle_cli_arguments(argv.into_iter());
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
@@ -93,6 +103,7 @@ pub fn run() {
             submit_poll_vote,
             get_poll_client_state,
             save_poll_client_state,
+            append_auth_debug_log,
             start_github_auth,
             exchange_github_auth,
             start_google_auth,
