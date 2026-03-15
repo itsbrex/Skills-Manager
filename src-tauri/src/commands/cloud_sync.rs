@@ -25,6 +25,45 @@ fn now_timestamp() -> i64 {
 fn payload_hash(payload: &CloudSyncPayload) -> Result<String, String> {
     let mut skills = payload.skills.clone();
     skills.sort_by(|a, b| a.id.cmp(&b.id));
+    for skill in &mut skills {
+        if let Some(meta) = skill.marketplace.as_mut() {
+            if let Some(value) = meta.marketplace_source_id.as_mut() {
+                *value = value.trim().to_string();
+            }
+            if let Some(value) = meta.marketplace_skill_id.as_mut() {
+                *value = value.trim().to_string();
+            }
+            if let Some(value) = meta.marketplace_skill_slug.as_mut() {
+                *value = value.trim().to_string();
+            }
+            if let Some(value) = meta.repo_url.as_mut() {
+                *value = value.trim().to_string();
+            }
+            if let Some(value) = meta.skill_path.as_mut() {
+                *value = value.trim().to_string();
+            }
+            if let Some(value) = meta.remote_revision.as_mut() {
+                *value = value.trim().to_string();
+            }
+        }
+        if let Some(meta) = skill.vault.as_mut() {
+            if let Some(value) = meta.provider.as_mut() {
+                *value = value.trim().to_string();
+            }
+            if let Some(value) = meta.user_id.as_mut() {
+                *value = value.trim().to_string();
+            }
+            if let Some(value) = meta.skill_id.as_mut() {
+                *value = value.trim().to_string();
+            }
+            if let Some(value) = meta.version.as_mut() {
+                *value = value.trim().to_string();
+            }
+            if let Some(value) = meta.hash.as_mut() {
+                *value = value.trim().to_string();
+            }
+        }
+    }
 
     let mut custom_tools = payload.custom_tools.clone();
     custom_tools.sort_by(|a, b| a.id.cmp(&b.id));
@@ -256,12 +295,16 @@ mod tests {
                     name: "S1".to_string(),
                     source: "local".to_string(),
                     version: "1.0".to_string(),
+                    marketplace: None,
+                    vault: None,
                 },
                 CloudSyncSkill {
                     id: "s2".to_string(),
                     name: "S2".to_string(),
                     source: "local".to_string(),
                     version: "1.0".to_string(),
+                    marketplace: None,
+                    vault: None,
                 },
             ],
             tool_states: HashMap::from([
@@ -308,12 +351,16 @@ mod tests {
                     name: "S2".to_string(),
                     source: "local".to_string(),
                     version: "1.0".to_string(),
+                    marketplace: None,
+                    vault: None,
                 },
                 CloudSyncSkill {
                     id: "s1".to_string(),
                     name: "S1".to_string(),
                     source: "local".to_string(),
                     version: "1.0".to_string(),
+                    marketplace: None,
+                    vault: None,
                 },
             ],
             tool_states: HashMap::from([
@@ -353,5 +400,39 @@ mod tests {
         let hash1 = payload_hash(&payload).expect("hash payload");
         let hash2 = payload_hash(&payload_reordered).expect("hash payload reordered");
         assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn payload_hash_changes_when_marketplace_meta_changes() {
+        let payload = CloudSyncPayload {
+            version: 1,
+            updated_at: 100,
+            device_id: "d1".to_string(),
+            skills: vec![CloudSyncSkill {
+                id: "s1".to_string(),
+                name: "S1".to_string(),
+                source: "marketplace".to_string(),
+                version: "1.0".to_string(),
+                marketplace: Some(crate::models::cloud_sync::CloudSyncMarketplaceMeta {
+                    marketplace_source_id: Some("source-1".to_string()),
+                    marketplace_skill_id: Some("mkt-1".to_string()),
+                    marketplace_skill_slug: Some("slug-1".to_string()),
+                    repo_url: Some("https://github.com/acme/repo".to_string()),
+                    skill_path: Some(".claude/skills/s1".to_string()),
+                    remote_revision: Some("rev-1".to_string()),
+                }),
+                vault: None,
+            }],
+            tool_states: HashMap::new(),
+            custom_tools: Vec::new(),
+        };
+
+        let hash1 = payload_hash(&payload).expect("hash payload");
+        let mut updated = payload.clone();
+        if let Some(meta) = updated.skills[0].marketplace.as_mut() {
+            meta.marketplace_skill_id = Some("mkt-2".to_string());
+        }
+        let hash2 = payload_hash(&updated).expect("hash payload updated");
+        assert_ne!(hash1, hash2);
     }
 }

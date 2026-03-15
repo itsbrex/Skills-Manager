@@ -28,6 +28,31 @@ pub struct CloudSyncSkill {
     pub name: String,
     pub source: String,
     pub version: String,
+    #[serde(default)]
+    pub marketplace: Option<CloudSyncMarketplaceMeta>,
+    #[serde(default)]
+    pub vault: Option<CloudSyncVaultMeta>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudSyncMarketplaceMeta {
+    pub marketplace_source_id: Option<String>,
+    pub marketplace_skill_id: Option<String>,
+    pub marketplace_skill_slug: Option<String>,
+    pub repo_url: Option<String>,
+    pub skill_path: Option<String>,
+    pub remote_revision: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CloudSyncVaultMeta {
+    pub provider: Option<String>,
+    pub user_id: Option<String>,
+    pub skill_id: Option<String>,
+    pub version: Option<String>,
+    pub hash: Option<String>,
+    pub size: Option<u64>,
+    pub updated_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

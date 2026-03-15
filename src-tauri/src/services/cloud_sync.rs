@@ -1,5 +1,6 @@
 use crate::models::cloud_sync::{
-    CloudSyncCustomTool, CloudSyncPayload, CloudSyncSkill, CloudSyncToolState,
+    CloudSyncCustomTool, CloudSyncMarketplaceMeta, CloudSyncPayload, CloudSyncSkill,
+    CloudSyncToolState, CloudSyncVaultMeta,
 };
 use crate::models::{AppConfig, Skill, SkillSource};
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
@@ -62,17 +63,34 @@ pub fn build_payload(config: &AppConfig, skills: &[Skill]) -> CloudSyncPayload {
 
     let skills_payload = skills
         .iter()
-            .map(|skill| CloudSyncSkill {
-                id: skill.id.clone(),
-                name: skill.name.clone(),
-                source: match skill.source {
-                    SkillSource::Local => "local".to_string(),
-                    SkillSource::Imported => "imported".to_string(),
-                    SkillSource::Marketplace => "marketplace".to_string(),
-                    SkillSource::Vault => "vault".to_string(),
-                },
-                version: skill.version.clone(),
-            })
+        .map(|skill| CloudSyncSkill {
+            id: skill.id.clone(),
+            name: skill.name.clone(),
+            source: match skill.source {
+                SkillSource::Local => "local".to_string(),
+                SkillSource::Imported => "imported".to_string(),
+                SkillSource::Marketplace => "marketplace".to_string(),
+                SkillSource::Vault => "vault".to_string(),
+            },
+            version: skill.version.clone(),
+            marketplace: skill.marketplace_meta.as_ref().map(|meta| CloudSyncMarketplaceMeta {
+                marketplace_source_id: meta.marketplace_source_id.clone(),
+                marketplace_skill_id: meta.marketplace_skill_id.clone(),
+                marketplace_skill_slug: meta.marketplace_skill_slug.clone(),
+                repo_url: meta.repo_url.clone(),
+                skill_path: meta.skill_path.clone(),
+                remote_revision: meta.remote_revision.clone(),
+            }),
+            vault: skill.vault_meta.as_ref().map(|meta| CloudSyncVaultMeta {
+                provider: meta.provider.clone(),
+                user_id: meta.user_id.clone(),
+                skill_id: meta.skill_id.clone(),
+                version: meta.version.clone(),
+                hash: meta.hash.clone(),
+                size: meta.size,
+                updated_at: meta.updated_at,
+            }),
+        })
         .collect();
 
     let updated_at = SystemTime::now()
