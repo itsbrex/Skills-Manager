@@ -12,6 +12,7 @@ import wechatRewardCode from "@/assets/donation/wechat-reward-code.jpg";
 import alipayRewardCode from "@/assets/donation/alipay-reward-code.jpg";
 import { Toggle } from "@/components/ui/toggle";
 import { buildCloudSyncIntervalOptions } from "@/services/cloudSyncSettingsOptions";
+import { setCloudSyncSettingsSnapshot } from "@/services/cloudSyncSettingsStore";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
 import { ToastContainer, useToast } from "@/components/ui/toast";
@@ -145,6 +146,11 @@ export function Settings() {
 
     try {
       await invoke("save_config", { config });
+      const prefs = config.preferences || defaultPreferences;
+      setCloudSyncSettingsSnapshot({
+        auto: prefs.cloud_sync_auto,
+        intervalMinutes: prefs.cloud_sync_interval_minutes,
+      });
       setSaveSuccess(true);
       setTimeout(() => {
         setSaveSuccess(false);
