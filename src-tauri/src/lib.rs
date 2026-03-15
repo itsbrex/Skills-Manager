@@ -23,10 +23,22 @@ use commands::{
     toggle_marketplace_source, update_custom_tool, update_tool_paths, write_file,
 };
 use services::{AppCache, MarketplaceCache};
+use tauri::Manager;
+use tauri_plugin_deep_link::DeepLinkExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, mut argv, _cwd| {
+            if matches!(argv.first(), Some(arg) if arg.contains("://")) {
+                argv.insert(0, String::new());
+            }
+            app.deep_link().handle_cli_arguments(argv.into_iter());
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
