@@ -37,6 +37,8 @@ export interface UserPreferences {
   // Sync behavior
   auto_sync: boolean;
   sync_on_save: boolean;
+  cloud_sync_auto: boolean;
+  cloud_sync_interval_minutes: number;
 
   // Editor settings
   default_editor: string;

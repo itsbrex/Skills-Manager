@@ -15,6 +15,10 @@ pub struct UserPreferences {
     pub auto_sync: bool,
     #[serde(default = "default_true")]
     pub sync_on_save: bool,
+    #[serde(default = "default_true")]
+    pub cloud_sync_auto: bool,
+    #[serde(default = "default_cloud_sync_interval_minutes")]
+    pub cloud_sync_interval_minutes: u32,
     #[serde(default = "default_editor")]
     pub default_editor: String,
     #[serde(default = "default_tab_size")]
@@ -79,6 +83,9 @@ fn default_editor() -> String {
 fn default_tab_size() -> u8 {
     2
 }
+fn default_cloud_sync_interval_minutes() -> u32 {
+    10
+}
 fn default_true() -> bool {
     true
 }
@@ -115,6 +122,8 @@ impl Default for UserPreferences {
             language: default_language(),
             auto_sync: true,
             sync_on_save: true,
+            cloud_sync_auto: true,
+            cloud_sync_interval_minutes: default_cloud_sync_interval_minutes(),
             default_editor: default_editor(),
             tab_size: default_tab_size(),
             show_sync_notifications: true,
@@ -322,5 +331,19 @@ mod tests {
         let state = restored.cloud_sync.expect("cloud sync restored");
         assert_eq!(state.device_id, device_id);
         assert_eq!(state.last_revision, 0);
+    }
+
+    #[test]
+    fn cloud_sync_preferences_persist() {
+        let config = AppConfig::default();
+        let prefs = config.preferences.as_ref().expect("prefs");
+        assert!(prefs.cloud_sync_auto);
+        assert_eq!(prefs.cloud_sync_interval_minutes, 10);
+
+        let json = serde_json::to_string(&config).unwrap();
+        let restored: AppConfig = serde_json::from_str(&json).unwrap();
+        let restored_prefs = restored.preferences.as_ref().expect("prefs");
+        assert!(restored_prefs.cloud_sync_auto);
+        assert_eq!(restored_prefs.cloud_sync_interval_minutes, 10);
     }
 }
