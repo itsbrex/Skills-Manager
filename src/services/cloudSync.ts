@@ -4,6 +4,7 @@ import type {
   CloudSyncPushResult,
   CloudSyncSnapshot,
   InstallResult,
+  VaultBackupResult,
 } from "@/types";
 
 export async function cloudSyncPull(): Promise<CloudSyncSnapshot> {
@@ -36,4 +37,8 @@ export async function installMarketplaceSkillByRef(
 
 export async function vaultDownload(skillId: string): Promise<string> {
   return invoke<string>("vault_download", { skillId });
+}
+
+export async function vaultBackup(): Promise<VaultBackupResult> {
+  return invoke<VaultBackupResult>("vault_backup");
 }

@@ -20,9 +20,13 @@ import {
   cloudSyncPush,
   cloudSyncResolve,
   installMarketplaceSkillByRef,
+  vaultBackup,
   vaultDownload,
 } from "@/services/cloudSync";
-import { buildMissingSkillRestores } from "@/services/cloudSyncUtils";
+import {
+  buildMissingSkillRestores,
+  runVaultBackupThenPush,
+} from "@/services/cloudSyncUtils";
 import { getAuthProfile, logoutAuth } from "@/services/auth";
 import {
   setAuthProfileSnapshot,
@@ -293,7 +297,7 @@ function useCloudSyncAgent(): CloudSyncContextValue {
 
   const performPush = useCallback(async () => {
     setError(null);
-    const result = await cloudSyncPush();
+    const result = await runVaultBackupThenPush(vaultBackup, cloudSyncPush);
     handlePushResult(result);
   }, [handlePushResult]);
 

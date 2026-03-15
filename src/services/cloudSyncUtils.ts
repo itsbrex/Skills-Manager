@@ -40,3 +40,11 @@ export function buildMissingSkillRestores(
   }
   return restores;
 }
+
+export async function runVaultBackupThenPush<TBackup, TPush>(
+  backup: () => Promise<TBackup>,
+  push: () => Promise<TPush>,
+): Promise<TPush> {
+  await backup();
+  return push();
+}

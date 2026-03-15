@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildMissingSkillRestores, computeMissingSkills } from "../cloudSyncUtils.ts";
+import {
+  buildMissingSkillRestores,
+  computeMissingSkills,
+  runVaultBackupThenPush,
+} from "../cloudSyncUtils.ts";
 
 test("computeMissingSkills returns skills that are missing locally", () => {
   const missing = computeMissingSkills(
@@ -38,4 +42,39 @@ test("buildMissingSkillRestores returns restore plan for missing skills", () => 
     restores.map((item) => item.type),
     ["marketplace", "vault"],
   );
+});
+
+test("runVaultBackupThenPush runs backup before push", async () => {
+  const order: string[] = [];
+  const result = await runVaultBackupThenPush(
+    async () => {
+      order.push("backup");
+      return { uploaded: 0, skipped: 0, failed: [] };
+    },
+    async () => {
+      order.push("push");
+      return { status: "synced", revision: 1 };
+    },
+  );
+
+  assert.deepEqual(order, ["backup", "push"]);
+  assert.deepEqual(result, { status: "synced", revision: 1 });
+});
+
+test("runVaultBackupThenPush stops on backup failure", async () => {
+  let pushed = false;
+  await assert.rejects(
+    () =>
+      runVaultBackupThenPush(
+        async () => {
+          throw new Error("backup failed");
+        },
+        async () => {
+          pushed = true;
+          return { status: "synced", revision: 1 };
+        },
+      ),
+    /backup failed/,
+  );
+  assert.equal(pushed, false);
 });

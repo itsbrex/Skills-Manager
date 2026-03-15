@@ -1,9 +1,21 @@
 use crate::models::auth::AuthSession;
-use crate::services::ConfigManager;
-use crate::services::vault::vault_download as fetch_vault_download;
+use crate::models::SkillSource;
+use crate::services::{ConfigManager, ScannerService};
+use crate::services::vault::{
+    vault_download as fetch_vault_download, vault_upload as fetch_vault_upload, VaultUploadResult,
+};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
-use zip::ZipArchive;
+use zip::write::FileOptions;
+use zip::{ZipArchive, ZipWriter};
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct VaultBackupSummary {
+    pub uploaded: usize,
+    pub skipped: usize,
+    pub failed: Vec<String>,
+}
 
 fn resolve_access_token(session: &AuthSession) -> Result<String, String> {
     if let Some(access) = session.access_token.clone() {
@@ -17,6 +29,63 @@ fn vault_api_base_url() -> String {
     const DEFAULT_VAULT_API_BASE: &str = "https://skills-market-api.guardssl.info/api/v1";
     std::env::var("SKILLS_MARKET_API_BASE")
         .unwrap_or_else(|_| DEFAULT_VAULT_API_BASE.to_string())
+}
+
+fn hash_bytes(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
+}
+
+fn zip_skill_dir(skill_dir: &Path) -> Result<Vec<u8>, String> {
+    let cursor = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(cursor);
+    let options = FileOptions::default();
+    add_dir_to_zip(skill_dir, skill_dir, &mut zip, options)?;
+    let cursor = zip.finish().map_err(|e| format!("写入 Zip 失败: {}", e))?;
+    Ok(cursor.into_inner())
+}
+
+fn add_dir_to_zip(
+    base_dir: &Path,
+    current_dir: &Path,
+    zip: &mut ZipWriter<std::io::Cursor<Vec<u8>>>,
+    options: FileOptions,
+) -> Result<(), String> {
+    let entries = fs::read_dir(current_dir)
+        .map_err(|e| format!("读取目录失败: {}", e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("读取目录条目失败: {}", e))?;
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("读取目录条目失败: {}", e))?;
+        if file_type.is_symlink() {
+            continue;
+        }
+        let rel_path = path
+            .strip_prefix(base_dir)
+            .map_err(|e| format!("计算相对路径失败: {}", e))?;
+        let rel_name = rel_path.to_string_lossy().replace('\\', "/");
+        if file_type.is_dir() {
+            let dir_name = if rel_name.ends_with('/') {
+                rel_name
+            } else {
+                format!("{}/", rel_name)
+            };
+            zip.add_directory(dir_name, options)
+                .map_err(|e| format!("写入 Zip 目录失败: {}", e))?;
+            add_dir_to_zip(base_dir, &path, zip, options)?;
+            continue;
+        }
+        if file_type.is_file() {
+            zip.start_file(rel_name, options)
+                .map_err(|e| format!("写入 Zip 文件失败: {}", e))?;
+            let mut file = fs::File::open(&path).map_err(|e| format!("读取文件失败: {}", e))?;
+            std::io::copy(&mut file, zip).map_err(|e| format!("写入文件失败: {}", e))?;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -40,6 +109,56 @@ pub async fn vault_download(skill_id: String) -> Result<String, String> {
     extract_zip(&bytes, &install_dir)?;
 
     Ok(install_dir.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub async fn vault_backup() -> Result<VaultBackupSummary, String> {
+    let manager = ConfigManager::new();
+    let config = manager.load()?;
+    let session = config
+        .auth_session
+        .clone()
+        .ok_or_else(|| "not authenticated".to_string())?;
+    let access_token = resolve_access_token(&session)?;
+    let base_url = vault_api_base_url();
+
+    let skills = ScannerService::scan_skills(&config.skills_dir)?;
+    let mut summary = VaultBackupSummary {
+        uploaded: 0,
+        skipped: 0,
+        failed: Vec::new(),
+    };
+
+    for skill in skills
+        .into_iter()
+        .filter(|skill| skill.source != SkillSource::Marketplace)
+    {
+        let zip_bytes = match zip_skill_dir(&skill.path) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                summary.failed.push(format!("{}: {}", skill.id, err));
+                continue;
+            }
+        };
+        let hash = hash_bytes(&zip_bytes);
+        let size = zip_bytes.len() as u64;
+        match fetch_vault_upload(
+            &base_url,
+            &access_token,
+            &skill.id,
+            &hash,
+            size,
+            &zip_bytes,
+        )
+        .await
+        {
+            Ok(VaultUploadResult::Uploaded { .. }) => summary.uploaded += 1,
+            Ok(VaultUploadResult::Skipped { .. }) => summary.skipped += 1,
+            Err(err) => summary.failed.push(format!("{}: {}", skill.id, err)),
+        }
+    }
+
+    Ok(summary)
 }
 
 fn extract_zip(bytes: &[u8], target_dir: &Path) -> Result<(), String> {
@@ -118,6 +237,53 @@ mod tests {
             let installed_path = std::path::Path::new(&install_dir).join("SKILL.md");
             let content = std::fs::read_to_string(installed_path).expect("read file");
             assert_eq!(content, "hello");
+        });
+    }
+
+    #[test]
+    fn vault_backup_skips_when_hash_same() {
+        with_temp_home(|_| {
+            let mut server = mockito::Server::new();
+            std::env::set_var(
+                "SKILLS_MARKET_API_BASE",
+                format!("{}/api/v1", server.url()),
+            );
+
+            let _mock = server
+                .mock("POST", "/api/v1/vault/upload")
+                .match_header("authorization", "Bearer token")
+                .match_query(mockito::Matcher::Any)
+                .with_status(200)
+                .with_body(r#"{"status":"skipped","reason":"hash_same"}"#)
+                .create();
+
+            let manager = ConfigManager::new();
+            let mut config = manager.load().expect("load config");
+            config.auth_session = Some(AuthSession {
+                provider: "github".to_string(),
+                access_token: Some("token".to_string()),
+                refresh_token: None,
+                profile: AuthProfile {
+                    username: "octo".to_string(),
+                    avatar_url: None,
+                },
+            });
+            manager.save(&config).expect("save config");
+
+            let skill_dir = config.skills_dir.join("local-skill");
+            std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+            std::fs::write(
+                skill_dir.join("SKILL.md"),
+                "---\nname: local-skill\ndescription: test\n---\n",
+            )
+            .expect("write SKILL.md");
+
+            let summary = tauri::async_runtime::block_on(async {
+                vault_backup().await.expect("backup")
+            });
+
+            assert_eq!(summary.skipped, 1);
+            assert_eq!(summary.failed.len(), 0);
         });
     }
 

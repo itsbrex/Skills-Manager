@@ -20,7 +20,8 @@ use commands::{
     start_google_auth, submit_feedback, submit_poll_vote, sync_marketplace_installed_skills,
     telemetry_end_session,
     telemetry_flush_pending, telemetry_initialize, telemetry_record_heartbeat, telemetry_track_event,
-    toggle_marketplace_source, update_custom_tool, update_tool_paths, vault_download, write_file,
+    toggle_marketplace_source, update_custom_tool, update_tool_paths, vault_backup, vault_download,
+    write_file,
 };
 use services::{AppCache, MarketplaceCache};
 use tauri::{Emitter, Manager};
@@ -122,6 +123,7 @@ pub fn run() {
             telemetry_end_session,
             telemetry_flush_pending,
             telemetry_track_event,
+            vault_backup,
             vault_download,
         ])
         .run(tauri::generate_context!())

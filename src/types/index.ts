@@ -139,6 +139,12 @@ export interface CloudSyncSnapshot {
   payload: CloudSyncPayload | null;
 }
 
+export interface VaultBackupResult {
+  uploaded: number;
+  skipped: number;
+  failed: string[];
+}
+
 export type CloudSyncPushResult =
   | { status: "synced"; revision: number }
   | { status: "skipped"; reason: string }

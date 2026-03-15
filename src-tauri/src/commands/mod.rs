@@ -45,4 +45,4 @@ pub use tools::{
     set_tool_enabled, update_custom_tool, update_tool_paths,
 };
 pub use updater::check_update;
-pub use vault::vault_download;
+pub use vault::{vault_backup, vault_download};
