@@ -237,6 +237,11 @@ export const en = {
     accountDesc: "Sign in to sync settings across devices",
     cloudSync: "Cloud Sync",
     cloudSyncDesc: "Sync status and manual control",
+    cloudSyncAuto: "Auto Cloud Sync",
+    cloudSyncAutoDesc: "Periodically push local config to cloud",
+    cloudSyncInterval: "Sync interval",
+    cloudSyncIntervalDesc: "Set the interval for automatic sync",
+    cloudSyncIntervalOption: "{minutes} min",
     // Marketplace
     marketplace: "Marketplace",
     marketplaceEmpty: "No marketplace sources configured",

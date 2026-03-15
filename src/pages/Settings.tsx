@@ -11,6 +11,7 @@ import { getEditorIcon } from "@/assets/editors";
 import wechatRewardCode from "@/assets/donation/wechat-reward-code.jpg";
 import alipayRewardCode from "@/assets/donation/alipay-reward-code.jpg";
 import { Toggle } from "@/components/ui/toggle";
+import { buildCloudSyncIntervalOptions } from "@/services/cloudSyncSettingsOptions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
 import { ToastContainer, useToast } from "@/components/ui/toast";
@@ -248,6 +249,7 @@ export function Settings() {
   }
 
   const prefs = config.preferences || defaultPreferences;
+  const cloudSyncIntervals = buildCloudSyncIntervalOptions([5, 10, 15, 30, 60]);
   const selectedEditor = availableEditors.find(e => e.id === prefs.default_editor) || availableEditors[0];
   const FallbackEditorIcon = selectedEditor ? getEditorIcon(selectedEditor.id) : null;
   const marketplaceSources = config.marketplace_sources || [];
@@ -441,7 +443,7 @@ export function Settings() {
             <SettingsRow
               label={t("settings.cloudSync")}
               description={t("settings.cloudSyncDesc")}
-              isLast={true}
+              isLast={false}
             >
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -480,6 +482,45 @@ export function Settings() {
                   </div>
                 )}
               </div>
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.cloudSyncAuto")}
+              description={t("settings.cloudSyncAutoDesc")}
+              isLast={false}
+            >
+              <Toggle
+                checked={prefs.cloud_sync_auto}
+                onChange={(v) => updatePreference("cloud_sync_auto", v)}
+              />
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.cloudSyncInterval")}
+              description={t("settings.cloudSyncIntervalDesc")}
+              isLast={true}
+            >
+              <select
+                value={prefs.cloud_sync_interval_minutes}
+                disabled={!prefs.cloud_sync_auto}
+                onChange={(e) => updatePreference("cloud_sync_interval_minutes", Number(e.target.value))}
+                style={{
+                  padding: '8px 10px',
+                  fontSize: '12px',
+                  color: 'var(--foreground)',
+                  backgroundColor: 'var(--secondary)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  opacity: prefs.cloud_sync_auto ? 1 : 0.6,
+                  cursor: prefs.cloud_sync_auto ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {cloudSyncIntervals.map((minutes) => (
+                  <option key={minutes} value={minutes}>
+                    {t("settings.cloudSyncIntervalOption").replace("{minutes}", String(minutes))}
+                  </option>
+                ))}
+              </select>
             </SettingsRow>
           </SettingsCard>
 
