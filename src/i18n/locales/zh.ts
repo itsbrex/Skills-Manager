@@ -297,7 +297,7 @@ export const zh = {
     email: "邮箱",
     loginFailed: "登录失败，请重试",
     logoutFailed: "退出失败，请重试",
-    devCallbackTip: "开发模式：粘贴回调 URL 以完成登录（无需打包）",
+    devCallbackTip: "如果浏览器没有自动唤起应用，请粘贴回调链接完成登录",
     devCallbackApply: "应用回调",
   },
   cloudSync: {

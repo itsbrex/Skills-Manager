@@ -157,20 +157,42 @@ export function Sidebar() {
       return;
     }
     const protocol = parsed.protocol.replace(":", "");
-    if (!["skills-manager", "skillsmanager"].includes(protocol) || parsed.host !== "auth" || parsed.pathname !== "/callback") {
+    const isCustomScheme = ["skills-manager", "skillsmanager"].includes(protocol);
+    if (isCustomScheme) {
+      if (parsed.host !== "auth" || parsed.pathname !== "/callback") {
+        appendAuthDebugLog(
+          `callback_rejected reason=unexpected_route protocol=${parsed.protocol} host=${parsed.host} path=${parsed.pathname}`,
+        );
+        setAuthDebug({
+          url,
+          receivedAt,
+          status: "rejected",
+          reason: `unexpected_route:${parsed.protocol}//${parsed.host}${parsed.pathname}`,
+          protocol: parsed.protocol,
+          host: parsed.host,
+          pathname: parsed.pathname,
+        });
+        return;
+      }
+    } else {
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+        appendAuthDebugLog(
+          `callback_rejected reason=unexpected_protocol protocol=${parsed.protocol} host=${parsed.host} path=${parsed.pathname}`,
+        );
+        setAuthDebug({
+          url,
+          receivedAt,
+          status: "rejected",
+          reason: `unexpected_protocol:${parsed.protocol}`,
+          protocol: parsed.protocol,
+          host: parsed.host,
+          pathname: parsed.pathname,
+        });
+        return;
+      }
       appendAuthDebugLog(
-        `callback_rejected reason=unexpected_route protocol=${parsed.protocol} host=${parsed.host} path=${parsed.pathname}`,
+        `callback_accept_non_custom_scheme protocol=${parsed.protocol} host=${parsed.host} path=${parsed.pathname}`,
       );
-      setAuthDebug({
-        url,
-        receivedAt,
-        status: "rejected",
-        reason: `unexpected_route:${parsed.protocol}//${parsed.host}${parsed.pathname}`,
-        protocol: parsed.protocol,
-        host: parsed.host,
-        pathname: parsed.pathname,
-      });
-      return;
     }
     const loginCode = parsed.searchParams.get("login_code");
     const state = parsed.searchParams.get("state");
@@ -818,62 +840,60 @@ export function Sidebar() {
                     </button>
                   </div>
                 </div>
-                {import.meta.env.DEV && (
-                  <div
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                    padding: "10px",
+                    borderRadius: "10px",
+                    border: "1px dashed var(--border)",
+                    backgroundColor: "var(--secondary)",
+                  }}
+                >
+                  <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+                    {t("auth.devCallbackTip")}
+                  </div>
+                  <input
+                    type="text"
+                    value={devCallbackUrl}
+                    onChange={(e) => setDevCallbackUrl(e.target.value)}
+                    placeholder="skills-manager://auth/callback?login_code=...&state=..."
                     style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "8px",
-                      padding: "10px",
-                      borderRadius: "10px",
-                      border: "1px dashed var(--border)",
+                      width: "100%",
+                      padding: "8px 10px",
+                      fontSize: "12px",
+                      border: "1px solid var(--border)",
+                      borderRadius: "8px",
+                      backgroundColor: "var(--background)",
+                      color: "var(--foreground)",
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleDevCallbackSubmit}
+                    disabled={authLoading}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "6px",
+                      padding: "8px 10px",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      color: "var(--foreground)",
                       backgroundColor: "var(--secondary)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "8px",
+                      cursor: authLoading ? "wait" : "pointer",
+                      opacity: authLoading ? 0.7 : 1,
                     }}
                   >
-                    <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
-                      {t("auth.devCallbackTip")}
-                    </div>
-                    <input
-                      type="text"
-                      value={devCallbackUrl}
-                      onChange={(e) => setDevCallbackUrl(e.target.value)}
-                      placeholder="skills-manager://auth/callback?login_code=...&state=..."
-                      style={{
-                        width: "100%",
-                        padding: "8px 10px",
-                        fontSize: "12px",
-                        border: "1px solid var(--border)",
-                        borderRadius: "8px",
-                        backgroundColor: "var(--background)",
-                        color: "var(--foreground)",
-                        outline: "none",
-                        boxSizing: "border-box",
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleDevCallbackSubmit}
-                      disabled={authLoading}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px",
-                        padding: "8px 10px",
-                        fontSize: "12px",
-                        fontWeight: 600,
-                        color: "var(--foreground)",
-                        backgroundColor: "var(--secondary)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "8px",
-                        cursor: authLoading ? "wait" : "pointer",
-                        opacity: authLoading ? 0.7 : 1,
-                      }}
-                    >
-                      {t("auth.devCallbackApply")}
-                    </button>
-                  </div>
-                )}
+                    {t("auth.devCallbackApply")}
+                  </button>
+                </div>
                 {authError && (
                   <div style={{ fontSize: "12px", color: "#dc2626" }}>
                     {authError}

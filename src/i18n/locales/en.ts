@@ -294,7 +294,7 @@ export const en = {
     email: "Email",
     loginFailed: "Sign in failed, please try again",
     logoutFailed: "Sign out failed, please try again",
-    devCallbackTip: "Dev only: paste callback URL to finish login without packaging.",
+    devCallbackTip: "If the browser did not open the app, paste the callback URL to finish login.",
     devCallbackApply: "Apply callback",
   },
   cloudSync: {
