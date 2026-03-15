@@ -237,7 +237,7 @@ function useCloudSyncAgent(): CloudSyncContextValue {
         });
         return;
       }
-      if (result.status === "synced") {
+      if (result.status === "synced" || result.status === "skipped") {
         updateLastSynced();
       }
     },

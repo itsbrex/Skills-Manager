@@ -1,10 +1,11 @@
 use crate::models::auth::AuthSession;
-use crate::models::cloud_sync::{CloudSyncPayload, CloudSyncState};
+use crate::models::cloud_sync::{CloudSyncPayload, CloudSyncState, CloudSyncToolState};
 use crate::services::cloud_sync::{
     build_payload, sync_pull, sync_push, sync_resolve, CloudSyncPushResult, CloudSyncSnapshot,
 };
 use crate::services::{ConfigManager, ScannerService};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
@@ -22,7 +23,38 @@ fn now_timestamp() -> i64 {
 }
 
 fn payload_hash(payload: &CloudSyncPayload) -> Result<String, String> {
-    let json = serde_json::to_string(payload).map_err(|e| e.to_string())?;
+    let mut skills = payload.skills.clone();
+    skills.sort_by(|a, b| a.id.cmp(&b.id));
+
+    let mut custom_tools = payload.custom_tools.clone();
+    custom_tools.sort_by(|a, b| a.id.cmp(&b.id));
+
+    let mut tool_states: BTreeMap<String, CloudSyncToolState> =
+        payload.tool_states.clone().into_iter().collect();
+    for state in tool_states.values_mut() {
+        state.enabled_skills.sort();
+    }
+
+    #[derive(serde::Serialize)]
+    struct HashPayload {
+        version: u8,
+        updated_at: i64,
+        device_id: String,
+        skills: Vec<crate::models::cloud_sync::CloudSyncSkill>,
+        tool_states: BTreeMap<String, CloudSyncToolState>,
+        custom_tools: Vec<crate::models::cloud_sync::CloudSyncCustomTool>,
+    }
+
+    let normalized = HashPayload {
+        version: payload.version,
+        updated_at: 0,
+        device_id: payload.device_id.clone(),
+        skills,
+        tool_states,
+        custom_tools,
+    };
+
+    let json = serde_json::to_string(&normalized).map_err(|e| e.to_string())?;
     let mut hasher = Sha256::new();
     hasher.update(json.as_bytes());
     Ok(format!("{:x}", hasher.finalize()))
@@ -134,8 +166,10 @@ pub async fn cloud_sync_resolve(payload: CloudSyncPayload) -> Result<i64, String
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::cloud_sync::{CloudSyncCustomTool, CloudSyncSkill, CloudSyncToolState};
     use crate::models::auth::{AuthProfile, AuthSession};
     use crate::services::ConfigManager;
+    use std::collections::HashMap;
 
     #[test]
     fn cloud_sync_push_returns_conflict_payload() {
@@ -190,5 +224,134 @@ mod tests {
                 }
             });
         });
+    }
+
+    #[test]
+    fn payload_hash_ignores_updated_at() {
+        let payload = CloudSyncPayload {
+            version: 1,
+            updated_at: 100,
+            device_id: "d1".to_string(),
+            skills: Vec::new(),
+            tool_states: HashMap::new(),
+            custom_tools: Vec::new(),
+        };
+        let mut later_payload = payload.clone();
+        later_payload.updated_at = 200;
+
+        let hash1 = payload_hash(&payload).expect("hash payload");
+        let hash2 = payload_hash(&later_payload).expect("hash payload later");
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn payload_hash_is_order_invariant() {
+        let payload = CloudSyncPayload {
+            version: 1,
+            updated_at: 100,
+            device_id: "d1".to_string(),
+            skills: vec![
+                CloudSyncSkill {
+                    id: "s1".to_string(),
+                    name: "S1".to_string(),
+                    source: "local".to_string(),
+                    version: "1.0".to_string(),
+                },
+                CloudSyncSkill {
+                    id: "s2".to_string(),
+                    name: "S2".to_string(),
+                    source: "local".to_string(),
+                    version: "1.0".to_string(),
+                },
+            ],
+            tool_states: HashMap::from([
+                (
+                    "t1".to_string(),
+                    CloudSyncToolState {
+                        enabled: true,
+                        enabled_skills: vec!["s1".to_string(), "s2".to_string()],
+                    },
+                ),
+                (
+                    "t2".to_string(),
+                    CloudSyncToolState {
+                        enabled: false,
+                        enabled_skills: vec!["s2".to_string()],
+                    },
+                ),
+            ]),
+            custom_tools: vec![
+                CloudSyncCustomTool {
+                    id: "c1".to_string(),
+                    name: "C1".to_string(),
+                    config_path: "/tmp/c1".to_string(),
+                    skills_path: "/tmp/c1/skills".to_string(),
+                    enabled: true,
+                },
+                CloudSyncCustomTool {
+                    id: "c2".to_string(),
+                    name: "C2".to_string(),
+                    config_path: "/tmp/c2".to_string(),
+                    skills_path: "/tmp/c2/skills".to_string(),
+                    enabled: false,
+                },
+            ],
+        };
+
+        let payload_reordered = CloudSyncPayload {
+            version: 1,
+            updated_at: 200,
+            device_id: "d1".to_string(),
+            skills: vec![
+                CloudSyncSkill {
+                    id: "s2".to_string(),
+                    name: "S2".to_string(),
+                    source: "local".to_string(),
+                    version: "1.0".to_string(),
+                },
+                CloudSyncSkill {
+                    id: "s1".to_string(),
+                    name: "S1".to_string(),
+                    source: "local".to_string(),
+                    version: "1.0".to_string(),
+                },
+            ],
+            tool_states: HashMap::from([
+                (
+                    "t2".to_string(),
+                    CloudSyncToolState {
+                        enabled: false,
+                        enabled_skills: vec!["s2".to_string()],
+                    },
+                ),
+                (
+                    "t1".to_string(),
+                    CloudSyncToolState {
+                        enabled: true,
+                        enabled_skills: vec!["s2".to_string(), "s1".to_string()],
+                    },
+                ),
+            ]),
+            custom_tools: vec![
+                CloudSyncCustomTool {
+                    id: "c2".to_string(),
+                    name: "C2".to_string(),
+                    config_path: "/tmp/c2".to_string(),
+                    skills_path: "/tmp/c2/skills".to_string(),
+                    enabled: false,
+                },
+                CloudSyncCustomTool {
+                    id: "c1".to_string(),
+                    name: "C1".to_string(),
+                    config_path: "/tmp/c1".to_string(),
+                    skills_path: "/tmp/c1/skills".to_string(),
+                    enabled: true,
+                },
+            ],
+        };
+
+        let hash1 = payload_hash(&payload).expect("hash payload");
+        let hash2 = payload_hash(&payload_reordered).expect("hash payload reordered");
+        assert_eq!(hash1, hash2);
     }
 }
