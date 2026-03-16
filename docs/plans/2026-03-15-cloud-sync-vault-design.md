@@ -16,8 +16,8 @@
 ## 方案概述
 - 扩展云同步 payload，携带技能来源与恢复信息。
 - pull 后应用远端 payload：先补缺失技能，再应用 tool_states。
-- 增加 Vault 服务：服务端代管 GitHub 私有仓库，提供 list/upload/download。
-- 客户端自动备份非市场技能到 Vault（首次登录一次性授权提示）。
+- 增加 Vault 服务：服务端代管 GitHub 私有仓库，提供 upload/download（list 预留）。
+- 客户端在 push 前自动备份非市场技能到 Vault。
 
 ## 数据模型
 - CloudSyncSkill 增加来源与恢复字段：
@@ -55,18 +55,18 @@
 3. Marketplace 补装：基于 payload.marketplace 直接安装（新增指令按 repo_url + skill_path 安装）。
 4. Vault 补装：调用 vault/download，解包到 skills_dir。
 5. 自动备份：
-- 触发点：技能保存/安装/删除、定时同步、手动同步
-- 本地维护 vault_index.json，按 hash 去重上传
-- 失败不阻塞云同步，但在设置页提示失败状态
+- 触发点：每次 cloud_sync_push 前（手动同步 / 定时同步）
+- 不维护本地 vault_index.json，服务端按 hash/size 去重
+- 备份失败会中断本次 push，并在同步状态中提示错误
 
 ## 服务端流程（Vault）
 - 仓库结构：
 - users/<user_id>/manifest.json
 - users/<user_id>/<skill_id>.zip
-- API：
-- POST /vault/upload (skill_id, hash, size, updated_at, zip)
-- GET /vault/list (返回 manifest)
+- API（当前实现）：
+- POST /vault/upload (skill_id, hash, size, zip)
 - GET /vault/download?skill_id=...
+- GET /vault/list（返回 manifest，预留）
 - 服务端代管 GitHub 仓库写入（GitHub App 或专用 PAT），客户端无仓库凭证。
 - 上传前安全校验：zip 解包路径校验、最大文件数/总大小限制。
 
@@ -92,7 +92,7 @@
 - 单测：
 - payload_hash 包含 marketplace/vault 字段
 - 缺失技能补装流程（Marketplace/Vault）
-- Vault 上传去重逻辑
+- Vault 上传去重逻辑（vault_upload/vault_backup）
 - 集成：
 - 登录后 pull + 应用 payload
 - 冲突“使用远端”流程
