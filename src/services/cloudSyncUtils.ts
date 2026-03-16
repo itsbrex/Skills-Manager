@@ -15,8 +15,12 @@ type CloudSyncSkillLike = {
   name: string;
   source: string;
   marketplace?: {
+    marketplace_source_id?: string | null;
+    marketplace_skill_id?: string | null;
+    marketplace_skill_slug?: string | null;
     repo_url?: string | null;
     skill_path?: string | null;
+    remote_revision?: string | null;
   } | null;
   vault?: {
     skill_id?: string | null;
