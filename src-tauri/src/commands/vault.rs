@@ -40,10 +40,15 @@ fn hash_bytes(bytes: &[u8]) -> String {
 fn zip_skill_dir(skill_dir: &Path) -> Result<Vec<u8>, String> {
     let cursor = std::io::Cursor::new(Vec::new());
     let mut zip = ZipWriter::new(cursor);
-    let options = FileOptions::default();
+    let options = stable_zip_options();
     add_dir_to_zip(skill_dir, skill_dir, &mut zip, options)?;
     let cursor = zip.finish().map_err(|e| format!("写入 Zip 失败: {}", e))?;
     Ok(cursor.into_inner())
+}
+
+fn stable_zip_options() -> FileOptions {
+    // 使用固定时间戳，避免每次备份因为当前时间不同导致 hash 变化
+    FileOptions::default().last_modified_time(zip::DateTime::default())
 }
 
 fn add_dir_to_zip(
@@ -52,9 +57,10 @@ fn add_dir_to_zip(
     zip: &mut ZipWriter<std::io::Cursor<Vec<u8>>>,
     options: FileOptions,
 ) -> Result<(), String> {
-    let entries = fs::read_dir(current_dir)
-        .map_err(|e| format!("读取目录失败: {}", e))?;
-    for entry in entries {
+    let mut entries: Vec<(std::path::PathBuf, fs::FileType, String)> = Vec::new();
+    for entry in fs::read_dir(current_dir)
+        .map_err(|e| format!("读取目录失败: {}", e))?
+    {
         let entry = entry.map_err(|e| format!("读取目录条目失败: {}", e))?;
         let path = entry.path();
         let file_type = entry
@@ -67,6 +73,11 @@ fn add_dir_to_zip(
             .strip_prefix(base_dir)
             .map_err(|e| format!("计算相对路径失败: {}", e))?;
         let rel_name = rel_path.to_string_lossy().replace('\\', "/");
+        entries.push((path, file_type, rel_name));
+    }
+    entries.sort_by(|a, b| a.2.cmp(&b.2));
+
+    for (path, file_type, rel_name) in entries {
         if file_type.is_dir() {
             let dir_name = if rel_name.ends_with('/') {
                 rel_name
@@ -284,6 +295,30 @@ mod tests {
 
             assert_eq!(summary.skipped, 1);
             assert_eq!(summary.failed.len(), 0);
+        });
+    }
+
+    #[test]
+    fn zip_skill_dir_is_deterministic_across_runs() {
+        with_temp_home(|_| {
+            let manager = ConfigManager::new();
+            let config = manager.load().expect("load config");
+
+            let skill_dir = config.skills_dir.join("local-skill");
+            std::fs::create_dir_all(skill_dir.join("sub")).expect("create skill dir");
+            std::fs::write(
+                skill_dir.join("SKILL.md"),
+                "---\nname: local-skill\ndescription: test\n---\n",
+            )
+            .expect("write SKILL.md");
+            std::fs::write(skill_dir.join("sub/extra.txt"), "hello").expect("write extra");
+
+            let first = zip_skill_dir(&skill_dir).expect("zip 1");
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            let second = zip_skill_dir(&skill_dir).expect("zip 2");
+
+            assert_eq!(hash_bytes(&first), hash_bytes(&second));
+            assert_eq!(first, second);
         });
     }
 
