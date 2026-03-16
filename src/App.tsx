@@ -19,6 +19,7 @@ import { registerTelemetryCloseHandler } from "@/telemetry/registerTelemetryClos
 import { AppConfig, MarketplaceUpdateCheckResult } from "@/types";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { CloudSyncConflictDialog } from "@/components/cloud/CloudSyncConflictDialog";
+import { VaultConsentDialog } from "@/components/cloud/VaultConsentDialog";
 
 type Theme = "light" | "dark" | "system";
 const TELEMETRY_HEARTBEAT_INTERVAL_MS = 60_000;
@@ -175,6 +176,7 @@ function App() {
             <ToastContainer toasts={toasts} onRemove={removeToast} />
           </BrowserRouter>
           <CloudSyncConflictDialog />
+          <VaultConsentDialog />
         </CloudSyncProvider>
       </I18nProvider>
     </ThemeProvider>

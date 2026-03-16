@@ -5,6 +5,14 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VaultBackupConsent {
+    Unknown,
+    Granted,
+    Denied,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPreferences {
     #[serde(default = "default_theme")]
@@ -27,6 +35,8 @@ pub struct UserPreferences {
     pub show_sync_notifications: bool,
     #[serde(default = "default_false")]
     pub remove_links_when_disabling_tool: bool,
+    #[serde(default = "default_vault_backup_consent")]
+    pub vault_backup_consent: VaultBackupConsent,
     #[serde(default)]
     pub github_token: Option<String>,
 }
@@ -92,6 +102,9 @@ fn default_true() -> bool {
 fn default_false() -> bool {
     false
 }
+fn default_vault_backup_consent() -> VaultBackupConsent {
+    VaultBackupConsent::Unknown
+}
 fn default_marketplace_sources() -> Vec<MarketplaceSource> {
     vec![
         MarketplaceSource {
@@ -128,6 +141,7 @@ impl Default for UserPreferences {
             tab_size: default_tab_size(),
             show_sync_notifications: true,
             remove_links_when_disabling_tool: false,
+            vault_backup_consent: default_vault_backup_consent(),
             github_token: None,
         }
     }
@@ -277,6 +291,7 @@ impl AppConfig {
 mod tests {
     use super::default_marketplace_sources;
     use super::AppConfig;
+    use super::VaultBackupConsent;
     use crate::models::SourceType;
     use crate::models::auth::{AuthProfile, AuthSession};
 
@@ -345,5 +360,20 @@ mod tests {
         let restored_prefs = restored.preferences.as_ref().expect("prefs");
         assert!(restored_prefs.cloud_sync_auto);
         assert_eq!(restored_prefs.cloud_sync_interval_minutes, 10);
+    }
+
+    #[test]
+    fn vault_backup_consent_defaults_to_unknown() {
+        let config = AppConfig::default();
+        let prefs = config.preferences.as_ref().expect("prefs");
+        assert_eq!(prefs.vault_backup_consent, VaultBackupConsent::Unknown);
+
+        let json = serde_json::to_string(&config).unwrap();
+        let restored: AppConfig = serde_json::from_str(&json).unwrap();
+        let restored_prefs = restored.preferences.as_ref().expect("prefs");
+        assert_eq!(
+            restored_prefs.vault_backup_consent,
+            VaultBackupConsent::Unknown
+        );
     }
 }

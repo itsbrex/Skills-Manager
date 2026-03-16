@@ -2,7 +2,7 @@ use crate::models::cloud_sync::{
     CloudSyncCustomTool, CloudSyncMarketplaceMeta, CloudSyncPayload, CloudSyncSkill,
     CloudSyncToolState, CloudSyncVaultMeta,
 };
-use crate::models::{AppConfig, Skill, SkillSource};
+use crate::models::{AppConfig, Skill, SkillSource, VaultBackupConsent};
 use reqwest::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use reqwest::Client;
 use std::collections::HashMap;
@@ -27,6 +27,22 @@ pub enum CloudSyncPushResult {
 }
 
 pub fn build_payload(config: &AppConfig, skills: &[Skill]) -> CloudSyncPayload {
+    let include_non_market = matches!(
+        config
+            .preferences
+            .as_ref()
+            .map(|prefs| &prefs.vault_backup_consent),
+        Some(VaultBackupConsent::Granted)
+    );
+    let filtered_skills: Vec<&Skill> = if include_non_market {
+        skills.iter().collect()
+    } else {
+        skills
+            .iter()
+            .filter(|skill| matches!(skill.source, SkillSource::Marketplace))
+            .collect()
+    };
+
     let device_id = config
         .cloud_sync
         .as_ref()
@@ -35,7 +51,7 @@ pub fn build_payload(config: &AppConfig, skills: &[Skill]) -> CloudSyncPayload {
 
     let mut tool_states: HashMap<String, CloudSyncToolState> = HashMap::new();
     for (tool_id, tool_config) in config.collect_tool_configs() {
-        let enabled_skills: Vec<String> = skills
+        let enabled_skills: Vec<String> = filtered_skills
             .iter()
             .filter(|skill| skill.is_enabled_for(&tool_id))
             .map(|skill| skill.id.clone())
@@ -61,7 +77,7 @@ pub fn build_payload(config: &AppConfig, skills: &[Skill]) -> CloudSyncPayload {
         })
         .collect();
 
-    let skills_payload = skills
+    let skills_payload = filtered_skills
         .iter()
         .map(|skill| CloudSyncSkill {
             id: skill.id.clone(),
@@ -363,6 +379,9 @@ mod tests {
     #[test]
     fn build_payload_includes_enabled_skills_and_custom_tools() {
         let mut config = AppConfig::default();
+        if let Some(prefs) = config.preferences.as_mut() {
+            prefs.vault_backup_consent = VaultBackupConsent::Granted;
+        }
         config.tools.insert(
             "codex".to_string(),
             ToolConfig {
@@ -396,5 +415,38 @@ mod tests {
             vec!["s1".to_string()]
         );
         assert_eq!(payload.custom_tools.len(), 1);
+    }
+
+    #[test]
+    fn build_payload_excludes_non_market_skills_without_consent() {
+        let mut config = AppConfig::default();
+        if let Some(prefs) = config.preferences.as_mut() {
+            prefs.vault_backup_consent = VaultBackupConsent::Denied;
+        }
+        config.tools.insert(
+            "codex".to_string(),
+            ToolConfig {
+                enabled: true,
+                detected: true,
+                skills_path: std::path::PathBuf::from("/tmp/codex/skills"),
+                config_path: std::path::PathBuf::from("/tmp/codex/config"),
+            },
+        );
+
+        let mut market = Skill::new("m1".to_string(), "Market 1".to_string(), "/tmp/m1".into());
+        market.source = SkillSource::Marketplace;
+        market.enabled.insert("codex".to_string(), true);
+
+        let mut local = Skill::new("l1".to_string(), "Local 1".to_string(), "/tmp/l1".into());
+        local.source = SkillSource::Local;
+        local.enabled.insert("codex".to_string(), true);
+
+        let payload = super::build_payload(&config, &[market, local]);
+        assert_eq!(payload.skills.len(), 1);
+        assert_eq!(payload.skills[0].id, "m1");
+        assert_eq!(
+            payload.tool_states["codex"].enabled_skills,
+            vec!["m1".to_string()]
+        );
     }
 }

@@ -28,6 +28,8 @@ export interface Tool {
   icon_path?: string | null;
 }
 
+export type VaultBackupConsent = "unknown" | "granted" | "denied";
+
 // User preferences for the application
 export interface UserPreferences {
   // Appearance
@@ -47,6 +49,7 @@ export interface UserPreferences {
   // Notifications
   show_sync_notifications: boolean;
   remove_links_when_disabling_tool: boolean;
+  vault_backup_consent: VaultBackupConsent;
 
   // Marketplace auth
   github_token?: string | null;

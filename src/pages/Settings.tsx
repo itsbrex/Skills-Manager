@@ -136,6 +136,7 @@ export function Settings() {
         auto: prefs.cloud_sync_auto,
         intervalMinutes: prefs.cloud_sync_interval_minutes,
       });
+      await cloudSync.refreshVaultConsent();
       setSaveSuccess(true);
       setTimeout(() => {
         setSaveSuccess(false);
@@ -246,6 +247,12 @@ export function Settings() {
   const marketplaceSources = config.marketplace_sources || [];
   const marketplaceRows = marketplaceSources;
   const authProfile = cloudSync.authProfile;
+  const vaultConsent = prefs.vault_backup_consent ?? "unknown";
+  const vaultConsentLabel = vaultConsent === "granted"
+    ? t("settings.vaultBackupConsentStatusGranted")
+    : vaultConsent === "denied"
+      ? t("settings.vaultBackupConsentStatusDenied")
+      : t("settings.vaultBackupConsentStatusUnknown");
   const lastSyncedLabel = cloudSync.lastSyncedAt
     ? t("cloudSync.lastSynced").replace("{time}", new Date(cloudSync.lastSyncedAt * 1000).toLocaleString())
     : t("cloudSync.neverSynced");
@@ -737,6 +744,22 @@ export function Settings() {
                     {cloudSync.error}
                   </div>
                 )}
+              </div>
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.vaultBackupConsent")}
+              description={t("settings.vaultBackupConsentDesc")}
+              isLast={false}
+            >
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
+                <Toggle
+                  checked={vaultConsent === "granted"}
+                  onChange={(v) => updatePreference("vault_backup_consent", v ? "granted" : "denied")}
+                />
+                <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                  {vaultConsentLabel}
+                </div>
               </div>
             </SettingsRow>
 

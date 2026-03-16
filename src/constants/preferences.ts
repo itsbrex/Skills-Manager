@@ -11,5 +11,6 @@ export const defaultPreferences: UserPreferences = {
   tab_size: 2,
   show_sync_notifications: true,
   remove_links_when_disabling_tool: false,
+  vault_backup_consent: "unknown",
   github_token: "",
 };
