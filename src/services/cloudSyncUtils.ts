@@ -38,7 +38,9 @@ export function buildMissingSkillRestores(
       restores.push({ type: "marketplace", skill });
       continue;
     }
-    if (skill.vault?.skill_id || skill.source === "vault") {
+    const isNonMarketSource =
+      skill.source === "local" || skill.source === "imported";
+    if (skill.vault?.skill_id || skill.source === "vault" || isNonMarketSource) {
       restores.push({ type: "vault", skill });
     }
   }

@@ -44,6 +44,31 @@ test("buildMissingSkillRestores returns restore plan for missing skills", () => 
   );
 });
 
+test("buildMissingSkillRestores falls back to vault for local/imported skills", () => {
+  const restores = buildMissingSkillRestores(
+    [
+      {
+        id: "s-local",
+        name: "Local Skill",
+        source: "local",
+        version: "1.0",
+      },
+      {
+        id: "s-imported",
+        name: "Imported Skill",
+        source: "imported",
+        version: "1.0",
+      },
+    ],
+    [],
+  );
+
+  assert.deepEqual(
+    restores.map((item) => item.type),
+    ["vault", "vault"],
+  );
+});
+
 test("runVaultBackupThenPush runs backup before push", async () => {
   const order: string[] = [];
   const result = await runVaultBackupThenPush(
