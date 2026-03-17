@@ -391,11 +391,27 @@ function useCloudSyncAgent(): CloudSyncContextValue {
   const pullThenPush = useCallback(
     async (allowVaultBackup: boolean) => {
       setError(null);
+      let sawConflict = false;
       await syncPullThenPush({
         pull: performPull,
         push: () => performPush(allowVaultBackup),
         onStage: setSyncStage,
-        onError: setError,
+        onError: (message) => {
+          if (!sawConflict) {
+            setError(message);
+          }
+        },
+        onConflict: (result) => {
+          if (result.status !== "conflict") {
+            return;
+          }
+          sawConflict = true;
+          setConflict({
+            revision: result.revision,
+            payload: result.payload,
+            localPayload: result.local_payload,
+          });
+        },
         retryOnConflict: true,
       });
     },
@@ -423,6 +439,9 @@ function useCloudSyncAgent(): CloudSyncContextValue {
       return;
     }
     const timer = window.setInterval(() => {
+      if (conflictRef.current) {
+        return;
+      }
       if (errorRef.current) {
         return;
       }

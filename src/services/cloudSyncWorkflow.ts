@@ -7,6 +7,7 @@ type SyncPullThenPushOptions = {
   push: () => Promise<CloudSyncPushResult>;
   onStage: (stage: SyncStage) => void;
   onError?: (message: string) => void;
+  onConflict?: (result: CloudSyncPushResult) => void;
   retryOnConflict?: boolean;
 };
 
@@ -15,6 +16,7 @@ export async function syncPullThenPush({
   push,
   onStage,
   onError,
+  onConflict,
   retryOnConflict = true,
 }: SyncPullThenPushOptions): Promise<CloudSyncPushResult> {
   try {
@@ -25,6 +27,7 @@ export async function syncPullThenPush({
 
     if (result.status === "conflict") {
       if (!retryOnConflict) {
+        onConflict?.(result);
         onStage("idle");
         return result;
       }
@@ -33,6 +36,7 @@ export async function syncPullThenPush({
       onStage("pushing");
       result = await push();
       if (result.status === "conflict") {
+        onConflict?.(result);
         throw new Error("Sync conflict persists after retry");
       }
     }

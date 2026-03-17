@@ -131,6 +131,7 @@ test("syncPullThenPush returns conflict when retryOnConflict is false", async ()
 test("syncPullThenPush throws after conflict retry and calls onError", async () => {
   const stages: string[] = [];
   const onErrorMessages: string[] = [];
+  const onConflictResults: Array<(typeof payload) & { status: "conflict" }> = [];
 
   await assert.rejects(
     () =>
@@ -144,6 +145,11 @@ test("syncPullThenPush throws after conflict retry and calls onError", async () 
         }),
         onStage: (stage) => stages.push(stage),
         onError: (message) => onErrorMessages.push(message),
+        onConflict: (result) => {
+          if (result.status === "conflict") {
+            onConflictResults.push(result);
+          }
+        },
         retryOnConflict: true,
       }),
     /Sync conflict persists after retry/,
@@ -157,6 +163,7 @@ test("syncPullThenPush throws after conflict retry and calls onError", async () 
     "error",
   ]);
   assert.deepEqual(onErrorMessages, ["Sync conflict persists after retry"]);
+  assert.equal(onConflictResults.length, 1);
 });
 
 test("syncPullThenPush returns skipped result without errors", async () => {
