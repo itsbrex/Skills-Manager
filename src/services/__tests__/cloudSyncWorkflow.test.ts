@@ -158,3 +158,71 @@ test("syncPullThenPush throws after conflict retry and calls onError", async () 
   ]);
   assert.deepEqual(onErrorMessages, ["Sync conflict persists after retry"]);
 });
+
+test("syncPullThenPush returns skipped result without errors", async () => {
+  const stages: string[] = [];
+  const onErrorMessages: string[] = [];
+  const skippedResult = { status: "skipped", reason: "no changes" } as const;
+
+  const result = await syncPullThenPush({
+    pull: async () => {},
+    push: async () => skippedResult,
+    onStage: (stage) => stages.push(stage),
+    onError: (message) => onErrorMessages.push(message),
+  });
+
+  assert.deepEqual(result, skippedResult);
+  assert.deepEqual(stages, ["pulling", "pushing", "idle"]);
+  assert.deepEqual(onErrorMessages, []);
+});
+
+test("syncPullThenPush reports push errors", async () => {
+  const stages: string[] = [];
+  const onErrorMessages: string[] = [];
+
+  await assert.rejects(
+    () =>
+      syncPullThenPush({
+        pull: async () => {},
+        push: async () => {
+          throw new Error("push failed");
+        },
+        onStage: (stage) => stages.push(stage),
+        onError: (message) => onErrorMessages.push(message),
+      }),
+    /push failed/,
+  );
+
+  assert.deepEqual(stages, ["pulling", "pushing", "error"]);
+  assert.deepEqual(onErrorMessages, ["push failed"]);
+});
+
+test("syncPullThenPush reports pull errors during retry", async () => {
+  const stages: string[] = [];
+  const onErrorMessages: string[] = [];
+  let pullCount = 0;
+
+  await assert.rejects(
+    () =>
+      syncPullThenPush({
+        pull: async () => {
+          pullCount += 1;
+          if (pullCount > 1) {
+            throw new Error("pull retry failed");
+          }
+        },
+        push: async () => ({
+          status: "conflict",
+          revision: 1,
+          payload,
+          local_payload: payload,
+        }),
+        onStage: (stage) => stages.push(stage),
+        onError: (message) => onErrorMessages.push(message),
+      }),
+    /pull retry failed/,
+  );
+
+  assert.deepEqual(stages, ["pulling", "pushing", "pulling", "error"]);
+  assert.deepEqual(onErrorMessages, ["pull retry failed"]);
+});
