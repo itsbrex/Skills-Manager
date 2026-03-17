@@ -82,6 +82,7 @@ fn payload_hash(payload: &CloudSyncPayload) -> Result<String, String> {
         skills: Vec<crate::models::cloud_sync::CloudSyncSkill>,
         tool_states: BTreeMap<String, CloudSyncToolState>,
         custom_tools: Vec<crate::models::cloud_sync::CloudSyncCustomTool>,
+        preferences: Option<crate::models::config::UserPreferences>,
     }
 
     let normalized = HashPayload {
@@ -91,6 +92,7 @@ fn payload_hash(payload: &CloudSyncPayload) -> Result<String, String> {
         skills,
         tool_states,
         custom_tools,
+        preferences: payload.preferences.clone(),
     };
 
     let json = serde_json::to_string(&normalized).map_err(|e| e.to_string())?;
@@ -206,6 +208,7 @@ pub async fn cloud_sync_resolve(payload: CloudSyncPayload) -> Result<i64, String
 mod tests {
     use super::*;
     use crate::models::cloud_sync::{CloudSyncCustomTool, CloudSyncSkill, CloudSyncToolState};
+    use crate::models::config::UserPreferences;
     use crate::models::auth::{AuthProfile, AuthSession};
     use crate::services::ConfigManager;
     use std::collections::HashMap;
@@ -274,6 +277,7 @@ mod tests {
             skills: Vec::new(),
             tool_states: HashMap::new(),
             custom_tools: Vec::new(),
+            preferences: None,
         };
         let mut later_payload = payload.clone();
         later_payload.updated_at = 200;
@@ -339,6 +343,7 @@ mod tests {
                     enabled: false,
                 },
             ],
+            preferences: None,
         };
 
         let payload_reordered = CloudSyncPayload {
@@ -395,6 +400,7 @@ mod tests {
                     enabled: true,
                 },
             ],
+            preferences: None,
         };
 
         let hash1 = payload_hash(&payload).expect("hash payload");
@@ -425,6 +431,7 @@ mod tests {
             }],
             tool_states: HashMap::new(),
             custom_tools: Vec::new(),
+            preferences: None,
         };
 
         let hash1 = payload_hash(&payload).expect("hash payload");
@@ -434,5 +441,29 @@ mod tests {
         }
         let hash2 = payload_hash(&updated).expect("hash payload updated");
         assert_ne!(hash1, hash2);
+    }
+
+    #[test]
+    fn payload_hash_changes_when_preferences_change() {
+        crate::test_support::with_temp_home(|_| {
+            let payload = CloudSyncPayload {
+                version: 1,
+                updated_at: 1,
+                device_id: "d1".to_string(),
+                skills: vec![],
+                tool_states: Default::default(),
+                custom_tools: vec![],
+                preferences: Some(UserPreferences::default()),
+            };
+
+            let mut updated = payload.clone();
+            let mut prefs = UserPreferences::default();
+            prefs.language = "zh".to_string();
+            updated.preferences = Some(prefs);
+
+            let hash1 = payload_hash(&payload).expect("hash payload");
+            let hash2 = payload_hash(&updated).expect("hash updated");
+            assert_ne!(hash1, hash2);
+        });
     }
 }

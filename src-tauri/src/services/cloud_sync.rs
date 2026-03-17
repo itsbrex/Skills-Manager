@@ -121,6 +121,7 @@ pub fn build_payload(config: &AppConfig, skills: &[Skill]) -> CloudSyncPayload {
         skills: skills_payload,
         tool_states,
         custom_tools,
+        preferences: Some(config.preferences.clone().unwrap_or_default()),
     }
 }
 
@@ -287,6 +288,7 @@ mod tests {
                 skills: Vec::new(),
                 tool_states: HashMap::new(),
                 custom_tools: Vec::new(),
+                preferences: None,
             };
             let result = sync_push(&server.url(), "token", 1, &payload, "req1").await;
             assert!(
@@ -323,6 +325,7 @@ mod tests {
                 skills: Vec::new(),
                 tool_states: HashMap::new(),
                 custom_tools: Vec::new(),
+                preferences: None,
             };
             let result = sync_push(&server.url(), "token", 1, &payload, "req1").await;
             assert!(
@@ -359,6 +362,7 @@ mod tests {
                 skills: Vec::new(),
                 tool_states: HashMap::new(),
                 custom_tools: Vec::new(),
+                preferences: None,
             };
             let result = sync_push(&server.url(), "token", 1, &payload, "req1").await;
             assert!(
@@ -415,6 +419,7 @@ mod tests {
             vec!["s1".to_string()]
         );
         assert_eq!(payload.custom_tools.len(), 1);
+        assert!(payload.preferences.is_some());
     }
 
     #[test]

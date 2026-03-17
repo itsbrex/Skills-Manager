@@ -1,3 +1,4 @@
+use crate::models::config::UserPreferences;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -82,4 +83,6 @@ pub struct CloudSyncPayload {
     pub tool_states: HashMap<String, CloudSyncToolState>,
     #[serde(default)]
     pub custom_tools: Vec<CloudSyncCustomTool>,
+    #[serde(default)]
+    pub preferences: Option<UserPreferences>,
 }
