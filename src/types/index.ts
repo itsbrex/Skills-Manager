@@ -135,6 +135,7 @@ export interface CloudSyncPayload {
   skills: CloudSyncSkill[];
   tool_states: Record<string, CloudSyncToolState>;
   custom_tools: CloudSyncCustomTool[];
+  preferences?: UserPreferences | null;
 }
 
 export interface CloudSyncSnapshot {

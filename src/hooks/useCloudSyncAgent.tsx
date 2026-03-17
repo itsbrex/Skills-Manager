@@ -208,6 +208,20 @@ function useCloudSyncAgent(): CloudSyncContextValue {
 
   const applyCloudPayload = useCallback(async (payload: CloudSyncPayload) => {
     const config = await invoke<AppConfig>("get_config");
+    if (payload.preferences) {
+      const merged = {
+        ...defaultPreferences,
+        ...(config.preferences ?? {}),
+        ...payload.preferences,
+      };
+      config.preferences = merged;
+      await invoke("save_config", { config });
+      setCloudSyncSettingsSnapshot({
+        auto: merged.cloud_sync_auto,
+        intervalMinutes: merged.cloud_sync_interval_minutes,
+      });
+      setVaultConsent(merged.vault_backup_consent);
+    }
     const existingCustomTools = config.custom_tools || {};
 
     for (const tool of payload.custom_tools) {
