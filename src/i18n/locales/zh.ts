@@ -313,6 +313,8 @@ export const zh = {
     notSignedIn: "登录后可启用云同步",
     syncNow: "立即同步",
     syncing: "同步中...",
+    pulling: "正在从云端拉取...",
+    pushing: "正在上传到云端...",
     conflictNotice: "检测到云端冲突，请处理。",
     conflictTitle: "检测到同步冲突",
     conflictDesc: "本地与云端同时有变更，请选择保留版本。",

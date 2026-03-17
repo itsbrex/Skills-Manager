@@ -734,6 +734,16 @@ export function Settings() {
                 <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
                   {authProfile ? lastSyncedLabel : t("cloudSync.notSignedIn")}
                 </div>
+                {cloudSync.syncStage === "pulling" && (
+                  <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                    {t("cloudSync.pulling")}
+                  </div>
+                )}
+                {cloudSync.syncStage === "pushing" && (
+                  <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                    {t("cloudSync.pushing")}
+                  </div>
+                )}
                 {cloudSync.conflict && (
                   <div style={{ fontSize: '12px', color: 'var(--color-warning)' }}>
                     {t("cloudSync.conflictNotice")}

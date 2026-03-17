@@ -310,6 +310,8 @@ export const en = {
     notSignedIn: "Sign in to enable cloud sync",
     syncNow: "Sync Now",
     syncing: "Syncing...",
+    pulling: "Pulling from cloud...",
+    pushing: "Uploading to cloud...",
     conflictNotice: "Cloud conflict detected. Please resolve.",
     conflictTitle: "Sync conflict detected",
     conflictDesc: "Local and cloud changes both exist. Choose which version to keep.",
