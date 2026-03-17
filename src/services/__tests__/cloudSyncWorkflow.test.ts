@@ -32,8 +32,6 @@ test("syncPullThenPush runs pull then push and updates stages", async () => {
   const result = await run;
 
   assert.deepEqual(calls, ["pull", "push"]);
-  assert.equal(stages[0], "pulling");
-  assert.equal(stages[1], "pushing");
-  assert.equal(stages[stages.length - 1], "idle");
-  assert.equal(result, okResult);
+  assert.deepEqual(stages, ["pulling", "pushing", "idle"]);
+  assert.deepEqual(result, okResult);
 });
