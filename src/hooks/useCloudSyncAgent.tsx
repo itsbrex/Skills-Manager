@@ -377,7 +377,12 @@ function useCloudSyncAgent(): CloudSyncContextValue {
     await syncPullThenPush({
       pull: performPull,
       push: async () => ({ status: "skipped", reason: "pull_only" } as const),
-      onStage: setSyncStage,
+      onStage: (stage) => {
+        if (stage === "pushing") {
+          return;
+        }
+        setSyncStage(stage);
+      },
       onError: setError,
       retryOnConflict: false,
     });
