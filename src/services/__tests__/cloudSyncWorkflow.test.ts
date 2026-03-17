@@ -96,3 +96,65 @@ test("syncPullThenPush retries once on conflict and succeeds", async () => {
   assert.deepEqual(stages, ["pulling", "pushing", "pulling", "pushing", "idle"]);
   assert.deepEqual(result, okResult);
 });
+
+test("syncPullThenPush returns conflict when retryOnConflict is false", async () => {
+  const stages: string[] = [];
+  const calls: string[] = [];
+  const onErrorMessages: string[] = [];
+
+  const conflictResult = {
+    status: "conflict",
+    revision: 1,
+    payload,
+    local_payload: payload,
+  } as const;
+
+  const result = await syncPullThenPush({
+    pull: async () => {
+      calls.push("pull");
+    },
+    push: async () => {
+      calls.push("push");
+      return conflictResult;
+    },
+    onStage: (stage) => stages.push(stage),
+    onError: (message) => onErrorMessages.push(message),
+    retryOnConflict: false,
+  });
+
+  assert.deepEqual(calls, ["pull", "push"]);
+  assert.deepEqual(stages, ["pulling", "pushing", "idle"]);
+  assert.deepEqual(onErrorMessages, []);
+  assert.deepEqual(result, conflictResult);
+});
+
+test("syncPullThenPush throws after conflict retry and calls onError", async () => {
+  const stages: string[] = [];
+  const onErrorMessages: string[] = [];
+
+  await assert.rejects(
+    () =>
+      syncPullThenPush({
+        pull: async () => {},
+        push: async () => ({
+          status: "conflict",
+          revision: 1,
+          payload,
+          local_payload: payload,
+        }),
+        onStage: (stage) => stages.push(stage),
+        onError: (message) => onErrorMessages.push(message),
+        retryOnConflict: true,
+      }),
+    /Sync conflict persists after retry/,
+  );
+
+  assert.deepEqual(stages, [
+    "pulling",
+    "pushing",
+    "pulling",
+    "pushing",
+    "error",
+  ]);
+  assert.deepEqual(onErrorMessages, ["Sync conflict persists after retry"]);
+});

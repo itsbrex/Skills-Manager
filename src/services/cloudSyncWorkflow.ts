@@ -23,15 +23,18 @@ export async function syncPullThenPush({
     onStage("pushing");
     let result = await push();
 
-    if (result.status === "conflict" && retryOnConflict) {
+    if (result.status === "conflict") {
+      if (!retryOnConflict) {
+        onStage("idle");
+        return result;
+      }
       onStage("pulling");
       await pull();
       onStage("pushing");
       result = await push();
-    }
-
-    if (result.status === "conflict") {
-      throw new Error("Sync conflict persists after retry");
+      if (result.status === "conflict") {
+        throw new Error("Sync conflict persists after retry");
+      }
     }
 
     onStage("idle");
