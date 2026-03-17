@@ -26,6 +26,7 @@ import {
 } from "@/services/cloudSync";
 import {
   buildMissingSkillRestores,
+  isNonBlockingRestoreError,
   runVaultBackupThenPush,
 } from "@/services/cloudSyncUtils";
 import { syncPullThenPush, type SyncStage } from "@/services/cloudSyncWorkflow";
@@ -367,8 +368,17 @@ function useCloudSyncAgent(): CloudSyncContextValue {
     setError(null);
     const snapshot = await cloudSyncPull();
     if (snapshot.payload) {
-      await applyCloudPayload(snapshot.payload);
-      updateLastSynced();
+      try {
+        await applyCloudPayload(snapshot.payload);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!isNonBlockingRestoreError(message)) {
+          throw err;
+        }
+        setError(message);
+      } finally {
+        updateLastSynced();
+      }
     }
   }, [applyCloudPayload, updateLastSynced]);
 

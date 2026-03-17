@@ -10,6 +10,10 @@ export type MissingSkillRestore =
   | { type: "marketplace"; skill: CloudSyncSkillLike }
   | { type: "vault"; skill: CloudSyncSkillLike };
 
+export function isNonBlockingRestoreError(message: string): boolean {
+  return message.startsWith("Restore failed:");
+}
+
 type CloudSyncSkillLike = {
   id: string;
   name: string;

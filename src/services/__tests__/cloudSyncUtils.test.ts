@@ -69,6 +69,15 @@ test("buildMissingSkillRestores falls back to vault for local/imported skills", 
   );
 });
 
+test("isNonBlockingRestoreError identifies restore failures", async () => {
+  const { isNonBlockingRestoreError } = await import("../cloudSyncUtils.ts");
+  assert.equal(
+    isNonBlockingRestoreError("Restore failed: superpowers: Vault download failed: HTTP 502"),
+    true,
+  );
+  assert.equal(isNonBlockingRestoreError("network failed"), false);
+});
+
 test("runVaultBackupThenPush runs backup before push", async () => {
   const order: string[] = [];
   const result = await runVaultBackupThenPush(
