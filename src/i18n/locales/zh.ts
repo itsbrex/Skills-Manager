@@ -267,6 +267,11 @@ export const zh = {
     themeLight: "浅色",
     themeDark: "深色",
     themeSystem: "跟随系统",
+    fontFamily: "字体",
+    fontFamilyDesc: "选择应用界面的字体风格",
+    fontFamilySystem: "默认",
+    fontFamilyRounded: "圆润",
+    fontFamilySerif: "衬线",
     language: "界面语言",
     languageDesc: "设置应用显示的语言",
     // About

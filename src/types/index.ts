@@ -34,6 +34,7 @@ export type VaultBackupConsent = "unknown" | "granted" | "denied";
 export interface UserPreferences {
   // Appearance
   theme: "light" | "dark" | "system";
+  font_family: "system" | "rounded" | "serif";
   language: "zh" | "en";
 
   // Sync behavior

@@ -264,6 +264,11 @@ export const en = {
     themeLight: "Light",
     themeDark: "Dark",
     themeSystem: "System",
+    fontFamily: "Font",
+    fontFamilyDesc: "Choose the application font style",
+    fontFamilySystem: "Default",
+    fontFamilyRounded: "Rounded",
+    fontFamilySerif: "Serif",
     language: "Language",
     languageDesc: "Set application display language",
     // About

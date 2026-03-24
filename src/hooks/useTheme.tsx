@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
+import { FontFamilyPreset, getFontFamilyStack } from "@/lib/fontFamily";
 
 type Theme = "light" | "dark" | "system";
 type ResolvedTheme = "light" | "dark";
@@ -6,7 +7,9 @@ type ResolvedTheme = "light" | "dark";
 interface ThemeContextValue {
   theme: Theme;
   resolvedTheme: ResolvedTheme;
+  fontFamily: FontFamilyPreset;
   setTheme: (theme: Theme) => void;
+  setFontFamily: (fontFamily: FontFamilyPreset) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -23,10 +26,18 @@ function resolveTheme(theme: Theme): ResolvedTheme {
 interface ThemeProviderProps {
   children: ReactNode;
   theme: Theme;
+  fontFamily: FontFamilyPreset;
   onThemeChange?: (theme: Theme) => void;
+  onFontFamilyChange?: (fontFamily: FontFamilyPreset) => void;
 }
 
-export function ThemeProvider({ children, theme, onThemeChange }: ThemeProviderProps) {
+export function ThemeProvider({
+  children,
+  theme,
+  fontFamily,
+  onThemeChange,
+  onFontFamilyChange,
+}: ThemeProviderProps) {
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => resolveTheme(theme));
 
   // Apply theme class to document
@@ -41,6 +52,10 @@ export function ThemeProvider({ children, theme, onThemeChange }: ThemeProviderP
       root.classList.remove("dark");
     }
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty("--app-font-family", getFontFamilyStack(fontFamily));
+  }, [fontFamily]);
 
   // Listen for system theme changes when theme is "system"
   useEffect(() => {
@@ -66,8 +81,12 @@ export function ThemeProvider({ children, theme, onThemeChange }: ThemeProviderP
     onThemeChange?.(newTheme);
   }, [onThemeChange]);
 
+  const setFontFamily = useCallback((newFontFamily: FontFamilyPreset) => {
+    onFontFamilyChange?.(newFontFamily);
+  }, [onFontFamilyChange]);
+
   return (
-    <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, resolvedTheme, fontFamily, setTheme, setFontFamily }}>
       {children}
     </ThemeContext.Provider>
   );

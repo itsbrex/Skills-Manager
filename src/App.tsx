@@ -16,6 +16,7 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import { CloudSyncProvider } from "@/hooks/useCloudSyncAgent";
 import { I18nProvider, Language } from "@/i18n";
 import { registerTelemetryCloseHandler } from "@/telemetry/registerTelemetryCloseHandler";
+import { FontFamilyPreset, normalizeFontFamilyPreset } from "@/lib/fontFamily";
 import { AppConfig, MarketplaceUpdateCheckResult } from "@/types";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { CloudSyncConflictDialog } from "@/components/cloud/CloudSyncConflictDialog";
@@ -30,6 +31,7 @@ function App() {
   const { isInitialized, isLoading: initLoading, markInitialized } = useInitialization();
   const [language, setLanguage] = useState<Language>("en");
   const [theme, setTheme] = useState<Theme>("system");
+  const [fontFamily, setFontFamily] = useState<FontFamilyPreset>("system");
   const [configLoaded, setConfigLoaded] = useState(false);
   const { toasts, removeToast } = useToast();
 
@@ -44,6 +46,7 @@ function App() {
         if (config.preferences?.theme) {
           setTheme(config.preferences.theme as Theme);
         }
+        setFontFamily(normalizeFontFamilyPreset(config.preferences?.font_family));
       } catch {
         // Use defaults on error
       }
@@ -58,6 +61,10 @@ function App() {
 
   const handleThemeChange = useCallback((newTheme: Theme) => {
     setTheme(newTheme);
+  }, []);
+
+  const handleFontFamilyChange = useCallback((newFontFamily: FontFamilyPreset) => {
+    setFontFamily(newFontFamily);
   }, []);
 
   useEffect(() => {
@@ -149,7 +156,12 @@ function App() {
 
   if (!isInitialized) {
     return (
-      <ThemeProvider theme={theme} onThemeChange={handleThemeChange}>
+      <ThemeProvider
+        theme={theme}
+        fontFamily={fontFamily}
+        onThemeChange={handleThemeChange}
+        onFontFamilyChange={handleFontFamilyChange}
+      >
         <I18nProvider language={language} onLanguageChange={handleLanguageChange}>
           <Welcome onComplete={markInitialized} />
         </I18nProvider>
@@ -158,7 +170,12 @@ function App() {
   }
 
   return (
-    <ThemeProvider theme={theme} onThemeChange={handleThemeChange}>
+    <ThemeProvider
+      theme={theme}
+      fontFamily={fontFamily}
+      onThemeChange={handleThemeChange}
+      onFontFamilyChange={handleFontFamilyChange}
+    >
       <I18nProvider language={language} onLanguageChange={handleLanguageChange}>
         <CloudSyncProvider>
           <BrowserRouter>

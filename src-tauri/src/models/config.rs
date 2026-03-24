@@ -17,6 +17,8 @@ pub enum VaultBackupConsent {
 pub struct UserPreferences {
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default = "default_font_family")]
+    pub font_family: String,
     #[serde(default = "default_language")]
     pub language: String,
     #[serde(default = "default_true")]
@@ -87,6 +89,9 @@ fn default_theme() -> String {
 fn default_language() -> String {
     "en".to_string()
 }
+fn default_font_family() -> String {
+    "system".to_string()
+}
 fn default_editor() -> String {
     "builtin".to_string()
 }
@@ -132,6 +137,7 @@ impl Default for UserPreferences {
     fn default() -> Self {
         Self {
             theme: default_theme(),
+            font_family: default_font_family(),
             language: default_language(),
             auto_sync: true,
             sync_on_save: true,
@@ -375,5 +381,25 @@ mod tests {
             restored_prefs.vault_backup_consent,
             VaultBackupConsent::Unknown
         );
+    }
+
+    #[test]
+    fn font_family_preference_defaults_and_persists() {
+        let config = AppConfig::default();
+        let value = serde_json::to_value(&config).expect("config should serialize");
+        let font_family = value
+            .get("preferences")
+            .and_then(|prefs| prefs.get("font_family"))
+            .and_then(|value| value.as_str());
+        assert_eq!(font_family, Some("system"));
+
+        let json = serde_json::to_string(&config).expect("config should serialize");
+        let restored: AppConfig = serde_json::from_str(&json).expect("config should deserialize");
+        let restored_value = serde_json::to_value(&restored).expect("restored config should serialize");
+        let restored_font_family = restored_value
+            .get("preferences")
+            .and_then(|prefs| prefs.get("font_family"))
+            .and_then(|value| value.as_str());
+        assert_eq!(restored_font_family, Some("system"));
     }
 }

@@ -9,6 +9,7 @@ import { useTranslation, Language } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
 import { useCloudSync } from "@/hooks/useCloudSyncAgent";
 import { getEditorIcon } from "@/assets/editors";
+import { FontFamilyPreset, normalizeFontFamilyPreset } from "@/lib/fontFamily";
 import wechatRewardCode from "@/assets/donation/wechat-reward-code.jpg";
 import alipayRewardCode from "@/assets/donation/alipay-reward-code.jpg";
 import { Toggle } from "@/components/ui/toggle";
@@ -21,7 +22,7 @@ import { SunIcon, MoonIcon, MonitorIcon } from "@/components/icons/theme-icons";
 
 export function Settings() {
   const { t, language, setLanguage } = useTranslation();
-  const { setTheme } = useTheme();
+  const { setTheme, setFontFamily } = useTheme();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -40,9 +41,10 @@ export function Settings() {
     setError(null);
     try {
       const configResult = await invoke<AppConfig>("get_config");
-      if (!configResult.preferences) {
-        configResult.preferences = { ...defaultPreferences };
-      }
+      configResult.preferences = {
+        ...defaultPreferences,
+        ...(configResult.preferences ?? {}),
+      };
       setConfig(configResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -104,6 +106,10 @@ export function Settings() {
     // If theme changed, update the app theme immediately
     if (key === "theme") {
       setTheme(value as "light" | "dark" | "system");
+    }
+
+    if (key === "font_family") {
+      setFontFamily(value as FontFamilyPreset);
     }
   };
 
@@ -579,6 +585,22 @@ export function Settings() {
               <ThemeSelector
                 value={prefs.theme}
                 onChange={(v) => updatePreference("theme", v)}
+              />
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.fontFamily")}
+              description={t("settings.fontFamilyDesc")}
+              isLast={false}
+            >
+              <SegmentedControl
+                value={normalizeFontFamilyPreset(prefs.font_family)}
+                onChange={(v) => updatePreference("font_family", normalizeFontFamilyPreset(v))}
+                options={[
+                  { value: "system", label: t("settings.fontFamilySystem") },
+                  { value: "rounded", label: t("settings.fontFamilyRounded") },
+                  { value: "serif", label: t("settings.fontFamilySerif") },
+                ]}
               />
             </SettingsRow>
 
