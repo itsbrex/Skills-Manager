@@ -19,6 +19,7 @@ import { setAuthProfileSnapshot } from "@/services/authProfileStore";
 import { useCloudSync } from "@/hooks/useCloudSyncAgent";
 import { UpdateInfo } from "@/types";
 import { MODAL_LAYER_Z_INDEX, MODAL_OVERLAY_COLOR } from "@/constants/modal";
+import { getSidebarChromeMetrics } from "./sidebarChrome";
 
 const navItems = [
   { path: "/", labelKey: "nav.skills" as const, icon: "sparkles" },
@@ -295,6 +296,9 @@ export function Sidebar() {
     : authProfile?.provider === "google"
       ? "Google"
       : authProfile?.provider || "-";
+  const chromeMetrics = getSidebarChromeMetrics(
+    typeof navigator === "undefined" ? "" : navigator.userAgent,
+  );
 
   return (
     <aside
@@ -312,15 +316,15 @@ export function Sidebar() {
       <div
         onMouseDown={() => getCurrentWindow().startDragging()}
         style={{
-          height: '52px',
-          minHeight: '52px',
-          cursor: 'default',
+          height: `${chromeMetrics.topSpacerHeight}px`,
+          minHeight: `${chromeMetrics.topSpacerHeight}px`,
+          cursor: 'grab',
         }}
       />
       {/* App name */}
       <div
         style={{
-          padding: '0 20px 12px 20px',
+          padding: chromeMetrics.brandPadding,
           fontSize: '13px',
           fontWeight: 500,
           color: 'var(--muted-foreground)',
@@ -358,7 +362,7 @@ export function Sidebar() {
         )}
       </div>
       {/* Navigation */}
-      <nav style={{ padding: '8px', flex: 1 }}>
+      <nav style={{ padding: chromeMetrics.navPadding, flex: 1 }}>
         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
           {navItems.map((item) => (
             <li key={item.path} style={{ marginBottom: '2px' }}>
