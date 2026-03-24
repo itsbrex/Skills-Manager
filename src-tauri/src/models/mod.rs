@@ -8,7 +8,8 @@ pub mod tool;
 pub mod update;
 
 pub use config::{
-    AppConfig, CustomToolConfig, PollClientState, TelemetryConfig, ToolConfig, VaultBackupConsent,
+    AppConfig, CustomToolConfig, PollClientState, TelemetryConfig, TelemetryConsent, ToolConfig,
+    VaultBackupConsent,
 };
 pub use editor::{DetectedEditor, EDITOR_DEFINITIONS};
 pub use marketplace::{

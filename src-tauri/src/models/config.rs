@@ -13,6 +13,14 @@ pub enum VaultBackupConsent {
     Denied,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TelemetryConsent {
+    Unknown,
+    Granted,
+    Denied,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPreferences {
     #[serde(default = "default_theme")]
@@ -39,6 +47,8 @@ pub struct UserPreferences {
     pub remove_links_when_disabling_tool: bool,
     #[serde(default = "default_vault_backup_consent")]
     pub vault_backup_consent: VaultBackupConsent,
+    #[serde(default = "default_telemetry_consent")]
+    pub telemetry_consent: TelemetryConsent,
     #[serde(default)]
     pub github_token: Option<String>,
 }
@@ -110,6 +120,9 @@ fn default_false() -> bool {
 fn default_vault_backup_consent() -> VaultBackupConsent {
     VaultBackupConsent::Unknown
 }
+fn default_telemetry_consent() -> TelemetryConsent {
+    TelemetryConsent::Unknown
+}
 fn default_marketplace_sources() -> Vec<MarketplaceSource> {
     vec![
         MarketplaceSource {
@@ -148,6 +161,7 @@ impl Default for UserPreferences {
             show_sync_notifications: true,
             remove_links_when_disabling_tool: false,
             vault_backup_consent: default_vault_backup_consent(),
+            telemetry_consent: default_telemetry_consent(),
             github_token: None,
         }
     }
@@ -297,6 +311,7 @@ impl AppConfig {
 mod tests {
     use super::default_marketplace_sources;
     use super::AppConfig;
+    use super::TelemetryConsent;
     use super::VaultBackupConsent;
     use crate::models::auth::{AuthProfile, AuthSession};
     use crate::models::SourceType;
@@ -384,6 +399,18 @@ mod tests {
     }
 
     #[test]
+    fn telemetry_consent_defaults_to_unknown() {
+        let config = AppConfig::default();
+        let prefs = config.preferences.as_ref().expect("prefs");
+        assert_eq!(prefs.telemetry_consent, TelemetryConsent::Unknown);
+
+        let json = serde_json::to_string(&config).unwrap();
+        let restored: AppConfig = serde_json::from_str(&json).unwrap();
+        let restored_prefs = restored.preferences.as_ref().expect("prefs");
+        assert_eq!(restored_prefs.telemetry_consent, TelemetryConsent::Unknown);
+    }
+
+    #[test]
     fn font_family_preference_defaults_and_persists() {
         let config = AppConfig::default();
         let value = serde_json::to_value(&config).expect("config should serialize");
@@ -395,7 +422,8 @@ mod tests {
 
         let json = serde_json::to_string(&config).expect("config should serialize");
         let restored: AppConfig = serde_json::from_str(&json).expect("config should deserialize");
-        let restored_value = serde_json::to_value(&restored).expect("restored config should serialize");
+        let restored_value =
+            serde_json::to_value(&restored).expect("restored config should serialize");
         let restored_font_family = restored_value
             .get("preferences")
             .and_then(|prefs| prefs.get("font_family"))

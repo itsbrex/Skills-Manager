@@ -237,6 +237,11 @@ export const en = {
     accountDesc: "Sign in to sync settings across devices",
     cloudSync: "Cloud Sync",
     cloudSyncDesc: "Sync status and manual control",
+    telemetryConsent: "Usage analytics",
+    telemetryConsentDesc: "Allow anonymous usage events to be collected for product improvements",
+    telemetryConsentStatusUnknown: "Waiting for your choice",
+    telemetryConsentStatusGranted: "Collection allowed",
+    telemetryConsentStatusDenied: "Collection denied",
     vaultBackupConsent: "Backup non-market skills",
     vaultBackupConsentDesc: "Allow backing up local/imported skills to the cloud",
     vaultBackupConsentStatusUnknown: "We'll ask on first manual sync",
@@ -424,6 +429,13 @@ export const en = {
       wechatDesc: "You can contact me via WeChat (yeheboo) and please add note: {note}",
       emailLabel: "Email",
     },
+  },
+  telemetry: {
+    consentTitle: "Help us improve Skills Manager",
+    consentDesc: "Allow anonymous usage events to be collected so we can understand feature usage and improve the app.",
+    consentHint: "You can change this anytime later in Settings.",
+    consentAccept: "Allow",
+    consentDeny: "Deny",
   },
 } as const;
 

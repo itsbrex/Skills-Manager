@@ -29,6 +29,7 @@ export interface Tool {
 }
 
 export type VaultBackupConsent = "unknown" | "granted" | "denied";
+export type TelemetryConsent = "unknown" | "granted" | "denied";
 
 // User preferences for the application
 export interface UserPreferences {
@@ -51,6 +52,7 @@ export interface UserPreferences {
   show_sync_notifications: boolean;
   remove_links_when_disabling_tool: boolean;
   vault_backup_consent: VaultBackupConsent;
+  telemetry_consent: TelemetryConsent;
 
   // Marketplace auth
   github_token?: string | null;

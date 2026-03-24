@@ -379,6 +379,15 @@ impl TelemetryService {
         })
     }
 
+    pub fn clear_local_data(&self) -> Result<(), String> {
+        if !self.db_path.exists() {
+            return Ok(());
+        }
+
+        std::fs::remove_file(&self.db_path)
+            .map_err(|e| format!("Failed to delete telemetry database: {}", e))
+    }
+
     #[cfg_attr(not(test), allow(dead_code))]
     fn pending_counts(&self) -> Result<(usize, usize), String> {
         let conn = self.connection()?;

@@ -1,13 +1,20 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { AppConfig, UserPreferences, DetectedEditor, UpdateInfo, MarketplaceSource } from "@/types";
+import {
+  AppConfig,
+  UserPreferences,
+  DetectedEditor,
+  UpdateInfo,
+  MarketplaceSource,
+} from "@/types";
 import { defaultPreferences } from "@/constants/preferences";
 import { startGithubAuth, startGoogleAuth, clearPendingAuthProvider, setPendingAuthProvider } from "@/services/auth";
 import { checkUpdate } from "@/services/updater";
 import { useTranslation, Language } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
 import { useCloudSync } from "@/hooks/useCloudSyncAgent";
+import { resolveTelemetryConsent } from "@/telemetry/consent";
 import { getEditorIcon } from "@/assets/editors";
 import { FontFamilyPreset, normalizeFontFamilyPreset } from "@/lib/fontFamily";
 import wechatRewardCode from "@/assets/donation/wechat-reward-code.jpg";
@@ -143,6 +150,16 @@ export function Settings() {
         intervalMinutes: prefs.cloud_sync_interval_minutes,
       });
       await cloudSync.refreshVaultConsent();
+      const telemetryConsent = resolveTelemetryConsent(prefs.telemetry_consent);
+      if (telemetryConsent === "granted") {
+        void invoke("telemetry_initialize").catch((err) => {
+          console.warn("Failed to initialize telemetry after settings save:", err);
+        });
+      } else if (telemetryConsent === "denied") {
+        void invoke("telemetry_clear_local_data").catch((err) => {
+          console.warn("Failed to clear telemetry after settings save:", err);
+        });
+      }
       setSaveSuccess(true);
       setTimeout(() => {
         setSaveSuccess(false);
@@ -254,11 +271,17 @@ export function Settings() {
   const marketplaceRows = marketplaceSources;
   const authProfile = cloudSync.authProfile;
   const vaultConsent = prefs.vault_backup_consent ?? "unknown";
+  const telemetryConsent = resolveTelemetryConsent(prefs.telemetry_consent);
   const vaultConsentLabel = vaultConsent === "granted"
     ? t("settings.vaultBackupConsentStatusGranted")
     : vaultConsent === "denied"
       ? t("settings.vaultBackupConsentStatusDenied")
       : t("settings.vaultBackupConsentStatusUnknown");
+  const telemetryConsentLabel = telemetryConsent === "granted"
+    ? t("settings.telemetryConsentStatusGranted")
+    : telemetryConsent === "denied"
+      ? t("settings.telemetryConsentStatusDenied")
+      : t("settings.telemetryConsentStatusUnknown");
   const lastSyncedLabel = cloudSync.lastSyncedAt
     ? t("cloudSync.lastSynced").replace("{time}", new Date(cloudSync.lastSyncedAt * 1000).toLocaleString())
     : t("cloudSync.neverSynced");
@@ -776,6 +799,22 @@ export function Settings() {
                     {cloudSync.error}
                   </div>
                 )}
+              </div>
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.telemetryConsent")}
+              description={t("settings.telemetryConsentDesc")}
+              isLast={false}
+            >
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
+                <Toggle
+                  checked={telemetryConsent === "granted"}
+                  onChange={(v) => updatePreference("telemetry_consent", v ? "granted" : "denied")}
+                />
+                <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                  {telemetryConsentLabel}
+                </div>
               </div>
             </SettingsRow>
 

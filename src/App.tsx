@@ -16,11 +16,17 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import { CloudSyncProvider } from "@/hooks/useCloudSyncAgent";
 import { I18nProvider, Language } from "@/i18n";
 import { registerTelemetryCloseHandler } from "@/telemetry/registerTelemetryCloseHandler";
+import {
+  resolveTelemetryConsent,
+  shouldPromptForTelemetryConsent,
+} from "@/telemetry/consent";
 import { FontFamilyPreset, normalizeFontFamilyPreset } from "@/lib/fontFamily";
-import { AppConfig, MarketplaceUpdateCheckResult } from "@/types";
+import { AppConfig, MarketplaceUpdateCheckResult, TelemetryConsent } from "@/types";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { CloudSyncConflictDialog } from "@/components/cloud/CloudSyncConflictDialog";
 import { VaultConsentDialog } from "@/components/cloud/VaultConsentDialog";
+import { TelemetryConsentDialog } from "@/components/telemetry/TelemetryConsentDialog";
+import { defaultPreferences } from "@/constants/preferences";
 
 type Theme = "light" | "dark" | "system";
 const TELEMETRY_HEARTBEAT_INTERVAL_MS = 60_000;
@@ -32,7 +38,12 @@ function App() {
   const [language, setLanguage] = useState<Language>("en");
   const [theme, setTheme] = useState<Theme>("system");
   const [fontFamily, setFontFamily] = useState<FontFamilyPreset>("system");
+  const [telemetryConsent, setTelemetryConsent] = useState<TelemetryConsent>(
+    defaultPreferences.telemetry_consent,
+  );
   const [configLoaded, setConfigLoaded] = useState(false);
+  const [telemetryConsentSaving, setTelemetryConsentSaving] = useState(false);
+  const [telemetryConsentError, setTelemetryConsentError] = useState<string | null>(null);
   const { toasts, removeToast } = useToast();
 
   // Load preferences from config on mount
@@ -47,6 +58,7 @@ function App() {
           setTheme(config.preferences.theme as Theme);
         }
         setFontFamily(normalizeFontFamilyPreset(config.preferences?.font_family));
+        setTelemetryConsent(resolveTelemetryConsent(config.preferences?.telemetry_consent));
       } catch {
         // Use defaults on error
       }
@@ -65,6 +77,40 @@ function App() {
 
   const handleFontFamilyChange = useCallback((newFontFamily: FontFamilyPreset) => {
     setFontFamily(newFontFamily);
+  }, []);
+
+  const handleTelemetryConsentChange = useCallback(async (nextConsent: TelemetryConsent) => {
+    setTelemetryConsentSaving(true);
+    setTelemetryConsentError(null);
+
+    try {
+      const config = await invoke<AppConfig>("get_config");
+      const nextConfig: AppConfig = {
+        ...config,
+        preferences: {
+          ...defaultPreferences,
+          ...(config.preferences ?? {}),
+          telemetry_consent: nextConsent,
+        },
+      };
+
+      await invoke("save_config", { config: nextConfig });
+      setTelemetryConsent(nextConsent);
+
+      if (nextConsent === "granted") {
+        void invoke("telemetry_initialize").catch(() => {
+          // keep telemetry initialization silent on failures after consent changes
+        });
+      } else if (nextConsent === "denied") {
+        void invoke("telemetry_clear_local_data").catch(() => {
+          // keep telemetry cleanup silent on failures after consent changes
+        });
+      }
+    } catch (error) {
+      setTelemetryConsentError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setTelemetryConsentSaving(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -194,6 +240,17 @@ function App() {
           </BrowserRouter>
           <CloudSyncConflictDialog />
           <VaultConsentDialog />
+          <TelemetryConsentDialog
+            open={isInitialized && configLoaded && shouldPromptForTelemetryConsent(telemetryConsent)}
+            saving={telemetryConsentSaving}
+            error={telemetryConsentError}
+            onAccept={() => {
+              void handleTelemetryConsentChange("granted");
+            }}
+            onDeny={() => {
+              void handleTelemetryConsentChange("denied");
+            }}
+          />
         </CloudSyncProvider>
       </I18nProvider>
     </ThemeProvider>

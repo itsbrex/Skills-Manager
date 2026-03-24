@@ -16,10 +16,10 @@ use commands::{
     logout_auth, mark_initialized, open_in_editor, read_directory_tree, read_file, refresh_editors,
     refresh_skills, refresh_tools, save_config, save_poll_client_state, scan_existing_skills,
     set_tool_enabled, start_github_auth, start_google_auth, submit_feedback, submit_poll_vote,
-    sync_marketplace_installed_skills, telemetry_end_session, telemetry_flush_pending,
-    telemetry_initialize, telemetry_record_heartbeat, telemetry_track_event,
-    toggle_marketplace_source, update_custom_tool, update_tool_paths, vault_backup, vault_download,
-    write_file,
+    sync_marketplace_installed_skills, telemetry_clear_local_data, telemetry_end_session,
+    telemetry_flush_pending, telemetry_initialize, telemetry_record_heartbeat,
+    telemetry_track_event, toggle_marketplace_source, update_custom_tool, update_tool_paths,
+    vault_backup, vault_download, write_file,
 };
 use services::{AppCache, MarketplaceCache};
 use tauri::{Emitter, Manager};
@@ -121,6 +121,7 @@ pub fn run() {
             telemetry_end_session,
             telemetry_flush_pending,
             telemetry_track_event,
+            telemetry_clear_local_data,
             vault_backup,
             vault_download,
         ])

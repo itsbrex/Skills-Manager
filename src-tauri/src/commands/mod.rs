@@ -40,8 +40,8 @@ pub use skills::{
 };
 pub use sync::{check_sync_status, fix_sync_issues};
 pub use telemetry::{
-    telemetry_end_session, telemetry_flush_pending, telemetry_initialize,
-    telemetry_record_heartbeat, telemetry_track_event,
+    telemetry_clear_local_data, telemetry_end_session, telemetry_flush_pending,
+    telemetry_initialize, telemetry_record_heartbeat, telemetry_track_event,
 };
 pub use tools::{
     create_custom_tool, delete_custom_tool, detect_tools, get_tool_status, refresh_tools,

@@ -13,5 +13,6 @@ export const defaultPreferences: UserPreferences = {
   show_sync_notifications: true,
   remove_links_when_disabling_tool: false,
   vault_backup_consent: "unknown",
+  telemetry_consent: "unknown",
   github_token: "",
 };
