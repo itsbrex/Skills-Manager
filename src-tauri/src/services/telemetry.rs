@@ -160,7 +160,11 @@ impl TelemetryService {
         let session_id = Uuid::new_v4().to_string();
         let app_version = env!("CARGO_PKG_VERSION").to_string();
         let platform = std::env::consts::OS.to_string();
-        let os_version = Some(format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH));
+        let os_version = Some(format!(
+            "{}-{}",
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        ));
 
         conn.execute(
             r#"
@@ -245,7 +249,12 @@ impl TelemetryService {
         self.get_meta_value(&conn, META_INSTALL_ID)
     }
 
-    pub fn track_event(&self, _now: i64, _event_name: &str, _properties: &Value) -> Result<(), String> {
+    pub fn track_event(
+        &self,
+        _now: i64,
+        _event_name: &str,
+        _properties: &Value,
+    ) -> Result<(), String> {
         let conn = self.connection()?;
         let install_id = self.get_or_create_install_id(&conn)?;
         let session_id = self.get_meta_value(&conn, META_CURRENT_SESSION_ID)?;
@@ -288,7 +297,11 @@ impl TelemetryService {
         Ok(())
     }
 
-    pub fn flush_pending(&self, config: &TelemetryConfig, now: i64) -> Result<TelemetryFlushResult, String> {
+    pub fn flush_pending(
+        &self,
+        config: &TelemetryConfig,
+        now: i64,
+    ) -> Result<TelemetryFlushResult, String> {
         let transport = BlockingReqwestTransport::default();
         self.flush_pending_with(config, now, &transport)
     }
@@ -326,7 +339,11 @@ impl TelemetryService {
                 install_id,
                 user_id: None,
                 platform: std::env::consts::OS.to_string(),
-                os_version: Some(format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)),
+                os_version: Some(format!(
+                    "{}-{}",
+                    std::env::consts::OS,
+                    std::env::consts::ARCH
+                )),
                 app_version: env!("CARGO_PKG_VERSION").to_string(),
             },
             sessions: sessions
@@ -765,7 +782,9 @@ impl TelemetryTransport for BlockingReqwestTransport {
 
 #[cfg(test)]
 mod tests {
-    use super::{TelemetryBatchPayload, TelemetryFlushResult, TelemetryService, TelemetryTransport};
+    use super::{
+        TelemetryBatchPayload, TelemetryFlushResult, TelemetryService, TelemetryTransport,
+    };
     use crate::models::TelemetryConfig;
     use crate::test_support::with_temp_home;
     use serde_json::json;
@@ -875,7 +894,10 @@ mod tests {
                 .expect("end telemetry session");
 
             let current = service.current_session().expect("load current session");
-            assert!(current.is_none(), "current session should be cleared after end");
+            assert!(
+                current.is_none(),
+                "current session should be cleared after end"
+            );
         });
     }
 

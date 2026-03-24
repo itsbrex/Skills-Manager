@@ -382,8 +382,14 @@ mod tests {
 
             let result = super::set_tool_enabled_with_cache("my-tool".to_string(), true, &cache);
             assert!(result.is_ok(), "expected set_tool_enabled to succeed");
-            assert!(cache.get_tools().is_none(), "tools cache should be invalidated");
-            assert!(cache.get_skills().is_none(), "skills cache should be invalidated");
+            assert!(
+                cache.get_tools().is_none(),
+                "tools cache should be invalidated"
+            );
+            assert!(
+                cache.get_skills().is_none(),
+                "skills cache should be invalidated"
+            );
         });
     }
 

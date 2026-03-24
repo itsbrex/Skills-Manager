@@ -8,9 +8,12 @@ use tauri::State;
 
 use crate::models::{
     AppConfig, InstallResult, InstallStatus, MarketplaceSkill, MarketplaceSkillsResponse,
-    MarketplaceSource, MarketplaceSyncResult, MarketplaceUpdateCheckResult, SkillFileNode,
+    MarketplaceSource, MarketplaceSyncResult, MarketplaceUpdateCheckResult, Skill, SkillFileNode,
+    SkillSource,
 };
-use crate::services::{AppCache, ConfigManager, MarketplaceCache, MarketplaceService};
+use crate::services::{
+    AppCache, ConfigManager, MarketplaceCache, MarketplaceService, ScannerService,
+};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct MarketplaceSkillDescriptionRequest {
@@ -65,19 +68,11 @@ fn normalize_source_filter(source_ids: Option<Vec<String>>) -> Option<Vec<String
 fn build_marketplace_skill_from_reference(
     reference: MarketplaceSkillReference,
 ) -> Result<MarketplaceSkill, String> {
-    let repo_url = reference
-        .repo_url
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+    let repo_url = reference.repo_url.unwrap_or_default().trim().to_string();
     if repo_url.is_empty() {
         return Err("repo_url is required".to_string());
     }
-    let skill_path = reference
-        .skill_path
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+    let skill_path = reference.skill_path.unwrap_or_default().trim().to_string();
     if skill_path.is_empty() {
         return Err("skill_path is required".to_string());
     }
@@ -153,6 +148,138 @@ fn resolve_cache_source_scope(
         }
         None => Some(enabled_ids),
     }
+}
+
+fn load_cached_or_scanned_skills(
+    app_cache: &AppCache,
+    skills_dir: &std::path::Path,
+) -> Result<Vec<Skill>, String> {
+    if let Some(skills) = app_cache.get_skills() {
+        return Ok(skills);
+    }
+
+    let skills = ScannerService::scan_skills(skills_dir)?;
+    app_cache.set_skills(skills.clone());
+    Ok(skills)
+}
+
+fn collect_installed_marketplace_skills(
+    skills: &[Skill],
+    sources: &[MarketplaceSource],
+    normalized_query: Option<&str>,
+    normalized_source_filter: &Option<Vec<String>>,
+) -> Vec<MarketplaceSkill> {
+    let source_name_by_id: HashMap<String, String> = sources
+        .iter()
+        .map(|source| (source.id.clone(), source.name.clone()))
+        .collect();
+    let selected_source_ids: Option<HashSet<&str>> = normalized_source_filter
+        .as_ref()
+        .map(|ids| ids.iter().map(String::as_str).collect());
+
+    let mut installed: Vec<MarketplaceSkill> = skills
+        .iter()
+        .filter_map(|skill| {
+            if !matches!(skill.source, SkillSource::Marketplace) {
+                return None;
+            }
+
+            let meta = skill.marketplace_meta.as_ref()?;
+            let source_id = meta
+                .marketplace_source_id
+                .clone()
+                .unwrap_or_else(|| "marketplace".to_string());
+
+            if let Some(filter) = &selected_source_ids {
+                if !filter.contains(source_id.as_str()) {
+                    return None;
+                }
+            }
+
+            Some(MarketplaceSkill {
+                id: meta
+                    .marketplace_skill_id
+                    .clone()
+                    .unwrap_or_else(|| skill.id.clone()),
+                slug: meta
+                    .marketplace_skill_slug
+                    .clone()
+                    .or_else(|| meta.skill_path.clone()),
+                name: skill.name.clone(),
+                description: skill.description.clone(),
+                author: None,
+                source_id: source_id.clone(),
+                source_name: source_name_by_id
+                    .get(&source_id)
+                    .cloned()
+                    .unwrap_or_else(|| source_id.clone()),
+                install_count: None,
+                install_url: None,
+                created_at: None,
+                repo_url: meta.repo_url.clone(),
+                skill_path: meta.skill_path.clone(),
+                external_url: meta.repo_url.clone(),
+                remote_revision: meta.remote_revision.clone(),
+                tags: Vec::new(),
+                install_status: InstallStatus::Installed,
+            })
+        })
+        .collect();
+
+    installed.sort_by(|a, b| {
+        a.name
+            .to_lowercase()
+            .cmp(&b.name.to_lowercase())
+            .then_with(|| a.id.cmp(&b.id))
+    });
+
+    let mut seen_ids = HashSet::new();
+    installed.retain(|skill| seen_ids.insert(skill.id.clone()));
+
+    MarketplaceService::filter_marketplace_skills_by_query(installed, normalized_query)
+}
+
+fn prepend_missing_installed_marketplace_skills(
+    response: MarketplaceSkillsResponse,
+    installed_skills: Vec<MarketplaceSkill>,
+) -> MarketplaceSkillsResponse {
+    let existing_ids: HashSet<&str> = response
+        .skills
+        .iter()
+        .map(|skill| skill.id.as_str())
+        .collect();
+    let mut merged: Vec<MarketplaceSkill> = installed_skills
+        .into_iter()
+        .filter(|skill| !existing_ids.contains(skill.id.as_str()))
+        .collect();
+    merged.extend(response.skills);
+
+    MarketplaceSkillsResponse {
+        skills: merged,
+        has_more: response.has_more,
+    }
+}
+
+fn merge_installed_marketplace_skills_into_page(
+    response: MarketplaceSkillsResponse,
+    page: u32,
+    skills: &[Skill],
+    sources: &[MarketplaceSource],
+    normalized_query: Option<&str>,
+    normalized_source_filter: &Option<Vec<String>>,
+) -> MarketplaceSkillsResponse {
+    if page != 1 {
+        return response;
+    }
+
+    let installed_skills = collect_installed_marketplace_skills(
+        skills,
+        sources,
+        normalized_query,
+        normalized_source_filter,
+    );
+
+    prepend_missing_installed_marketplace_skills(response, installed_skills)
 }
 
 fn merge_remote_sources_into_config(
@@ -250,6 +377,7 @@ pub async fn fetch_marketplace_skills(
     page: Option<u32>,
     source_ids: Option<Vec<String>>,
     cache: State<'_, MarketplaceCache>,
+    app_cache: State<'_, AppCache>,
 ) -> Result<MarketplaceSkillsResponse, String> {
     let normalized_query = query
         .as_ref()
@@ -263,12 +391,22 @@ pub async fn fetch_marketplace_skills(
         &normalized_source_filter,
         config.marketplace_sources.as_deref().unwrap_or(&[]),
     );
+    let local_sources = config.marketplace_sources.clone().unwrap_or_default();
 
     if !force_refresh {
         if let Some(cached) =
             cache.get_fresh_with_meta(page, &normalized_query, &cache_source_scope)
         {
-            return Ok(cached);
+            let installed_skills =
+                load_cached_or_scanned_skills(app_cache.inner(), &config.skills_dir)?;
+            return Ok(merge_installed_marketplace_skills_into_page(
+                cached,
+                page,
+                &installed_skills,
+                &local_sources,
+                normalized_query.as_deref(),
+                &normalized_source_filter,
+            ));
         }
     }
 
@@ -309,10 +447,19 @@ pub async fn fetch_marketplace_skills(
                         filtered_by_source,
                         normalized_query.as_deref(),
                     );
-                    return Ok(MarketplaceSkillsResponse {
-                        skills: filtered,
-                        has_more: false,
-                    });
+                    let installed_skills =
+                        load_cached_or_scanned_skills(app_cache.inner(), &config.skills_dir)?;
+                    return Ok(merge_installed_marketplace_skills_into_page(
+                        MarketplaceSkillsResponse {
+                            skills: filtered,
+                            has_more: false,
+                        },
+                        page,
+                        &installed_skills,
+                        &sources,
+                        normalized_query.as_deref(),
+                        &normalized_source_filter,
+                    ));
                 }
             }
             return Err(err);
@@ -326,7 +473,15 @@ pub async fn fetch_marketplace_skills(
         result.clone(),
     );
 
-    Ok(result)
+    let installed_skills = load_cached_or_scanned_skills(app_cache.inner(), &config.skills_dir)?;
+    Ok(merge_installed_marketplace_skills_into_page(
+        result,
+        page,
+        &installed_skills,
+        &sources,
+        normalized_query.as_deref(),
+        &normalized_source_filter,
+    ))
 }
 
 #[tauri::command]
@@ -567,14 +722,20 @@ pub fn toggle_marketplace_source(source_id: String, enabled: bool) -> Result<(),
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::path::PathBuf;
     use std::time::{Duration, SystemTime};
 
-    use crate::models::{MarketplaceSource, SourceType};
+    use crate::models::{
+        InstallStatus, MarketplaceMeta, MarketplaceSkill, MarketplaceSkillsResponse,
+        MarketplaceSource, Skill, SkillSource, SourceType,
+    };
     use crate::test_support::with_temp_home;
 
     use super::{
-        build_marketplace_skill_from_reference, load_last_update_check_time,
-        persist_update_check_time, resolve_cache_source_scope,
+        build_marketplace_skill_from_reference, collect_installed_marketplace_skills,
+        load_last_update_check_time, persist_update_check_time,
+        prepend_missing_installed_marketplace_skills, resolve_cache_source_scope,
         should_run_marketplace_update_check, MarketplaceSkillReference,
         MARKETPLACE_UPDATE_CHECK_INTERVAL,
     };
@@ -588,6 +749,53 @@ mod tests {
             enabled,
             builtin: true,
             api_key: None,
+        }
+    }
+
+    fn make_marketplace_skill(
+        id: &str,
+        source_id: &str,
+        name: &str,
+        description: Option<&str>,
+    ) -> Skill {
+        Skill {
+            id: format!("local-{id}"),
+            name: name.to_string(),
+            description: description.map(str::to_string),
+            version: "1.0.0".to_string(),
+            source: SkillSource::Marketplace,
+            marketplace_meta: Some(MarketplaceMeta {
+                marketplace_source_id: Some(source_id.to_string()),
+                marketplace_skill_id: Some(id.to_string()),
+                marketplace_skill_slug: Some(name.to_lowercase()),
+                repo_url: Some("https://github.com/example/repo".to_string()),
+                skill_path: Some(format!(".claude/skills/{}", name.to_lowercase())),
+                remote_revision: Some("rev-local".to_string()),
+            }),
+            vault_meta: None,
+            enabled: HashMap::new(),
+            path: PathBuf::from(format!("/tmp/{id}")),
+        }
+    }
+
+    fn make_listing_skill(id: &str, install_status: InstallStatus) -> MarketplaceSkill {
+        MarketplaceSkill {
+            id: id.to_string(),
+            slug: Some(id.to_string()),
+            name: id.to_string(),
+            description: None,
+            author: None,
+            source_id: "src_skills".to_string(),
+            source_name: "src_skills".to_string(),
+            install_count: None,
+            install_url: None,
+            created_at: None,
+            repo_url: Some("https://github.com/example/repo".to_string()),
+            skill_path: Some(format!(".claude/skills/{id}")),
+            external_url: None,
+            remote_revision: Some("rev-remote".to_string()),
+            tags: Vec::new(),
+            install_status,
         }
     }
 
@@ -676,5 +884,70 @@ mod tests {
 
         let err = build_marketplace_skill_from_reference(reference).unwrap_err();
         assert!(err.contains("repo_url"));
+    }
+
+    #[test]
+    fn collect_installed_marketplace_skills_respects_source_filter_and_query() {
+        let skills = vec![
+            make_marketplace_skill("src_skills::alpha", "src_skills", "Alpha", Some("useful")),
+            make_marketplace_skill("src_other::beta", "src_other", "Beta", Some("other")),
+            Skill {
+                id: "local-only".to_string(),
+                name: "Local".to_string(),
+                description: Some("ignore".to_string()),
+                version: "1.0.0".to_string(),
+                source: SkillSource::Local,
+                marketplace_meta: None,
+                vault_meta: None,
+                enabled: HashMap::new(),
+                path: PathBuf::from("/tmp/local-only"),
+            },
+        ];
+        let sources = vec![
+            make_source("src_skills", true),
+            make_source("src_other", true),
+        ];
+        let source_filter = Some(vec!["src_skills".to_string()]);
+
+        let collected =
+            collect_installed_marketplace_skills(&skills, &sources, Some("alp"), &source_filter);
+
+        assert_eq!(collected.len(), 1);
+        assert_eq!(collected[0].id, "src_skills::alpha");
+        assert_eq!(collected[0].install_status, InstallStatus::Installed);
+        assert_eq!(collected[0].source_name, "src_skills");
+    }
+
+    #[test]
+    fn prepend_missing_installed_marketplace_skills_prepends_only_missing_entries() {
+        let response = MarketplaceSkillsResponse {
+            skills: vec![
+                make_listing_skill("src_skills::alpha", InstallStatus::UpdateAvailable),
+                make_listing_skill("src_skills::gamma", InstallStatus::NotInstalled),
+            ],
+            has_more: true,
+        };
+
+        let merged = prepend_missing_installed_marketplace_skills(
+            response,
+            vec![
+                make_listing_skill("src_skills::beta", InstallStatus::Installed),
+                make_listing_skill("src_skills::alpha", InstallStatus::Installed),
+            ],
+        );
+
+        assert_eq!(
+            merged
+                .skills
+                .iter()
+                .map(|skill| skill.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["src_skills::beta", "src_skills::alpha", "src_skills::gamma"]
+        );
+        assert_eq!(
+            merged.skills[1].install_status,
+            InstallStatus::UpdateAvailable
+        );
+        assert!(merged.has_more);
     }
 }

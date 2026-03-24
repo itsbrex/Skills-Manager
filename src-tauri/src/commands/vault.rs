@@ -1,9 +1,9 @@
 use crate::models::auth::AuthSession;
 use crate::models::SkillSource;
-use crate::services::{ConfigManager, ScannerService};
 use crate::services::vault::{
     vault_download as fetch_vault_download, vault_upload as fetch_vault_upload, VaultUploadResult,
 };
+use crate::services::{ConfigManager, ScannerService};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
@@ -27,8 +27,7 @@ fn resolve_access_token(session: &AuthSession) -> Result<String, String> {
 
 fn vault_api_base_url() -> String {
     const DEFAULT_VAULT_API_BASE: &str = "https://skills-market-api.guardssl.info/api/v1";
-    std::env::var("SKILLS_MARKET_API_BASE")
-        .unwrap_or_else(|_| DEFAULT_VAULT_API_BASE.to_string())
+    std::env::var("SKILLS_MARKET_API_BASE").unwrap_or_else(|_| DEFAULT_VAULT_API_BASE.to_string())
 }
 
 fn hash_bytes(bytes: &[u8]) -> String {
@@ -58,9 +57,7 @@ fn add_dir_to_zip(
     options: FileOptions,
 ) -> Result<(), String> {
     let mut entries: Vec<(std::path::PathBuf, fs::FileType, String)> = Vec::new();
-    for entry in fs::read_dir(current_dir)
-        .map_err(|e| format!("读取目录失败: {}", e))?
-    {
+    for entry in fs::read_dir(current_dir).map_err(|e| format!("读取目录失败: {}", e))? {
         let entry = entry.map_err(|e| format!("读取目录条目失败: {}", e))?;
         let path = entry.path();
         let file_type = entry
@@ -113,8 +110,7 @@ pub async fn vault_download(skill_id: String) -> Result<String, String> {
 
     let install_dir = config.skills_dir.join(&skill_id);
     if install_dir.exists() {
-        fs::remove_dir_all(&install_dir)
-            .map_err(|e| format!("无法覆盖已有 Skill: {}", e))?;
+        fs::remove_dir_all(&install_dir).map_err(|e| format!("无法覆盖已有 Skill: {}", e))?;
     }
     fs::create_dir_all(&install_dir).map_err(|e| format!("无法创建 Skills 目录: {}", e))?;
     extract_zip(&bytes, &install_dir)?;
@@ -153,15 +149,7 @@ pub async fn vault_backup() -> Result<VaultBackupSummary, String> {
         };
         let hash = hash_bytes(&zip_bytes);
         let size = zip_bytes.len() as u64;
-        match fetch_vault_upload(
-            &base_url,
-            &access_token,
-            &skill.id,
-            &hash,
-            size,
-            &zip_bytes,
-        )
-        .await
+        match fetch_vault_upload(&base_url, &access_token, &skill.id, &hash, size, &zip_bytes).await
         {
             Ok(VaultUploadResult::Uploaded { .. }) => summary.uploaded += 1,
             Ok(VaultUploadResult::Skipped { .. }) => summary.skipped += 1,
@@ -192,8 +180,7 @@ fn extract_zip(bytes: &[u8], target_dir: &Path) -> Result<(), String> {
             fs::create_dir_all(parent).map_err(|e| format!("无法创建目录: {}", e))?;
         }
         let mut output = fs::File::create(&out_path).map_err(|e| format!("写入文件失败: {}", e))?;
-        std::io::copy(&mut file, &mut output)
-            .map_err(|e| format!("写入文件失败: {}", e))?;
+        std::io::copy(&mut file, &mut output).map_err(|e| format!("写入文件失败: {}", e))?;
     }
 
     Ok(())
@@ -212,10 +199,7 @@ mod tests {
     fn vault_download_command_extracts_zip() {
         with_temp_home(|_| {
             let mut server = mockito::Server::new();
-            std::env::set_var(
-                "SKILLS_MARKET_API_BASE",
-                format!("{}/api/v1", server.url()),
-            );
+            std::env::set_var("SKILLS_MARKET_API_BASE", format!("{}/api/v1", server.url()));
 
             let zip_bytes = build_zip_bytes();
             let _mock = server
@@ -243,7 +227,9 @@ mod tests {
             manager.save(&config).expect("save config");
 
             let install_dir = tauri::async_runtime::block_on(async {
-                vault_download("skill-1".to_string()).await.expect("download")
+                vault_download("skill-1".to_string())
+                    .await
+                    .expect("download")
             });
             let installed_path = std::path::Path::new(&install_dir).join("SKILL.md");
             let content = std::fs::read_to_string(installed_path).expect("read file");
@@ -255,10 +241,7 @@ mod tests {
     fn vault_backup_skips_when_hash_same() {
         with_temp_home(|_| {
             let mut server = mockito::Server::new();
-            std::env::set_var(
-                "SKILLS_MARKET_API_BASE",
-                format!("{}/api/v1", server.url()),
-            );
+            std::env::set_var("SKILLS_MARKET_API_BASE", format!("{}/api/v1", server.url()));
 
             let _mock = server
                 .mock("POST", "/api/v1/vault/upload")
@@ -289,9 +272,8 @@ mod tests {
             )
             .expect("write SKILL.md");
 
-            let summary = tauri::async_runtime::block_on(async {
-                vault_backup().await.expect("backup")
-            });
+            let summary =
+                tauri::async_runtime::block_on(async { vault_backup().await.expect("backup") });
 
             assert_eq!(summary.skipped, 1);
             assert_eq!(summary.failed.len(), 0);

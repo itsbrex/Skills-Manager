@@ -207,9 +207,9 @@ pub async fn cloud_sync_resolve(payload: CloudSyncPayload) -> Result<i64, String
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::auth::{AuthProfile, AuthSession};
     use crate::models::cloud_sync::{CloudSyncCustomTool, CloudSyncSkill, CloudSyncToolState};
     use crate::models::config::UserPreferences;
-    use crate::models::auth::{AuthProfile, AuthSession};
     use crate::services::ConfigManager;
     use std::collections::HashMap;
 
@@ -217,10 +217,7 @@ mod tests {
     fn cloud_sync_push_returns_conflict_payload() {
         crate::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
-            std::env::set_var(
-                "SKILLS_MARKET_API_BASE",
-                format!("{}/api/v1", server.url()),
-            );
+            std::env::set_var("SKILLS_MARKET_API_BASE", format!("{}/api/v1", server.url()));
 
             let _mock = server
                 .mock("POST", "/api/v1/sync/push")

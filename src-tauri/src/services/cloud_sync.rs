@@ -17,8 +17,12 @@ pub struct CloudSyncSnapshot {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum CloudSyncPushResult {
-    Synced { revision: i64 },
-    Skipped { reason: String },
+    Synced {
+        revision: i64,
+    },
+    Skipped {
+        reason: String,
+    },
     Conflict {
         revision: i64,
         payload: CloudSyncPayload,
@@ -89,14 +93,17 @@ pub fn build_payload(config: &AppConfig, skills: &[Skill]) -> CloudSyncPayload {
                 SkillSource::Vault => "vault".to_string(),
             },
             version: skill.version.clone(),
-            marketplace: skill.marketplace_meta.as_ref().map(|meta| CloudSyncMarketplaceMeta {
-                marketplace_source_id: meta.marketplace_source_id.clone(),
-                marketplace_skill_id: meta.marketplace_skill_id.clone(),
-                marketplace_skill_slug: meta.marketplace_skill_slug.clone(),
-                repo_url: meta.repo_url.clone(),
-                skill_path: meta.skill_path.clone(),
-                remote_revision: meta.remote_revision.clone(),
-            }),
+            marketplace: skill
+                .marketplace_meta
+                .as_ref()
+                .map(|meta| CloudSyncMarketplaceMeta {
+                    marketplace_source_id: meta.marketplace_source_id.clone(),
+                    marketplace_skill_id: meta.marketplace_skill_id.clone(),
+                    marketplace_skill_slug: meta.marketplace_skill_slug.clone(),
+                    repo_url: meta.repo_url.clone(),
+                    skill_path: meta.skill_path.clone(),
+                    remote_revision: meta.remote_revision.clone(),
+                }),
             vault: skill.vault_meta.as_ref().map(|meta| CloudSyncVaultMeta {
                 provider: meta.provider.clone(),
                 user_id: meta.user_id.clone(),

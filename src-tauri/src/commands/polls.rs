@@ -1,11 +1,11 @@
+use crate::models::PollClientState as ModelPollClientState;
+use crate::services::ConfigManager;
 use reqwest::header::{ACCEPT, ACCEPT_LANGUAGE, ORIGIN, REFERER, USER_AGENT};
 use reqwest::{Client, Method, StatusCode, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::Command;
-use crate::models::PollClientState as ModelPollClientState;
-use crate::services::ConfigManager;
 
 const POLLS_API_BASE: &str = "https://skills-market-api.guardssl.info/api/v1";
 const POLLS_SITE_ORIGIN: &str = "https://skills-market-api.guardssl.info";
@@ -99,9 +99,7 @@ pub struct PollClientStatePayload {
     pub voted_options: HashMap<String, String>,
 }
 
-fn normalize_poll_client_state(
-    state: PollClientStatePayload,
-) -> PollClientStatePayload {
+fn normalize_poll_client_state(state: PollClientStatePayload) -> PollClientStatePayload {
     let voter_id = state
         .voter_id
         .map(|value| value.trim().to_string())
@@ -146,7 +144,12 @@ fn build_accept_language(locale: Option<&str>) -> String {
     }
 }
 
-fn build_base_request(client: &Client, method: Method, url: Url, locale: Option<&str>) -> reqwest::RequestBuilder {
+fn build_base_request(
+    client: &Client,
+    method: Method,
+    url: Url,
+    locale: Option<&str>,
+) -> reqwest::RequestBuilder {
     client
         .request(method, url)
         .header(ACCEPT, "application/json, text/plain, */*")
@@ -177,7 +180,10 @@ fn try_send_with_curl(
         .arg("-H")
         .arg("accept: application/json, text/plain, */*")
         .arg("-H")
-        .arg(format!("accept-language: {}", build_accept_language(locale)))
+        .arg(format!(
+            "accept-language: {}",
+            build_accept_language(locale)
+        ))
         .arg("-H")
         .arg(format!("origin: {POLLS_SITE_ORIGIN}"))
         .arg("-H")
@@ -234,8 +240,8 @@ async fn send_with_403_retry(
     let user_agents = [BROWSER_LIKE_USER_AGENT, CURL_LIKE_USER_AGENT];
 
     for (index, user_agent) in user_agents.iter().enumerate() {
-        let mut request =
-            build_base_request(client, method.clone(), url.clone(), locale).header(USER_AGENT, *user_agent);
+        let mut request = build_base_request(client, method.clone(), url.clone(), locale)
+            .header(USER_AGENT, *user_agent);
 
         if let Some(body) = body.as_ref() {
             request = request.json(body);
@@ -327,10 +333,7 @@ fn polls_url(path: &str, locale: Option<String>) -> Result<Url, String> {
 pub fn get_poll_client_state() -> Result<PollClientStatePayload, String> {
     let manager = ConfigManager::new();
     let mut config = manager.load()?;
-    let existing = config
-        .poll_client_state
-        .clone()
-        .unwrap_or_default();
+    let existing = config.poll_client_state.clone().unwrap_or_default();
 
     let normalized = normalize_poll_client_state(PollClientStatePayload {
         voter_id: existing.voter_id,
@@ -341,8 +344,7 @@ pub fn get_poll_client_state() -> Result<PollClientStatePayload, String> {
         .poll_client_state
         .as_ref()
         .map(|state| {
-            state.voter_id != normalized.voter_id
-                || state.voted_options != normalized.voted_options
+            state.voter_id != normalized.voter_id || state.voted_options != normalized.voted_options
         })
         .unwrap_or(true);
     if should_update {
@@ -431,8 +433,11 @@ pub async fn submit_poll_vote(
     }
 
     let client = Client::new();
-    let url = Url::parse(&format!("{POLLS_API_BASE}/polls/{}/votes", normalized_poll_id))
-        .map_err(|_| "REQUEST_FAILED: 请求失败，请稍后重试".to_string())?;
+    let url = Url::parse(&format!(
+        "{POLLS_API_BASE}/polls/{}/votes",
+        normalized_poll_id
+    ))
+    .map_err(|_| "REQUEST_FAILED: 请求失败，请稍后重试".to_string())?;
     let payload = PollVoteRequest {
         voter_id: normalized_voter_id,
         option_id: normalized_option_id,

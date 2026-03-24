@@ -80,7 +80,10 @@ mod tests {
 
             let service = TelemetryService::new().expect("create telemetry service");
             assert!(
-                service.current_session().expect("read current session").is_some(),
+                service
+                    .current_session()
+                    .expect("read current session")
+                    .is_some(),
                 "telemetry initialize should create a local session"
             );
 
@@ -95,7 +98,10 @@ mod tests {
 
             let service = TelemetryService::new().expect("create telemetry service");
             assert!(
-                service.current_session().expect("read current session").is_some(),
+                service
+                    .current_session()
+                    .expect("read current session")
+                    .is_some(),
                 "enabled telemetry should create a local session"
             );
 

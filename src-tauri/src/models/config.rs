@@ -292,8 +292,8 @@ mod tests {
     use super::default_marketplace_sources;
     use super::AppConfig;
     use super::VaultBackupConsent;
-    use crate::models::SourceType;
     use crate::models::auth::{AuthProfile, AuthSession};
+    use crate::models::SourceType;
 
     #[test]
     fn default_marketplace_sources_matches_remote_source_ids() {

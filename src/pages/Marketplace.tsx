@@ -26,6 +26,7 @@ import { useTranslation } from "@/i18n";
 import { SkillDetailModal } from "@/components/marketplace/SkillDetailModal";
 import { formatInstallCountLabel } from "@/pages/marketplace/formatInstallCount";
 import { buildMarketplaceMetaItems } from "@/pages/marketplace/buildMarketplaceMetaItems";
+import { sortMarketplaceSkillsByInstallStatus } from "@/pages/marketplace/sortMarketplaceSkillsByInstallStatus";
 import { getMarketplaceMetaChipStyle } from "@/components/marketplace/marketplaceMetaChipStyle";
 
 const DESCRIPTION_BATCH_SIZE = 12;
@@ -144,7 +145,7 @@ export function Marketplace() {
 
       setSkills((prev) => {
         if (!append || page === 1) {
-          return incoming;
+          return sortMarketplaceSkillsByInstallStatus(incoming);
         }
         const merged = [...prev];
         const existingIds = new Set(prev.map((skill) => skill.id));
@@ -153,7 +154,7 @@ export function Marketplace() {
             merged.push(skill);
           }
         }
-        return merged;
+        return sortMarketplaceSkillsByInstallStatus(merged);
       });
       setHasMore(result.has_more);
       setCurrentPage(page);

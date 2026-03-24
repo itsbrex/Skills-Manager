@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod cache;
+pub mod cloud_sync;
 pub mod config_manager;
 pub mod detector;
 pub mod editor_detector;
@@ -7,10 +8,9 @@ pub mod file_ops;
 pub mod linker;
 pub mod marketplace;
 pub mod scanner;
-pub mod cloud_sync;
-pub mod vault;
 pub mod telemetry;
 pub mod updater;
+pub mod vault;
 
 pub use cache::AppCache;
 pub use config_manager::ConfigManager;

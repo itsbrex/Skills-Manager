@@ -643,9 +643,7 @@ async fn request_marketplace_api_envelope<T: DeserializeOwned>(
             Ok(raw) => {
                 format!("curl fallback returned HTTP {}", raw.status_code)
             }
-            Err(err) => {
-                err
-            }
+            Err(err) => err,
         };
         return Err(format!(
             "{request_error_prefix}: HTTP {status} ({fallback_detail})"
@@ -2842,13 +2840,13 @@ mod tests {
     use super::{
         build_marketplace_external_url, build_skill_tree_from_tree_entries, collect_file_nodes,
         extract_root_skill_dirs_from_tree_entries, extract_skill_description_from_markdown,
-        get_cached_github_tree, github_tree_cache, github_tree_cache_key, normalize_github_token,
-        map_marketplace_api_skill_record, set_cached_github_tree, should_include_github_root_dir,
-        CachedGitHubTree, GitHubContent, GitHubTreeEntry, InstallStatus, MarketplaceApiSkillRecord,
-        MarketplaceApiSkillSource, MarketplaceCache, MarketplaceSkill, MarketplaceSkillsResponse,
-        PersistedMarketplaceCacheEntry, PersistedMarketplaceState, PersistedSkillDescriptionEntry,
-        GITHUB_TREE_CACHE_TTL, PERSISTED_CACHE_TTL,
-        PERSISTED_SKILL_DESCRIPTION_CACHE_TTL,
+        get_cached_github_tree, github_tree_cache, github_tree_cache_key,
+        map_marketplace_api_skill_record, normalize_github_token, set_cached_github_tree,
+        should_include_github_root_dir, CachedGitHubTree, GitHubContent, GitHubTreeEntry,
+        InstallStatus, MarketplaceApiSkillRecord, MarketplaceApiSkillSource, MarketplaceCache,
+        MarketplaceSkill, MarketplaceSkillsResponse, PersistedMarketplaceCacheEntry,
+        PersistedMarketplaceState, PersistedSkillDescriptionEntry, GITHUB_TREE_CACHE_TTL,
+        PERSISTED_CACHE_TTL, PERSISTED_SKILL_DESCRIPTION_CACHE_TTL,
     };
     use std::collections::HashSet;
     use std::fs;
@@ -2922,7 +2920,10 @@ mod tests {
 
         let query: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
 
-        assert_eq!(query.get("sortBy").map(String::as_str), Some("installCount"));
+        assert_eq!(
+            query.get("sortBy").map(String::as_str),
+            Some("installCount")
+        );
         assert_eq!(query.get("sortOrder").map(String::as_str), Some("desc"));
     }
 

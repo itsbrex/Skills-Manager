@@ -123,7 +123,10 @@ fn store_pending_state(state: String, code_verifier: String, nonce: String) {
 }
 
 fn take_pending_state(state: &str) -> Option<PendingAuthState> {
-    pending_auth_states().lock().ok().and_then(|mut guard| guard.remove(state))
+    pending_auth_states()
+        .lock()
+        .ok()
+        .and_then(|mut guard| guard.remove(state))
 }
 
 #[cfg(test)]
@@ -208,7 +211,10 @@ pub async fn start_google_auth(
 }
 
 #[tauri::command]
-pub async fn exchange_github_auth(login_code: String, state: String) -> Result<AuthMeResponse, String> {
+pub async fn exchange_github_auth(
+    login_code: String,
+    state: String,
+) -> Result<AuthMeResponse, String> {
     let Some(pending) = take_pending_state(&state) else {
         return Err("登录状态已过期，请重试".to_string());
     };
@@ -244,10 +250,7 @@ pub async fn exchange_github_auth(login_code: String, state: String) -> Result<A
         .map_err(|e| e.to_string())?;
 
     let profile = AuthProfile {
-        username: me
-            .username
-            .clone()
-            .unwrap_or_else(|| "User".to_string()),
+        username: me.username.clone().unwrap_or_else(|| "User".to_string()),
         avatar_url: me.avatar_url.clone(),
     };
     let provider = me.provider.clone().unwrap_or_else(|| "github".to_string());
@@ -263,7 +266,10 @@ pub async fn exchange_github_auth(login_code: String, state: String) -> Result<A
 }
 
 #[tauri::command]
-pub async fn exchange_google_auth(login_code: String, state: String) -> Result<AuthMeResponse, String> {
+pub async fn exchange_google_auth(
+    login_code: String,
+    state: String,
+) -> Result<AuthMeResponse, String> {
     exchange_github_auth(login_code, state).await
 }
 
@@ -432,10 +438,7 @@ mod tests {
     fn start_github_auth_returns_state_and_stores_pending() {
         crate::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
-            std::env::set_var(
-                "SKILLS_MARKET_API_BASE",
-                format!("{}/api/v1", server.url()),
-            );
+            std::env::set_var("SKILLS_MARKET_API_BASE", format!("{}/api/v1", server.url()));
             let _mock = server
                 .mock("GET", "/api/v1/auth/github/start")
                 .match_query(Matcher::Any)
@@ -445,7 +448,9 @@ mod tests {
                 .create();
 
             tauri::async_runtime::block_on(async {
-                let result = start_github_auth(Some(true), None).await.expect("start auth");
+                let result = start_github_auth(Some(true), None)
+                    .await
+                    .expect("start auth");
                 assert_eq!(result.auth_url, "https://example.com/auth");
                 assert!(result.state.starts_with("debug-"));
                 assert!(has_pending_state(&result.state));
@@ -457,10 +462,7 @@ mod tests {
     fn exchange_github_auth_saves_session_and_returns_profile() {
         crate::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
-            std::env::set_var(
-                "SKILLS_MARKET_API_BASE",
-                format!("{}/api/v1", server.url()),
-            );
+            std::env::set_var("SKILLS_MARKET_API_BASE", format!("{}/api/v1", server.url()));
 
             let _exchange_mock = server
                 .mock("POST", "/api/v1/auth/exchange")
@@ -510,10 +512,7 @@ mod tests {
     fn start_google_auth_returns_state_and_stores_pending() {
         crate::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
-            std::env::set_var(
-                "SKILLS_MARKET_API_BASE",
-                format!("{}/api/v1", server.url()),
-            );
+            std::env::set_var("SKILLS_MARKET_API_BASE", format!("{}/api/v1", server.url()));
             let _mock = server
                 .mock("GET", "/api/v1/auth/google/start")
                 .match_query(Matcher::Any)
@@ -523,7 +522,9 @@ mod tests {
                 .create();
 
             tauri::async_runtime::block_on(async {
-                let result = start_google_auth(Some(true), None).await.expect("start google auth");
+                let result = start_google_auth(Some(true), None)
+                    .await
+                    .expect("start google auth");
                 assert_eq!(result.auth_url, "https://example.com/google");
                 assert!(result.state.starts_with("debug-"));
                 assert!(has_pending_state(&result.state));
@@ -535,10 +536,7 @@ mod tests {
     fn exchange_google_auth_saves_session_and_returns_profile() {
         crate::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
-            std::env::set_var(
-                "SKILLS_MARKET_API_BASE",
-                format!("{}/api/v1", server.url()),
-            );
+            std::env::set_var("SKILLS_MARKET_API_BASE", format!("{}/api/v1", server.url()));
 
             let _exchange_mock = server
                 .mock("POST", "/api/v1/auth/exchange")
@@ -609,10 +607,7 @@ mod tests {
     fn logout_auth_clears_session() {
         crate::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
-            std::env::set_var(
-                "SKILLS_MARKET_API_BASE",
-                format!("{}/api/v1", server.url()),
-            );
+            std::env::set_var("SKILLS_MARKET_API_BASE", format!("{}/api/v1", server.url()));
             let _mock = server
                 .mock("POST", "/api/v1/auth/logout")
                 .match_header("content-type", "application/json")
