@@ -32,6 +32,8 @@ const MAX_MARKETPLACE_CACHED_PAGES: usize = 200;
 const GITHUB_TREE_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
 const SKILL_DESCRIPTION_CACHE_TTL: Duration = Duration::from_secs(30 * 60);
 const PERSISTED_SKILL_DESCRIPTION_CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+pub(crate) const DIRECT_GITHUB_SOURCE_ID: &str = "github_direct";
+pub(crate) const DIRECT_GITHUB_SOURCE_NAME: &str = "GitHub";
 
 #[derive(Debug, Clone, Deserialize)]
 struct GitHubTreeEntry {
@@ -1170,6 +1172,44 @@ impl MarketplaceService {
             message: None,
             installed_path: Some(install_dir.to_string_lossy().to_string()),
         })
+    }
+
+    pub async fn hydrate_marketplace_skill(
+        skill: &MarketplaceSkill,
+        github_token: Option<&str>,
+    ) -> Result<MarketplaceSkill, String> {
+        let repo_url = skill
+            .repo_url
+            .as_deref()
+            .ok_or_else(|| "Skill 缺少仓库地址，暂不支持安装".to_string())?;
+        let requested_skill_path = skill.skill_path.as_deref().unwrap_or_default();
+        let tree = Self::fetch_skill_files(repo_url, requested_skill_path, github_token).await?;
+        let mut files = Vec::new();
+        collect_file_nodes(&tree, &mut files);
+
+        let remote_revision = skill
+            .remote_revision
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_string())
+            .or_else(|| compute_skill_revision_from_file_nodes(&files));
+
+        let mut resolved = skill.clone();
+        resolved.skill_path = Some(tree.path.clone());
+        resolved.remote_revision = remote_revision;
+        resolved.external_url = build_marketplace_external_url(
+            skill.external_url
+                .as_deref()
+                .or(skill.install_url.as_deref()),
+            Some(repo_url),
+            Some(tree.path.as_str()),
+        );
+        if resolved.name.trim().is_empty() {
+            resolved.name = tree.name;
+        }
+
+        Ok(resolved)
     }
 
     pub fn check_install_status(skill: &MarketplaceSkill, skills_dir: &Path) -> InstallStatus {
@@ -2399,7 +2439,7 @@ fn build_marketplace_api_revision(
     format!("market-api-fnv64:{hash:016x}")
 }
 
-fn derive_github_repo_and_skill_path(
+pub(crate) fn derive_github_repo_and_skill_path(
     install_url: Option<&str>,
     slug: &str,
 ) -> (Option<String>, Option<String>) {
@@ -2474,17 +2514,29 @@ fn parse_github_repo_and_path_from_url(url: &str) -> Option<(String, Option<Stri
 
     let repo_url = format!("https://github.com/{}/{}", owner, repo);
     let path = if segments.len() > 4 && matches!(segments[2], "tree" | "blob") {
-        let path_value = segments[4..].join("/");
-        if path_value.trim().is_empty() {
-            None
-        } else {
-            Some(path_value)
-        }
+        normalize_github_skill_path(segments[4..].join("/"))
     } else {
         None
     };
 
     Some((repo_url, path))
+}
+
+fn normalize_github_skill_path(path: String) -> Option<String> {
+    let normalized = path.trim_matches('/').to_string();
+    if normalized.is_empty() {
+        return Some(String::new());
+    }
+
+    if let Some((parent, file_name)) = normalized.rsplit_once('/') {
+        if is_skill_manifest_file(file_name) {
+            return Some(parent.trim_matches('/').to_string());
+        }
+    } else if is_skill_manifest_file(normalized.as_str()) {
+        return Some(String::new());
+    }
+
+    Some(normalized)
 }
 
 fn parse_github_repo_and_path_from_slug(slug: &str) -> Option<(String, Option<String>)> {
@@ -3016,6 +3068,16 @@ mod tests {
             Some("https://github.com/anthropics/skills".to_string())
         );
         assert_eq!(skill_path, Some("skills/skill-creator".to_string()));
+    }
+
+    #[test]
+    fn derive_github_repo_and_skill_path_strips_manifest_file_from_blob_url() {
+        let (repo_url, skill_path) = super::derive_github_repo_and_skill_path(
+            Some("https://github.com/foo/bar/blob/main/skills/demo/SKILL.md"),
+            "foo/bar/skills/demo",
+        );
+        assert_eq!(repo_url, Some("https://github.com/foo/bar".to_string()));
+        assert_eq!(skill_path, Some("skills/demo".to_string()));
     }
 
     #[test]

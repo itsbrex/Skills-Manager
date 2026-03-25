@@ -11,6 +11,9 @@ use crate::models::{
     MarketplaceSource, MarketplaceSyncResult, MarketplaceUpdateCheckResult, Skill, SkillFileNode,
     SkillSource,
 };
+use crate::services::marketplace::{
+    derive_github_repo_and_skill_path, DIRECT_GITHUB_SOURCE_ID, DIRECT_GITHUB_SOURCE_NAME,
+};
 use crate::services::{
     AppCache, ConfigManager, MarketplaceCache, MarketplaceService, ScannerService,
 };
@@ -68,30 +71,56 @@ fn normalize_source_filter(source_ids: Option<Vec<String>>) -> Option<Vec<String
 fn build_marketplace_skill_from_reference(
     reference: MarketplaceSkillReference,
 ) -> Result<MarketplaceSkill, String> {
-    let repo_url = reference.repo_url.unwrap_or_default().trim().to_string();
-    if repo_url.is_empty() {
+    let raw_repo_url = reference.repo_url.unwrap_or_default().trim().to_string();
+    if raw_repo_url.is_empty() {
         return Err("repo_url is required".to_string());
     }
-    let skill_path = reference.skill_path.unwrap_or_default().trim().to_string();
+    let (derived_repo_url, derived_skill_path) =
+        derive_github_repo_and_skill_path(Some(raw_repo_url.as_str()), "");
+    let repo_url = derived_repo_url.unwrap_or_else(|| raw_repo_url.clone());
+    let is_github_reference = repo_url.contains("github.com/");
+
+    let mut skill_path = reference.skill_path.unwrap_or_default().trim().to_string();
     if skill_path.is_empty() {
+        if let Some(derived) = derived_skill_path {
+            skill_path = derived;
+        }
+    }
+    if skill_path.is_empty() && !is_github_reference {
         return Err("skill_path is required".to_string());
     }
     let source_id = reference
         .marketplace_source_id
-        .unwrap_or_else(|| "marketplace".to_string());
+        .unwrap_or_else(|| {
+            if is_github_reference {
+                DIRECT_GITHUB_SOURCE_ID.to_string()
+            } else {
+                "marketplace".to_string()
+            }
+        });
     let slug = reference
         .marketplace_skill_slug
         .clone()
-        .or_else(|| Some(skill_path.clone()));
-    let fallback_id = format!(
-        "{}-{}",
-        source_id,
-        slug.as_deref().unwrap_or(skill_path.as_str())
+        .or_else(|| {
+            if skill_path.is_empty() {
+                repo_url
+                    .rsplit('/')
+                    .next()
+                    .map(str::to_string)
+                    .filter(|value| !value.trim().is_empty())
+            } else {
+                Some(skill_path.clone())
+            }
+        });
+    let fallback_id = build_reference_skill_id(
+        &source_id,
+        &repo_url,
+        &skill_path,
+        slug.as_deref(),
     );
     let name = reference.name.trim().to_string();
     let name = if name.is_empty() {
-        slug.as_deref()
-            .and_then(|value| value.rsplit('/').next())
+        skill_display_name(slug.as_deref(), &repo_url, &skill_path)
             .unwrap_or("skill")
             .to_string()
     } else {
@@ -114,11 +143,62 @@ fn build_marketplace_skill_from_reference(
         created_at: None,
         repo_url: Some(repo_url),
         skill_path: Some(skill_path),
-        external_url: None,
+        external_url: Some(raw_repo_url),
         remote_revision: reference.remote_revision,
         tags: Vec::new(),
         install_status: InstallStatus::NotInstalled,
     })
+}
+
+fn build_reference_skill_id(
+    source_id: &str,
+    repo_url: &str,
+    skill_path: &str,
+    slug: Option<&str>,
+) -> String {
+    let raw = if source_id == DIRECT_GITHUB_SOURCE_ID {
+        format!("{}-{}-{}", source_id, repo_url.trim(), skill_path.trim())
+    } else {
+        format!("{}-{}", source_id, slug.unwrap_or(skill_path))
+    };
+    raw.to_lowercase()
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string()
+}
+
+fn skill_display_name<'a>(
+    slug: Option<&'a str>,
+    repo_url: &'a str,
+    skill_path: &'a str,
+) -> Option<&'a str> {
+    if !skill_path.trim().is_empty() {
+        return skill_path
+            .rsplit('/')
+            .next()
+            .filter(|value| !value.trim().is_empty());
+    }
+    slug.and_then(|value| value.rsplit('/').next())
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| repo_url.rsplit('/').next().filter(|value| !value.trim().is_empty()))
+}
+
+fn resolve_marketplace_source_name(
+    source_id: &str,
+    source_name_by_id: &HashMap<String, String>,
+) -> String {
+    source_name_by_id
+        .get(source_id)
+        .cloned()
+        .unwrap_or_else(|| {
+            if source_id == DIRECT_GITHUB_SOURCE_ID {
+                DIRECT_GITHUB_SOURCE_NAME.to_string()
+            } else {
+                source_id.to_string()
+            }
+        })
 }
 
 fn resolve_cache_source_scope(
@@ -209,10 +289,7 @@ fn collect_installed_marketplace_skills(
                 description: skill.description.clone(),
                 author: None,
                 source_id: source_id.clone(),
-                source_name: source_name_by_id
-                    .get(&source_id)
-                    .cloned()
-                    .unwrap_or_else(|| source_id.clone()),
+                source_name: resolve_marketplace_source_name(&source_id, &source_name_by_id),
                 install_count: None,
                 install_url: None,
                 created_at: None,
@@ -260,13 +337,27 @@ fn prepend_missing_installed_marketplace_skills(
     }
 }
 
-fn merge_installed_marketplace_skills_into_page(
+fn should_hydrate_missing_installed_marketplace_skill(skill: &MarketplaceSkill) -> bool {
+    skill.source_id == DIRECT_GITHUB_SOURCE_ID
+        && skill
+            .repo_url
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+        && skill
+            .skill_path
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+}
+
+async fn merge_installed_marketplace_skills_into_page(
     response: MarketplaceSkillsResponse,
     page: u32,
     skills: &[Skill],
     sources: &[MarketplaceSource],
     normalized_query: Option<&str>,
     normalized_source_filter: &Option<Vec<String>>,
+    skills_dir: &std::path::Path,
+    github_token: Option<&str>,
 ) -> MarketplaceSkillsResponse {
     if page != 1 {
         return response;
@@ -279,7 +370,28 @@ fn merge_installed_marketplace_skills_into_page(
         normalized_source_filter,
     );
 
-    prepend_missing_installed_marketplace_skills(response, installed_skills)
+    let existing_ids: HashSet<String> = response.skills.iter().map(|skill| skill.id.clone()).collect();
+    let mut hydrated_installed = Vec::new();
+    for skill in installed_skills
+        .into_iter()
+        .filter(|skill| !existing_ids.contains(&skill.id))
+    {
+        let resolved = if should_hydrate_missing_installed_marketplace_skill(&skill) {
+            match MarketplaceService::hydrate_marketplace_skill(&skill, github_token).await {
+                Ok(resolved) => resolved,
+                Err(_) => skill,
+            }
+        } else {
+            skill
+        };
+        let install_status = MarketplaceService::check_install_status(&resolved, skills_dir);
+        hydrated_installed.push(MarketplaceSkill {
+            install_status,
+            ..resolved
+        });
+    }
+
+    prepend_missing_installed_marketplace_skills(response, hydrated_installed)
 }
 
 fn merge_remote_sources_into_config(
@@ -387,6 +499,7 @@ pub async fn fetch_marketplace_skills(
     let page = page.unwrap_or(1).max(1);
     let manager = ConfigManager::new();
     let mut config = manager.load()?;
+    let github_token = github_token_from_config(&config);
     let cache_source_scope = resolve_cache_source_scope(
         &normalized_source_filter,
         config.marketplace_sources.as_deref().unwrap_or(&[]),
@@ -406,7 +519,10 @@ pub async fn fetch_marketplace_skills(
                 &local_sources,
                 normalized_query.as_deref(),
                 &normalized_source_filter,
-            ));
+                &config.skills_dir,
+                github_token.as_deref(),
+            )
+            .await);
         }
     }
 
@@ -459,7 +575,10 @@ pub async fn fetch_marketplace_skills(
                         &sources,
                         normalized_query.as_deref(),
                         &normalized_source_filter,
-                    ));
+                        &config.skills_dir,
+                        github_token.as_deref(),
+                    )
+                    .await);
                 }
             }
             return Err(err);
@@ -481,7 +600,10 @@ pub async fn fetch_marketplace_skills(
         &sources,
         normalized_query.as_deref(),
         &normalized_source_filter,
-    ))
+        &config.skills_dir,
+        github_token.as_deref(),
+    )
+    .await)
 }
 
 #[tauri::command]
@@ -599,6 +721,18 @@ pub async fn sync_marketplace_installed_skills(
         normalized_source_filter.clone(),
     )
     .await?;
+    let installed_skills = load_cached_or_scanned_skills(app_cache.inner(), &config.skills_dir)?;
+    let listing = merge_installed_marketplace_skills_into_page(
+        listing,
+        1,
+        &installed_skills,
+        &sources,
+        None,
+        &normalized_source_filter,
+        &config.skills_dir,
+        github_token.as_deref(),
+    )
+    .await;
 
     let mut result = MarketplaceSyncResult {
         checked: 0,
@@ -635,6 +769,7 @@ pub async fn sync_marketplace_installed_skills(
 #[tauri::command]
 pub async fn check_marketplace_updates_if_stale(
     marketplace_cache: State<'_, MarketplaceCache>,
+    app_cache: State<'_, AppCache>,
 ) -> Result<MarketplaceUpdateCheckResult, String> {
     let now = SystemTime::now();
     let last_checked = load_last_update_check_time();
@@ -648,6 +783,7 @@ pub async fn check_marketplace_updates_if_stale(
 
     let manager = ConfigManager::new();
     let mut config = manager.load()?;
+    let github_token = github_token_from_config(&config);
     let sources = load_marketplace_sources_for_runtime(&manager, &mut config).await;
 
     let listing = MarketplaceService::fetch_marketplace_skills_page(
@@ -659,6 +795,18 @@ pub async fn check_marketplace_updates_if_stale(
         None,
     )
     .await?;
+    let installed_skills = load_cached_or_scanned_skills(app_cache.inner(), &config.skills_dir)?;
+    let merged_listing = merge_installed_marketplace_skills_into_page(
+        listing.clone(),
+        1,
+        &installed_skills,
+        &sources,
+        None,
+        &None,
+        &config.skills_dir,
+        github_token.as_deref(),
+    )
+    .await;
 
     let cache_source_scope = resolve_cache_source_scope(&None, &sources);
     marketplace_cache.set(
@@ -669,12 +817,12 @@ pub async fn check_marketplace_updates_if_stale(
     );
     persist_update_check_time(now);
 
-    let checked = listing
+    let checked = merged_listing
         .skills
         .iter()
         .filter(|skill| skill.install_status != InstallStatus::NotInstalled)
         .count();
-    let update_available = listing
+    let update_available = merged_listing
         .skills
         .iter()
         .filter(|skill| skill.install_status == InstallStatus::UpdateAvailable)
@@ -726,6 +874,7 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{Duration, SystemTime};
 
+    use crate::services::marketplace::{DIRECT_GITHUB_SOURCE_ID, DIRECT_GITHUB_SOURCE_NAME};
     use crate::models::{
         InstallStatus, MarketplaceMeta, MarketplaceSkill, MarketplaceSkillsResponse,
         MarketplaceSource, Skill, SkillSource, SourceType,
@@ -736,7 +885,8 @@ mod tests {
         build_marketplace_skill_from_reference, collect_installed_marketplace_skills,
         load_last_update_check_time, persist_update_check_time,
         prepend_missing_installed_marketplace_skills, resolve_cache_source_scope,
-        should_run_marketplace_update_check, MarketplaceSkillReference,
+        should_hydrate_missing_installed_marketplace_skill, should_run_marketplace_update_check,
+        MarketplaceSkillReference,
         MARKETPLACE_UPDATE_CHECK_INTERVAL,
     };
 
@@ -887,6 +1037,36 @@ mod tests {
     }
 
     #[test]
+    fn build_marketplace_skill_from_reference_distinguishes_github_direct_skills_by_repo() {
+        let first = build_marketplace_skill_from_reference(MarketplaceSkillReference {
+            name: "Demo".to_string(),
+            marketplace_source_id: Some("github_direct".to_string()),
+            marketplace_skill_id: None,
+            marketplace_skill_slug: None,
+            repo_url: Some("https://github.com/acme/skills-one".to_string()),
+            skill_path: Some("skills/demo".to_string()),
+            remote_revision: None,
+        })
+        .expect("first skill should build");
+
+        let second = build_marketplace_skill_from_reference(MarketplaceSkillReference {
+            name: "Demo".to_string(),
+            marketplace_source_id: Some("github_direct".to_string()),
+            marketplace_skill_id: None,
+            marketplace_skill_slug: None,
+            repo_url: Some("https://github.com/acme/skills-two".to_string()),
+            skill_path: Some("skills/demo".to_string()),
+            remote_revision: None,
+        })
+        .expect("second skill should build");
+
+        assert_ne!(
+            first.id, second.id,
+            "direct GitHub installs must stay distinct even when skill_path matches"
+        );
+    }
+
+    #[test]
     fn collect_installed_marketplace_skills_respects_source_filter_and_query() {
         let skills = vec![
             make_marketplace_skill("src_skills::alpha", "src_skills", "Alpha", Some("useful")),
@@ -949,5 +1129,26 @@ mod tests {
             InstallStatus::UpdateAvailable
         );
         assert!(merged.has_more);
+    }
+
+    #[test]
+    fn only_direct_github_installs_are_hydrated_when_missing_from_listing() {
+        let builtin = make_listing_skill("src_skills::alpha", InstallStatus::Installed);
+        assert!(
+            !should_hydrate_missing_installed_marketplace_skill(&builtin),
+            "builtin marketplace skills already have remote metadata in listing and should not block page load"
+        );
+
+        let direct = MarketplaceSkill {
+            source_id: DIRECT_GITHUB_SOURCE_ID.to_string(),
+            source_name: DIRECT_GITHUB_SOURCE_NAME.to_string(),
+            repo_url: Some("https://github.com/example/repo".to_string()),
+            skill_path: Some("skills/demo".to_string()),
+            ..make_listing_skill("github-direct-demo", InstallStatus::Installed)
+        };
+        assert!(
+            should_hydrate_missing_installed_marketplace_skill(&direct),
+            "direct GitHub installs still need remote hydration for update tracking"
+        );
     }
 }

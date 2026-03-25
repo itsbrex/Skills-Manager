@@ -9,7 +9,7 @@ import {
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Link2 } from "lucide-react";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoader } from "@/components/ui/loading";
@@ -28,8 +28,10 @@ import { formatInstallCountLabel } from "@/pages/marketplace/formatInstallCount"
 import { buildMarketplaceMetaItems } from "@/pages/marketplace/buildMarketplaceMetaItems";
 import { sortMarketplaceSkillsByInstallStatus } from "@/pages/marketplace/sortMarketplaceSkillsByInstallStatus";
 import { getMarketplaceMetaChipStyle } from "@/components/marketplace/marketplaceMetaChipStyle";
+import { MODAL_LAYER_Z_INDEX, MODAL_OVERLAY_COLOR } from "@/constants/modal";
 
 const DESCRIPTION_BATCH_SIZE = 12;
+const DIRECT_GITHUB_INSTALL_ID = "__github_direct_install__";
 const marketplaceDescriptionCache = new Map<string, string | null>();
 
 interface MarketplaceDescriptionRequest {
@@ -80,7 +82,9 @@ export function Marketplace() {
   const [availableSources, setAvailableSources] = useState<MarketplaceSource[]>([]);
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
   const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
+  const [githubInstallDialogOpen, setGithubInstallDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [githubInstallUrl, setGithubInstallUrl] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<MarketplaceSkill | null>(null);
   const [installingSkill, setInstallingSkill] = useState<string | null>(null);
@@ -333,6 +337,7 @@ export function Marketplace() {
     () => skills.filter((skill) => skill.install_status === "update_available").length,
     [skills],
   );
+  const installingGithubUrl = installingSkill === DIRECT_GITHUB_INSTALL_ID;
 
   const handleUpdateAll = useCallback(async () => {
     if (updatingAll || updateAvailableCount === 0 || installingSkill) {
@@ -453,6 +458,55 @@ export function Marketplace() {
       setInstallingSkill(null);
     }
   }, [addToast, loadSkills, normalizedRemoteQuery, selectedSourceIds, showMarketplaceError, t]);
+
+  const handleGithubInstall = useCallback(async () => {
+    const directUrl = githubInstallUrl.trim();
+    if (!directUrl) {
+      addToast(t("marketplace.githubInstallRequired"), "error");
+      return;
+    }
+    if (installingSkill || updatingAll || refreshing) {
+      return;
+    }
+
+    setInstallingSkill(DIRECT_GITHUB_INSTALL_ID);
+    try {
+      const result = await invoke<InstallResult>("install_marketplace_skill_by_ref", {
+        reference: {
+          name: "",
+          repo_url: directUrl,
+        },
+      });
+      if (result.success) {
+        addToast(t("marketplace.githubInstallSuccess"), "success");
+        setGithubInstallUrl("");
+        setGithubInstallDialogOpen(false);
+        await loadSkills({
+          forceRefresh: true,
+          page: 1,
+          query: normalizedRemoteQuery,
+          sourceIds: selectedSourceIds,
+        });
+      } else {
+        addToast(t("marketplace.githubInstallFailed"), "error");
+      }
+    } catch (err) {
+      showMarketplaceError(err, t("marketplace.githubInstallFailed"));
+    } finally {
+      setInstallingSkill(null);
+    }
+  }, [
+    addToast,
+    githubInstallUrl,
+    installingSkill,
+    loadSkills,
+    normalizedRemoteQuery,
+    refreshing,
+    selectedSourceIds,
+    showMarketplaceError,
+    t,
+    updatingAll,
+  ]);
 
   const handleOpenExternalLink = useCallback(async (event: MouseEvent, url: string) => {
     event.stopPropagation();
@@ -593,6 +647,28 @@ export function Marketplace() {
                   : t("marketplace.updateAll").replace("{count}", String(updateAvailableCount))}
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => setGithubInstallDialogOpen(true)}
+              disabled={installingSkill !== null || updatingAll}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '7px 12px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 600,
+                border: '1px solid rgba(9, 105, 218, 0.28)',
+                color: 'var(--foreground)',
+                backgroundColor: 'var(--background)',
+                cursor: installingSkill !== null || updatingAll ? 'not-allowed' : 'pointer',
+                opacity: installingSkill !== null || updatingAll ? 0.7 : 1,
+              }}
+            >
+              <Link2 size={14} />
+              {t("marketplace.githubInstallOpen")}
+            </button>
             <RefreshButton onClick={handleRefresh} loading={refreshing || updatingAll} />
             {showSourceFilter && (
               <div style={{ position: 'relative' }}>
@@ -1067,6 +1143,205 @@ export function Marketplace() {
           installing={updatingAll || installingSkill === selectedSkill.id}
         />
       )}
+
+      <GithubInstallDialog
+        open={githubInstallDialogOpen}
+        installing={installingGithubUrl}
+        value={githubInstallUrl}
+        onChange={setGithubInstallUrl}
+        onClose={() => setGithubInstallDialogOpen(false)}
+        onSubmit={() => void handleGithubInstall()}
+      />
+    </div>
+  );
+}
+
+function GithubInstallDialog({
+  open,
+  installing,
+  value,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  installing: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !installing) {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [installing, onClose, open]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: MODAL_OVERLAY_COLOR,
+        zIndex: MODAL_LAYER_Z_INDEX,
+        padding: "24px",
+      }}
+      onClick={() => {
+        if (!installing) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        style={{
+          width: "min(680px, calc(100vw - 48px))",
+          backgroundColor: "var(--background)",
+          borderRadius: "18px",
+          border: "1px solid var(--border)",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.24)",
+          padding: "22px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "18px",
+        }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              fontSize: "16px",
+              fontWeight: 700,
+              color: "var(--foreground)",
+            }}
+          >
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "28px",
+                height: "28px",
+                borderRadius: "10px",
+                background: "rgba(9, 105, 218, 0.1)",
+                color: "var(--primary)",
+              }}
+            >
+              <Link2 size={15} />
+            </span>
+            {t("marketplace.githubInstallTitle")}
+          </div>
+          <p
+            style={{
+              margin: 0,
+              fontSize: "13px",
+              lineHeight: 1.6,
+              color: "var(--muted-foreground)",
+            }}
+          >
+            {t("marketplace.githubInstallDesc")}
+          </p>
+        </div>
+
+        <div
+          style={{
+            padding: "12px 14px",
+            borderRadius: "14px",
+            border: "1px solid rgba(9, 105, 218, 0.14)",
+            background:
+              "linear-gradient(135deg, rgba(9, 105, 218, 0.08), rgba(9, 105, 218, 0.03))",
+            fontSize: "12px",
+            color: "var(--muted-foreground)",
+            lineHeight: 1.6,
+          }}
+        >
+          {t("marketplace.githubInstallPlaceholder")}
+        </div>
+
+        <input
+          autoFocus
+          type="text"
+          placeholder={t("marketplace.githubInstallPlaceholder")}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              onSubmit();
+            }
+          }}
+          style={{
+            width: "100%",
+            padding: "12px 14px",
+            fontSize: "13px",
+            border: "1px solid var(--border)",
+            borderRadius: "12px",
+            backgroundColor: "var(--background)",
+            color: "var(--foreground)",
+            outline: "none",
+            boxSizing: "border-box",
+          }}
+        />
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={installing}
+            style={{
+              padding: "9px 14px",
+              borderRadius: "10px",
+              border: "1px solid var(--border)",
+              backgroundColor: "var(--secondary)",
+              color: "var(--foreground)",
+              fontSize: "13px",
+              fontWeight: 600,
+              cursor: installing ? "wait" : "pointer",
+              opacity: installing ? 0.7 : 1,
+            }}
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={installing}
+            style={{
+              padding: "9px 16px",
+              borderRadius: "10px",
+              border: "1px solid var(--color-primary)",
+              backgroundColor: "var(--color-primary)",
+              color: "white",
+              fontSize: "13px",
+              fontWeight: 700,
+              cursor: installing ? "wait" : "pointer",
+              opacity: installing ? 0.7 : 1,
+            }}
+          >
+            {installing ? t("marketplace.installing") : t("marketplace.githubInstallAction")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
