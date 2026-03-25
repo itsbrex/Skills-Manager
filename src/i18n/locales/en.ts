@@ -376,8 +376,8 @@ export const en = {
     issuesDetected: "Detected {count} broken link(s) that need fixing",
     fixButton: "Fix Now",
     fixing: "Fixing...",
-    fixComplete: "Fixed: {success} succeeded",
-    fixCompleteFailed: "Fixed: {success} succeeded, {failed} failed",
+    fixComplete: "Sync complete: processed {processed}, fixed {success}",
+    fixCompleteFailed: "Sync complete: processed {processed}, fixed {success}, failed {failed}",
   },
   polls: {
     title: "Polls",

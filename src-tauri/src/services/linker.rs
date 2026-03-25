@@ -240,14 +240,33 @@ impl LinkerService {
         if is_symlink_or_junction(&link_path) {
             match fs::read_link(&link_path) {
                 Ok(target) => {
-                    if target == skill_source {
-                        if target.exists() {
+                    // Resolve relative link targets against the link parent so we can
+                    // compare canonical paths and avoid false "WrongTarget" reports.
+                    let resolved_target = if target.is_relative() {
+                        link_path
+                            .parent()
+                            .map(|p| p.join(&target))
+                            .unwrap_or_else(|| target.clone())
+                    } else {
+                        target.clone()
+                    };
+
+                    // Fast path: exact path match.
+                    if resolved_target == skill_source {
+                        return if skill_source.exists() {
                             LinkStatus::Valid
                         } else {
                             LinkStatus::Broken
-                        }
-                    } else {
-                        LinkStatus::WrongTarget
+                        };
+                    }
+
+                    // Fallback: canonicalized comparison to handle path normalization.
+                    let canonical_target = resolved_target.canonicalize().ok();
+                    let canonical_source = skill_source.canonicalize().ok();
+
+                    match (canonical_target, canonical_source) {
+                        (Some(t), Some(s)) if t == s => LinkStatus::Valid,
+                        _ => LinkStatus::WrongTarget,
                     }
                 }
                 Err(_) => LinkStatus::Broken,
@@ -295,13 +314,19 @@ impl LinkerService {
 
         for (skill_id, skill_path) in skills {
             let should_be_enabled = enabled_skills.contains(skill_id);
+            let current_status =
+                Self::check_link_for_tool(skill_path, tool_skills_dir, skill_id, tool_id);
 
             if should_be_enabled {
+                if current_status == LinkStatus::Valid {
+                    continue;
+                }
+
                 match Self::enable_skill_for_tool(skill_path, tool_skills_dir, skill_id, tool_id) {
                     Ok(_) => {
                         report.success.push(LinkResult {
                             skill_id: skill_id.clone(),
-                            tool_id: String::new(),
+                            tool_id: tool_id.to_string(),
                             status: LinkStatus::Valid,
                             message: Some("Enabled successfully".to_string()),
                         });
@@ -309,18 +334,22 @@ impl LinkerService {
                     Err(e) => {
                         report.failed.push(LinkResult {
                             skill_id: skill_id.clone(),
-                            tool_id: String::new(),
+                            tool_id: tool_id.to_string(),
                             status: LinkStatus::Broken,
                             message: Some(e),
                         });
                     }
                 }
             } else {
+                if current_status == LinkStatus::Missing {
+                    continue;
+                }
+
                 match Self::disable_skill_for_tool(tool_skills_dir, skill_id, tool_id) {
                     Ok(_) => {
                         report.success.push(LinkResult {
                             skill_id: skill_id.clone(),
-                            tool_id: String::new(),
+                            tool_id: tool_id.to_string(),
                             status: LinkStatus::Missing,
                             message: Some("Disabled successfully".to_string()),
                         });
@@ -328,7 +357,7 @@ impl LinkerService {
                     Err(e) => {
                         report.failed.push(LinkResult {
                             skill_id: skill_id.clone(),
-                            tool_id: String::new(),
+                            tool_id: tool_id.to_string(),
                             status: LinkStatus::Broken,
                             message: Some(e),
                         });
@@ -532,6 +561,58 @@ mod tests {
             "disable should remove copied iflow skill"
         );
 
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sync_all_for_tool_skips_noop_when_disabled_skill_is_already_missing() {
+        let root = make_temp_dir("sync-noop-missing");
+        let source_skill = root.join("hub").join("demo-skill");
+        let tool_skills_dir = root.join("codex").join("skills");
+        fs::create_dir_all(&source_skill).expect("source skill dir should be created");
+        fs::create_dir_all(&tool_skills_dir).expect("tool skills dir should be created");
+
+        let skills = vec![("demo-skill".to_string(), source_skill.clone())];
+        let enabled_skills: Vec<String> = vec![];
+        let report =
+            LinkerService::sync_all_for_tool(&skills, &tool_skills_dir, &enabled_skills, "codex");
+
+        assert_eq!(
+            report.success.len(),
+            0,
+            "missing link should be treated as noop"
+        );
+        assert_eq!(report.failed.len(), 0, "noop should not produce failures");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sync_all_for_tool_skips_noop_when_enabled_skill_is_already_valid() {
+        let root = make_temp_dir("sync-noop-valid");
+        let source_skill = root.join("hub").join("demo-skill");
+        let tool_skills_dir = root.join("codex").join("skills");
+        fs::create_dir_all(&source_skill).expect("source skill dir should be created");
+        fs::write(source_skill.join("SKILL.md"), "# Demo\n").expect("skill file should be created");
+
+        LinkerService::enable_skill_for_tool(
+            &source_skill,
+            &tool_skills_dir,
+            "demo-skill",
+            "codex",
+        )
+        .expect("initial enable should succeed");
+
+        let skills = vec![("demo-skill".to_string(), source_skill.clone())];
+        let enabled_skills = vec!["demo-skill".to_string()];
+        let report =
+            LinkerService::sync_all_for_tool(&skills, &tool_skills_dir, &enabled_skills, "codex");
+
+        assert_eq!(
+            report.success.len(),
+            0,
+            "valid link should be treated as noop"
+        );
+        assert_eq!(report.failed.len(), 0, "noop should not produce failures");
         let _ = fs::remove_dir_all(root);
     }
 }

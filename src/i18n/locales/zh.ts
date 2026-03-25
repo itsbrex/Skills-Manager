@@ -379,8 +379,8 @@ export const zh = {
     issuesDetected: "检测到 {count} 个链接问题需要修复",
     fixButton: "一键修复",
     fixing: "修复中...",
-    fixComplete: "修复完成：成功 {success} 个",
-    fixCompleteFailed: "修复完成：成功 {success} 个，失败 {failed} 个",
+    fixComplete: "同步完成：已处理 {processed} 项，修复 {success} 项",
+    fixCompleteFailed: "同步完成：已处理 {processed} 项，修复 {success} 项，失败 {failed} 项",
   },
   polls: {
     title: "投 票",

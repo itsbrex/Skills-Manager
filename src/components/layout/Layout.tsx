@@ -10,7 +10,7 @@ export function Layout() {
   const [syncIssues, setSyncIssues] = useState<number>(0);
   const [showBanner, setShowBanner] = useState(false);
   const [fixing, setFixing] = useState(false);
-  const [fixResult, setFixResult] = useState<{ success: number; failed: number } | null>(null);
+  const [fixResult, setFixResult] = useState<{ success: number; failed: number; processed: number } | null>(null);
 
   useEffect(() => {
     checkSync();
@@ -32,7 +32,9 @@ export function Layout() {
     setFixing(true);
     try {
       const result = await invoke<LinkReport>("fix_sync_issues");
-      setFixResult({ success: result.success.length, failed: result.failed.length });
+      const success = result.success.length;
+      const failed = result.failed.length;
+      setFixResult({ success, failed, processed: success + failed });
       if (result.failed.length === 0) {
         setTimeout(() => setShowBanner(false), 2000);
       }
@@ -88,8 +90,13 @@ export function Layout() {
                   </svg>
                   <span style={{ fontSize: "14px", color: "#16a34a" }}>
                     {fixResult.failed > 0
-                      ? t("sync.fixCompleteFailed").replace("{success}", String(fixResult.success)).replace("{failed}", String(fixResult.failed))
-                      : t("sync.fixComplete").replace("{success}", String(fixResult.success))}
+                      ? t("sync.fixCompleteFailed")
+                          .replace("{processed}", String(fixResult.processed))
+                          .replace("{success}", String(fixResult.success))
+                          .replace("{failed}", String(fixResult.failed))
+                      : t("sync.fixComplete")
+                          .replace("{processed}", String(fixResult.processed))
+                          .replace("{success}", String(fixResult.success))}
                   </span>
                 </>
               ) : (
