@@ -289,8 +289,14 @@ export interface UpdateInfo {
   release_notes?: string;
 }
 
+export type FeedbackContactType =
+  | "wechat"
+  | "email"
+  | "other";
+
 export interface FeedbackRequest {
-  user_info: string;
+  contact_type: FeedbackContactType;
+  contact_value: string;
   content: string;
   source?: string | null;
   language?: string | null;

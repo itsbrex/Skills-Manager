@@ -1,9 +1,17 @@
 import { FormEvent, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "@/i18n";
 import { submitFeedback } from "@/services/feedback";
+import {
+  FEEDBACK_CONTACT_TYPES,
+  FEEDBACK_CONTACT_TYPE_LABEL_KEY_MAP,
+  getFeedbackContactValuePlaceholderKey,
+  validateFeedbackContact,
+} from "@/services/feedbackContact";
 import { PageHeader } from "@/components/ui/page-header";
 import { ToastContainer, useToast } from "@/components/ui/toast";
+import type { FeedbackContactType } from "@/types";
 
 const GITHUB_ISSUES_URL =
   "https://github.com/jiweiyeah/Skills-Manager/issues/new/choose";
@@ -13,9 +21,12 @@ const WECHAT_NOTE = "skills-manager";
 export function Feedback() {
   const { t, language } = useTranslation();
   const { toasts, addToast, removeToast } = useToast();
-  const [userInfo, setUserInfo] = useState("");
+  const [contactType, setContactType] = useState<FeedbackContactType | "">("");
+  const [contactValue, setContactValue] = useState("");
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [contactTypeFocused, setContactTypeFocused] = useState(false);
+  const [contactValueFocused, setContactValueFocused] = useState(false);
 
   const handleOpenGithubIssues = async () => {
     try {
@@ -31,11 +42,10 @@ export function Feedback() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const trimmedUserInfo = userInfo.trim();
     const trimmedContent = content.trim();
-
-    if (!trimmedUserInfo) {
-      addToast(t("feedback.form.userInfoRequired"), "error");
+    const contactValidation = validateFeedbackContact(contactType, contactValue);
+    if (!contactValidation.ok) {
+      addToast(t(contactValidation.errorKey), "error");
       return;
     }
 
@@ -47,11 +57,14 @@ export function Feedback() {
     setSubmitting(true);
     try {
       await submitFeedback({
-        user_info: trimmedUserInfo,
+        contact_type: contactValidation.contactType,
+        contact_value: contactValidation.contactValue,
         content: trimmedContent,
         source: "desktop-feedback-page",
         language,
       });
+      setContactType("");
+      setContactValue("");
       setContent("");
       addToast(t("feedback.form.submitSuccess"), "success");
     } catch (err) {
@@ -174,36 +187,138 @@ export function Feedback() {
                 {t("feedback.issueDirectDesc")}
               </div>
 
-              <label
-                htmlFor="feedback-user-info"
+              <div
                 style={{
-                  display: "block",
-                  fontSize: "12px",
-                  fontWeight: 500,
-                  color: "var(--foreground)",
-                  marginBottom: "6px",
+                  display: "flex",
+                  gap: "12px",
+                  flexWrap: "wrap",
+                  marginBottom: "8px",
                 }}
               >
-                {t("feedback.form.userInfoLabel")}
-                <span style={{ color: "var(--color-error)", marginLeft: "4px" }}>*</span>
-              </label>
-              <input
-                id="feedback-user-info"
-                value={userInfo}
-                onChange={(e) => setUserInfo(e.target.value)}
-                placeholder={t("feedback.form.userInfoPlaceholder")}
+                <div style={{ flex: "0 0 180px", minWidth: "180px" }}>
+                  <label
+                    htmlFor="feedback-contact-type"
+                    style={{
+                      display: "block",
+                      fontSize: "12px",
+                      fontWeight: 500,
+                      color: "var(--foreground)",
+                      marginBottom: "6px",
+                    }}
+                  >
+                    {t("feedback.form.contactTypeLabel")}
+                    <span style={{ color: "var(--color-error)", marginLeft: "4px" }}>
+                      *
+                    </span>
+                  </label>
+                  <div
+                    style={{
+                      ...getContactFieldShellStyle({ focused: contactTypeFocused }),
+                      minHeight: "44px",
+                    }}
+                  >
+                    <select
+                      id="feedback-contact-type"
+                      value={contactType}
+                      onChange={(e) => {
+                        setContactType(e.target.value as FeedbackContactType | "");
+                        setContactValue("");
+                      }}
+                      onFocus={() => setContactTypeFocused(true)}
+                      onBlur={() => setContactTypeFocused(false)}
+                      style={{
+                        ...getContactFieldControlStyle({ hasIcon: true }),
+                        cursor: "pointer",
+                      }}
+                    >
+                      <option value="">
+                        {t("feedback.form.contactTypePlaceholder")}
+                      </option>
+                      {FEEDBACK_CONTACT_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {t(FEEDBACK_CONTACT_TYPE_LABEL_KEY_MAP[type])}
+                        </option>
+                      ))}
+                    </select>
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "50%",
+                        right: "10px",
+                        transform: "translateY(-50%)",
+                        width: "24px",
+                        height: "24px",
+                        borderRadius: "999px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: "var(--secondary)",
+                        color: "var(--muted-foreground)",
+                        pointerEvents: "none",
+                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.6)",
+                      }}
+                    >
+                      <ChevronDown size={14} strokeWidth={2.1} />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ flex: "1 1 280px", minWidth: "240px" }}>
+                  <label
+                    htmlFor="feedback-contact-value"
+                    style={{
+                      display: "block",
+                      fontSize: "12px",
+                      fontWeight: 500,
+                      color: "var(--foreground)",
+                      marginBottom: "6px",
+                    }}
+                  >
+                    {t("feedback.form.contactValueLabel")}
+                    <span style={{ color: "var(--color-error)", marginLeft: "4px" }}>
+                      *
+                    </span>
+                  </label>
+                  <div
+                    style={{
+                      ...getContactFieldShellStyle({
+                        focused: contactValueFocused,
+                        disabled: !contactType,
+                      }),
+                      minHeight: "44px",
+                    }}
+                  >
+                    <input
+                      id="feedback-contact-value"
+                      type={contactType === "email" ? "email" : "text"}
+                      inputMode={contactType === "email" ? "email" : "text"}
+                      disabled={!contactType}
+                      value={contactValue}
+                      onFocus={() => setContactValueFocused(true)}
+                      onBlur={() => setContactValueFocused(false)}
+                      onChange={(e) => setContactValue(e.target.value)}
+                      placeholder={t(
+                        getFeedbackContactValuePlaceholderKey(contactType),
+                      )}
+                      style={{
+                        ...getContactFieldControlStyle(),
+                        cursor: contactType ? "text" : "not-allowed",
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div
                 style={{
-                  width: "100%",
-                  padding: "10px 12px",
-                  fontSize: "13px",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  backgroundColor: "var(--background)",
-                  color: "var(--foreground)",
-                  outline: "none",
+                  fontSize: "12px",
+                  lineHeight: 1.6,
+                  color: "var(--muted-foreground)",
                   marginBottom: "12px",
                 }}
-              />
+              >
+                {t("feedback.form.contactHelp")}
+              </div>
 
               <label
                 htmlFor="feedback-content"
@@ -230,12 +345,15 @@ export function Feedback() {
                   fontSize: "13px",
                   lineHeight: 1.6,
                   border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  backgroundColor: "var(--background)",
+                  borderRadius: "12px",
+                  background:
+                    "linear-gradient(180deg, var(--background) 0%, var(--secondary) 100%)",
                   color: "var(--foreground)",
                   outline: "none",
                   resize: "vertical",
                   minHeight: "132px",
+                  boxShadow:
+                    "inset 0 1px 0 rgba(255,255,255,0.55), 0 10px 24px rgba(15,23,42,0.04)",
                 }}
               />
 
@@ -339,6 +457,47 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
       {children}
     </h2>
   );
+}
+
+function getContactFieldShellStyle(options: {
+  focused: boolean;
+  disabled?: boolean;
+}): React.CSSProperties {
+  const { focused, disabled = false } = options;
+
+  return {
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    borderRadius: "12px",
+    border: focused ? "1px solid var(--ring)" : "1px solid var(--border)",
+    background: disabled
+      ? "var(--secondary)"
+      : "linear-gradient(180deg, var(--background) 0%, var(--secondary) 100%)",
+    boxShadow: focused
+      ? "0 0 0 3px rgba(9,105,218,0.14), 0 14px 28px rgba(15,23,42,0.08)"
+      : "inset 0 1px 0 rgba(255,255,255,0.55), 0 10px 24px rgba(15,23,42,0.04)",
+    transition: "border-color 160ms ease, box-shadow 160ms ease",
+    opacity: disabled ? 0.74 : 1,
+  };
+}
+
+function getContactFieldControlStyle(options?: {
+  hasIcon?: boolean;
+}): React.CSSProperties {
+  return {
+    width: "100%",
+    padding: options?.hasIcon ? "11px 42px 11px 12px" : "11px 12px",
+    fontSize: "13px",
+    fontWeight: 500,
+    color: "var(--foreground)",
+    background: "transparent",
+    border: "none",
+    outline: "none",
+    appearance: "none",
+    WebkitAppearance: "none",
+    MozAppearance: "none",
+  };
 }
 
 function FeedbackCard({ children }: { children: React.ReactNode }) {
