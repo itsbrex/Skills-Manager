@@ -11,6 +11,10 @@ export async function cloudSyncPull(): Promise<CloudSyncSnapshot> {
   return invoke<CloudSyncSnapshot>("cloud_sync_pull");
 }
 
+export async function cloudSyncHasLocalChanges(): Promise<boolean> {
+  return invoke<boolean>("cloud_sync_has_local_changes");
+}
+
 export async function cloudSyncPush(): Promise<CloudSyncPushResult> {
   return invoke<CloudSyncPushResult>("cloud_sync_push");
 }

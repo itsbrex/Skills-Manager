@@ -17,7 +17,9 @@ pub use auth::{
     exchange_github_auth, exchange_google_auth, get_auth_profile, logout_auth, start_github_auth,
     start_google_auth,
 };
-pub use cloud_sync::{cloud_sync_pull, cloud_sync_push, cloud_sync_resolve};
+pub use cloud_sync::{
+    cloud_sync_has_local_changes, cloud_sync_pull, cloud_sync_push, cloud_sync_resolve,
+};
 pub use config::{get_config, is_initialized, mark_initialized, save_config};
 pub use editors::{
     detect_available_editors, get_available_editors, open_in_editor, refresh_editors,

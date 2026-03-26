@@ -25,6 +25,27 @@ export type CloudSyncPreferencesLike = {
   github_token?: string | null;
 };
 
+export type CloudSyncTrigger = "startup" | "manual" | "auto";
+export type CloudSyncRunPlan = "pull_only" | "pull_then_push" | "push_only";
+
+export function planCloudSyncRun({
+  trigger,
+  hasLocalChanges,
+}: {
+  trigger: CloudSyncTrigger;
+  hasLocalChanges: boolean;
+}): CloudSyncRunPlan {
+  if (hasLocalChanges) {
+    return "push_only";
+  }
+
+  if (trigger === "startup") {
+    return "pull_only";
+  }
+
+  return "pull_then_push";
+}
+
 export function mergeCloudSyncPreferences<T extends CloudSyncPreferencesLike>(
   local: T | null | undefined,
   remote: Partial<T> | null | undefined,

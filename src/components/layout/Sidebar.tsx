@@ -15,6 +15,7 @@ import {
   setPendingAuthProvider,
   takePendingAuthProvider,
 } from "@/services/auth";
+import { buildAuthErrorMessage } from "@/services/authError";
 import { setAuthProfileSnapshot } from "@/services/authProfileStore";
 import { useCloudSync } from "@/hooks/useCloudSyncAgent";
 import { UpdateInfo } from "@/types";
@@ -139,15 +140,20 @@ export function Sidebar() {
     }
     setAuthLoading(true);
     setAuthError(null);
+    const resolvedProvider = pendingProvider ?? takePendingAuthProvider();
     try {
-      const resolvedProvider = pendingProvider ?? takePendingAuthProvider();
       const exchangeAuth = resolvedProvider === "google" ? exchangeGoogleAuth : exchangeGithubAuth;
       const profile = await exchangeAuth(loginCode, state);
       setAuthProfileSnapshot(profile);
       setAuthModalOpen(false);
     } catch (err) {
       console.warn("Failed to exchange auth code:", err);
-      setAuthError(t("auth.loginFailed"));
+      setAuthError(
+        buildAuthErrorMessage(t, err, {
+          provider: resolvedProvider ?? "github",
+          stage: "exchange",
+        }),
+      );
     } finally {
       setAuthLoading(false);
       setPendingProvider(null);
@@ -248,7 +254,12 @@ export function Sidebar() {
       await openUrl(result.auth_url);
     } catch (err) {
       console.warn("Failed to start github auth:", err);
-      setAuthError(t("auth.loginFailed"));
+      setAuthError(
+        buildAuthErrorMessage(t, err, {
+          provider: "github",
+          stage: "start",
+        }),
+      );
       setPendingProvider(null);
       clearPendingAuthProvider();
     } finally {
@@ -267,7 +278,12 @@ export function Sidebar() {
       await openUrl(result.auth_url);
     } catch (err) {
       console.warn("Failed to start google auth:", err);
-      setAuthError(t("auth.loginFailed"));
+      setAuthError(
+        buildAuthErrorMessage(t, err, {
+          provider: "google",
+          stage: "start",
+        }),
+      );
       setPendingProvider(null);
       clearPendingAuthProvider();
     } finally {

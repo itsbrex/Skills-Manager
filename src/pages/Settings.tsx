@@ -10,6 +10,7 @@ import {
 } from "@/types";
 import { defaultPreferences } from "@/constants/preferences";
 import { startGithubAuth, startGoogleAuth, clearPendingAuthProvider, setPendingAuthProvider } from "@/services/auth";
+import { buildAuthErrorMessage } from "@/services/authError";
 import { checkUpdate } from "@/services/updater";
 import { useTranslation, Language } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
@@ -204,7 +205,12 @@ export function Settings() {
       await openUrl(result.auth_url);
     } catch (err) {
       console.warn("Failed to start github auth:", err);
-      setAuthError(t("auth.loginFailed"));
+      setAuthError(
+        buildAuthErrorMessage(t, err, {
+          provider: "github",
+          stage: "start",
+        }),
+      );
       clearPendingAuthProvider();
     } finally {
       setAuthLoading(false);
@@ -220,7 +226,12 @@ export function Settings() {
       await openUrl(result.auth_url);
     } catch (err) {
       console.warn("Failed to start google auth:", err);
-      setAuthError(t("auth.loginFailed"));
+      setAuthError(
+        buildAuthErrorMessage(t, err, {
+          provider: "google",
+          stage: "start",
+        }),
+      );
       clearPendingAuthProvider();
     } finally {
       setAuthLoading(false);

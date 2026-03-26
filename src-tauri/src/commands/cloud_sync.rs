@@ -101,6 +101,18 @@ fn payload_hash(payload: &CloudSyncPayload) -> Result<String, String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+fn has_local_changes_since_last_sync(
+    last_payload_hash: Option<&str>,
+    current_payload_hash: &str,
+    last_revision: i64,
+    last_synced_at: Option<i64>,
+) -> bool {
+    match last_payload_hash {
+        Some(last_hash) => last_hash != current_payload_hash,
+        None => last_revision > 0 || last_synced_at.is_some(),
+    }
+}
+
 fn ensure_cloud_sync_state(config: &mut crate::models::AppConfig) -> &mut CloudSyncState {
     if config.cloud_sync.is_none() {
         config.cloud_sync = Some(CloudSyncState::new());
@@ -202,6 +214,23 @@ pub async fn cloud_sync_resolve(payload: CloudSyncPayload) -> Result<i64, String
     state.last_synced_at = Some(now_timestamp());
     manager.save(&config)?;
     Ok(revision)
+}
+
+#[tauri::command]
+pub fn cloud_sync_has_local_changes() -> Result<bool, String> {
+    let manager = ConfigManager::new();
+    let config = manager.load()?;
+    let skills = ScannerService::scan_skills(&config.skills_dir)?;
+    let payload = build_payload(&config, &skills);
+    let current_hash = payload_hash(&payload)?;
+    let state = config.cloud_sync.as_ref();
+
+    Ok(has_local_changes_since_last_sync(
+        state.and_then(|value| value.last_payload_hash.as_deref()),
+        &current_hash,
+        state.map(|value| value.last_revision).unwrap_or(0),
+        state.and_then(|value| value.last_synced_at),
+    ))
 }
 
 #[cfg(test)]
@@ -403,6 +432,28 @@ mod tests {
         let hash1 = payload_hash(&payload).expect("hash payload");
         let hash2 = payload_hash(&payload_reordered).expect("hash payload reordered");
         assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn has_local_changes_since_last_sync_detects_hash_mismatch() {
+        assert!(has_local_changes_since_last_sync(
+            Some("old"),
+            "new",
+            1,
+            Some(1)
+        ));
+        assert!(!has_local_changes_since_last_sync(
+            Some("same"),
+            "same",
+            1,
+            Some(1)
+        ));
+    }
+
+    #[test]
+    fn has_local_changes_since_last_sync_ignores_missing_baseline_before_first_sync() {
+        assert!(!has_local_changes_since_last_sync(None, "hash", 0, None));
+        assert!(has_local_changes_since_last_sync(None, "hash", 2, Some(1)));
     }
 
     #[test]

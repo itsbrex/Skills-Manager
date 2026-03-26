@@ -335,6 +335,8 @@ export const en = {
     username: "Username",
     email: "Email",
     loginFailed: "Sign in failed, please try again",
+    googleLoginUnavailable: "Google sign-in is temporarily unavailable. Please use GitHub for now.",
+    githubLoginUnavailable: "GitHub sign-in is temporarily unavailable. Please try again later.",
     logoutFailed: "Sign out failed, please try again",
     devCallbackTip: "If the browser did not open the app, paste the callback URL to finish login.",
     devCallbackApply: "Apply callback",

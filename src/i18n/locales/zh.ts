@@ -338,6 +338,8 @@ export const zh = {
     username: "用户名",
     email: "邮箱",
     loginFailed: "登录失败，请重试",
+    googleLoginUnavailable: "Google 登录当前不可用，请先使用 GitHub 登录",
+    githubLoginUnavailable: "GitHub 登录当前不可用，请稍后重试",
     logoutFailed: "退出失败，请重试",
     devCallbackTip: "如果浏览器没有自动唤起应用，请粘贴回调链接完成登录",
     devCallbackApply: "应用回调",

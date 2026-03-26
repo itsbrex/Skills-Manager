@@ -17,6 +17,7 @@ import type {
   VaultBackupConsent,
 } from "@/types";
 import {
+  cloudSyncHasLocalChanges,
   cloudSyncPull,
   cloudSyncPush,
   cloudSyncResolve,
@@ -28,7 +29,9 @@ import {
   buildMissingSkillRestores,
   isNonBlockingRestoreError,
   mergeCloudSyncPreferences,
+  planCloudSyncRun,
   runVaultBackupThenPush,
+  type CloudSyncTrigger,
 } from "@/services/cloudSyncUtils";
 import { syncPullThenPush, type SyncStage } from "@/services/cloudSyncWorkflow";
 import { getAuthProfile, logoutAuth } from "@/services/auth";
@@ -383,6 +386,19 @@ function useCloudSyncAgent(): CloudSyncContextValue {
     }
   }, [applyCloudPayload, updateLastSynced]);
 
+  const setConflictFromPushResult = useCallback((result: CloudSyncPushResult) => {
+    if (result.status !== "conflict") {
+      setConflict(null);
+      return;
+    }
+
+    setConflict({
+      revision: result.revision,
+      payload: result.payload,
+      localPayload: result.local_payload,
+    });
+  }, []);
+
   const pullLatest = useCallback(async () => {
     setError(null);
     await syncPullThenPush({
@@ -398,6 +414,25 @@ function useCloudSyncAgent(): CloudSyncContextValue {
       retryOnConflict: false,
     });
   }, [performPull]);
+
+  const pushLatest = useCallback(
+    async (allowVaultBackup: boolean) => {
+      setError(null);
+      try {
+        setSyncStage("pushing");
+        const result = await performPush(allowVaultBackup);
+        setConflictFromPushResult(result);
+        setSyncStage("idle");
+        return result;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setError(message);
+        setSyncStage("error");
+        throw err;
+      }
+    },
+    [performPush, setConflictFromPushResult],
+  );
 
   const pullThenPush = useCallback(
     async (allowVaultBackup: boolean) => {
@@ -417,16 +452,29 @@ function useCloudSyncAgent(): CloudSyncContextValue {
             return;
           }
           sawConflict = true;
-          setConflict({
-            revision: result.revision,
-            payload: result.payload,
-            localPayload: result.local_payload,
-          });
+          setConflictFromPushResult(result);
         },
         retryOnConflict: true,
       });
     },
-    [performPull, performPush],
+    [performPull, performPush, setConflictFromPushResult],
+  );
+
+  const runPlannedSync = useCallback(
+    async (trigger: CloudSyncTrigger, allowVaultBackup: boolean) => {
+      setConflict(null);
+      const hasLocalChanges = await cloudSyncHasLocalChanges();
+      const plan = planCloudSyncRun({ trigger, hasLocalChanges });
+
+      if (plan === "push_only") {
+        return pushLatest(allowVaultBackup);
+      }
+      if (plan === "pull_only") {
+        return pullLatest();
+      }
+      return pullThenPush(allowVaultBackup);
+    },
+    [pullLatest, pullThenPush, pushLatest],
   );
 
   useEffect(() => {
@@ -435,12 +483,13 @@ function useCloudSyncAgent(): CloudSyncContextValue {
     }
     void runSyncTask(async () => {
       try {
-        await pullLatest();
+        const consent = await refreshVaultConsent();
+        await runPlannedSync("startup", consent === "granted");
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
     });
-  }, [authProfile?.user_id, pullLatest, runSyncTask]);
+  }, [authProfile?.user_id, refreshVaultConsent, runPlannedSync, runSyncTask]);
 
   useEffect(() => {
     if (!authProfile?.user_id || !autoSyncEnabled) {
@@ -459,7 +508,7 @@ function useCloudSyncAgent(): CloudSyncContextValue {
       void runSyncTask(async () => {
         try {
           const allowVaultBackup = vaultConsentRef.current === "granted";
-          await pullThenPush(allowVaultBackup);
+          await runPlannedSync("auto", allowVaultBackup);
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err));
         }
@@ -467,7 +516,7 @@ function useCloudSyncAgent(): CloudSyncContextValue {
     }, autoSyncIntervalMs);
 
     return () => window.clearInterval(timer);
-  }, [authProfile?.user_id, autoSyncEnabled, autoSyncIntervalMs, pullThenPush, runSyncTask]);
+  }, [authProfile?.user_id, autoSyncEnabled, autoSyncIntervalMs, runPlannedSync, runSyncTask]);
 
   const manualSync = useCallback(async () => {
     if (inFlightRef.current) {
@@ -481,12 +530,12 @@ function useCloudSyncAgent(): CloudSyncContextValue {
     }
     await runSyncTask(async () => {
       try {
-        await pullThenPush(consent === "granted");
+        await runPlannedSync("manual", consent === "granted");
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
     });
-  }, [pullThenPush, refreshVaultConsent, runSyncTask]);
+  }, [refreshVaultConsent, runPlannedSync, runSyncTask]);
 
   const acceptVaultConsent = useCallback(async () => {
     setVaultConsentDialogOpen(false);
@@ -501,12 +550,12 @@ function useCloudSyncAgent(): CloudSyncContextValue {
     pendingManualSyncRef.current = false;
     await runSyncTask(async () => {
       try {
-        await pullThenPush(true);
+        await runPlannedSync("manual", true);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
     });
-  }, [pullThenPush, runSyncTask, updateVaultConsent]);
+  }, [runPlannedSync, runSyncTask, updateVaultConsent]);
 
   const denyVaultConsent = useCallback(async () => {
     setVaultConsentDialogOpen(false);
@@ -521,12 +570,12 @@ function useCloudSyncAgent(): CloudSyncContextValue {
     pendingManualSyncRef.current = false;
     await runSyncTask(async () => {
       try {
-        await pullThenPush(false);
+        await runPlannedSync("manual", false);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       }
     });
-  }, [pullThenPush, runSyncTask, updateVaultConsent]);
+  }, [runPlannedSync, runSyncTask, updateVaultConsent]);
 
   const cancelVaultConsent = useCallback(() => {
     setVaultConsentDialogOpen(false);

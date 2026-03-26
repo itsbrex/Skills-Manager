@@ -156,3 +156,51 @@ test("mergeCloudSyncPreferences keeps local telemetry consent when cloud payload
     },
   );
 });
+
+test("planCloudSyncRun uses push only when startup sync sees unsynced local changes", async () => {
+  const { planCloudSyncRun } = await import("../cloudSyncUtils.ts");
+  assert.equal(typeof planCloudSyncRun, "function");
+  assert.equal(
+    planCloudSyncRun({
+      trigger: "startup",
+      hasLocalChanges: true,
+    }),
+    "push_only",
+  );
+});
+
+test("planCloudSyncRun uses push only when manual sync sees unsynced local changes", async () => {
+  const { planCloudSyncRun } = await import("../cloudSyncUtils.ts");
+  assert.equal(typeof planCloudSyncRun, "function");
+  assert.equal(
+    planCloudSyncRun({
+      trigger: "manual",
+      hasLocalChanges: true,
+    }),
+    "push_only",
+  );
+});
+
+test("planCloudSyncRun keeps startup sync as pull only when local state is clean", async () => {
+  const { planCloudSyncRun } = await import("../cloudSyncUtils.ts");
+  assert.equal(typeof planCloudSyncRun, "function");
+  assert.equal(
+    planCloudSyncRun({
+      trigger: "startup",
+      hasLocalChanges: false,
+    }),
+    "pull_only",
+  );
+});
+
+test("planCloudSyncRun keeps auto sync as pull then push when local state is clean", async () => {
+  const { planCloudSyncRun } = await import("../cloudSyncUtils.ts");
+  assert.equal(typeof planCloudSyncRun, "function");
+  assert.equal(
+    planCloudSyncRun({
+      trigger: "auto",
+      hasLocalChanges: false,
+    }),
+    "pull_then_push",
+  );
+});
