@@ -467,6 +467,11 @@ export const en = {
       wechatLabel: "WeChat",
       wechatDesc: "You can contact me via WeChat (yeheboo) and please add note: {note}",
       emailLabel: "Email",
+      groupHint: "You can also scan to join the groups. If a QR code expires, contact me via WeChat or email above first.",
+      wechatGroupLabel: "WeChat Group",
+      wechatGroupDesc: "Scan to join the WeChat group",
+      feishuGroupLabel: "Feishu Group",
+      feishuGroupDesc: "Scan to join the Feishu group",
     },
   },
   telemetry: {
