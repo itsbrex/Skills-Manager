@@ -27,6 +27,7 @@ import {
 import {
   buildMissingSkillRestores,
   isNonBlockingRestoreError,
+  mergeCloudSyncPreferences,
   runVaultBackupThenPush,
 } from "@/services/cloudSyncUtils";
 import { syncPullThenPush, type SyncStage } from "@/services/cloudSyncWorkflow";
@@ -217,11 +218,11 @@ function useCloudSyncAgent(): CloudSyncContextValue {
   const applyCloudPayload = useCallback(async (payload: CloudSyncPayload) => {
     const config = await invoke<AppConfig>("get_config");
     if (payload.preferences) {
-      const merged = {
-        ...defaultPreferences,
-        ...(config.preferences ?? {}),
-        ...payload.preferences,
-      };
+      const merged = mergeCloudSyncPreferences(
+        config.preferences ?? undefined,
+        payload.preferences,
+        defaultPreferences,
+      );
       config.preferences = merged;
       await invoke("save_config", { config });
       setCloudSyncSettingsSnapshot({

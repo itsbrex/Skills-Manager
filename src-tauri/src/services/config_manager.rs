@@ -1,5 +1,7 @@
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::{AppConfig, SkillMetadata, SourceType, ToolConfig, SUPPORTED_TOOLS};
 #[cfg(windows)]
@@ -11,6 +13,54 @@ pub struct ConfigManager {
 }
 
 impl ConfigManager {
+    fn atomic_write(path: &PathBuf, content: &str) -> Result<(), String> {
+        let parent = path
+            .parent()
+            .ok_or_else(|| "Config path has no parent directory".to_string())?;
+
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| "Config path has no valid file name".to_string())?;
+
+        let unique_suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_nanos())
+            .unwrap_or(0);
+        let temp_path = parent.join(format!(".{}.{}.tmp", file_name, unique_suffix));
+
+        let mut temp_file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .map_err(|e| format!("Failed to create temp config file: {}", e))?;
+
+        if let Err(error) = (|| -> Result<(), String> {
+            temp_file
+                .write_all(content.as_bytes())
+                .map_err(|e| format!("Failed to write temp config file: {}", e))?;
+            temp_file
+                .sync_all()
+                .map_err(|e| format!("Failed to flush temp config file: {}", e))?;
+            drop(temp_file);
+            fs::rename(&temp_path, path).map_err(|e| format!("Failed to replace config: {}", e))?;
+
+            #[cfg(unix)]
+            {
+                if let Ok(directory) = fs::File::open(parent) {
+                    let _ = directory.sync_all();
+                }
+            }
+
+            Ok(())
+        })() {
+            let _ = fs::remove_file(&temp_path);
+            return Err(error);
+        }
+
+        Ok(())
+    }
+
     fn normalize_skill_tags(tags: &[String]) -> Vec<String> {
         let mut normalized = Vec::new();
         let mut seen = std::collections::HashSet::new();
@@ -365,7 +415,7 @@ impl ConfigManager {
         let content = serde_json::to_string_pretty(&normalized)
             .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
-        fs::write(&self.config_path, content).map_err(|e| format!("Failed to write config: {}", e))
+        Self::atomic_write(&self.config_path, &content)
     }
 
     pub fn init_default(&self) -> Result<AppConfig, String> {
@@ -550,6 +600,32 @@ mod tests {
                     tags: vec!["react".to_string(), "frontend".to_string()],
                 })
             );
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_replaces_existing_readonly_config_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        with_temp_home(|home_dir| {
+            let manager = ConfigManager::new();
+            let mut config = manager.init_default().expect("init default config");
+            config.initialized = true;
+
+            let config_path = home_dir.join(".skills-manager").join("config.json");
+            let mut permissions = fs::metadata(&config_path)
+                .expect("config metadata")
+                .permissions();
+            permissions.set_mode(0o444);
+            fs::set_permissions(&config_path, permissions).expect("set readonly permissions");
+
+            manager
+                .save(&config)
+                .expect("atomic save should replace readonly config file");
+
+            let restored = manager.load().expect("load config");
+            assert!(restored.initialized, "updated config should persist after save");
         });
     }
 }

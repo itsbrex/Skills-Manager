@@ -112,3 +112,47 @@ test("runVaultBackupThenPush stops on backup failure", async () => {
   );
   assert.equal(pushed, false);
 });
+
+test("mergeCloudSyncPreferences keeps local telemetry consent when cloud payload is unknown", async () => {
+  const { mergeCloudSyncPreferences } = await import("../cloudSyncUtils.ts");
+  assert.equal(typeof mergeCloudSyncPreferences, "function");
+
+  const defaults = {
+    theme: "system",
+    font_family: "system",
+    language: "en",
+    auto_sync: true,
+    sync_on_save: true,
+    cloud_sync_auto: true,
+    cloud_sync_interval_minutes: 10,
+    default_editor: "builtin",
+    tab_size: 2,
+    show_sync_notifications: true,
+    remove_links_when_disabling_tool: false,
+    vault_backup_consent: "unknown",
+    telemetry_consent: "unknown",
+    github_token: null,
+  } as const;
+
+  const local = {
+    ...defaults,
+    theme: "light",
+    telemetry_consent: "granted",
+  };
+
+  const remote = {
+    ...defaults,
+    theme: "dark",
+    telemetry_consent: "unknown",
+  };
+
+  assert.deepEqual(
+    mergeCloudSyncPreferences(local, remote, defaults),
+    {
+      ...defaults,
+      ...local,
+      ...remote,
+      telemetry_consent: "granted",
+    },
+  );
+});
