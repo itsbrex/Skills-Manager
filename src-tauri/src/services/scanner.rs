@@ -20,6 +20,12 @@ pub struct SkillMeta {
 }
 
 impl ScannerService {
+    fn is_skill_dir(path: &Path) -> bool {
+        path.join("meta.json").exists()
+            || path.join("SKILL.md").exists()
+            || path.join("skill.md").exists()
+    }
+
     pub fn scan_skills(skills_dir: &Path) -> Result<Vec<Skill>, String> {
         // Load config to check enabled status for each tool
         let config = crate::services::ConfigManager::new().load()?;
@@ -45,7 +51,7 @@ impl ScannerService {
             .par_iter()
             .filter_map(|entry| {
                 let path = entry.path();
-                if path.is_dir() {
+                if path.is_dir() && Self::is_skill_dir(&path) {
                     Self::load_skill_with_config(&path, config).ok()
                 } else {
                     None
@@ -490,6 +496,35 @@ description: "Description from SKILL.md"
                 marketplace.skill_path,
                 Some(".claude/skills/mkt-skill".to_string())
             );
+        });
+    }
+
+    #[test]
+    fn scan_skills_with_config_ignores_container_dirs_without_skill_files() {
+        with_temp_home(|home| {
+            let config = AppConfig::default();
+            let skills_dir = home.join(".skills-manager").join("skills");
+            fs::create_dir_all(&skills_dir).expect("create skills root");
+
+            let valid_skill_dir = skills_dir.join("valid-skill");
+            fs::create_dir_all(&valid_skill_dir).expect("create valid skill dir");
+            fs::write(
+                valid_skill_dir.join("SKILL.md"),
+                "---\nname: valid-skill\n---\n",
+            )
+            .expect("write valid SKILL.md");
+
+            for container_dir in [".skill-studio", "learned", "superpowers"] {
+                fs::create_dir_all(skills_dir.join(container_dir))
+                    .expect("create container dir");
+            }
+
+            let mut skills =
+                ScannerService::scan_skills_with_config(&skills_dir, &config).expect("scan skills");
+            skills.sort_by(|a, b| a.id.cmp(&b.id));
+
+            let ids: Vec<&str> = skills.iter().map(|skill| skill.id.as_str()).collect();
+            assert_eq!(ids, vec!["valid-skill"]);
         });
     }
 }

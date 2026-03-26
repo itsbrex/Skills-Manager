@@ -241,7 +241,7 @@ pub struct ToolConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            version: "2.0.0".to_string(),
+            version: "2.0.1".to_string(),
             skills_dir: Self::default_skills_dir(),
             tools: HashMap::new(),
             custom_tools: HashMap::new(),
@@ -445,7 +445,7 @@ mod tests {
     #[test]
     fn skill_tags_default_to_empty_when_loading_legacy_config() {
         let config_json = r#"{
-            "version": "2.0.0",
+            "version": "2.0.1",
             "skills_dir": "/tmp/skills",
             "tools": {},
             "custom_tools": {},
