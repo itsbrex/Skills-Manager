@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use crate::models::{AppConfig, SourceType, ToolConfig, SUPPORTED_TOOLS};
+use crate::models::{AppConfig, SkillMetadata, SourceType, ToolConfig, SUPPORTED_TOOLS};
 #[cfg(windows)]
 use crate::services::linker::LinkerService;
 use crate::services::linker::{is_symlink_or_junction, normalize_path, remove_symlink_or_junction};
@@ -11,6 +11,44 @@ pub struct ConfigManager {
 }
 
 impl ConfigManager {
+    fn normalize_skill_tags(tags: &[String]) -> Vec<String> {
+        let mut normalized = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        for tag in tags {
+            let collapsed = tag.split_whitespace().collect::<Vec<_>>().join(" ");
+            let value = collapsed.trim().to_lowercase();
+            if value.is_empty() || !seen.insert(value.clone()) {
+                continue;
+            }
+            normalized.push(value);
+        }
+
+        normalized
+    }
+
+    fn normalize_skill_metadata(
+        metadata: &std::collections::HashMap<String, SkillMetadata>,
+    ) -> std::collections::HashMap<String, SkillMetadata> {
+        let mut normalized = std::collections::HashMap::new();
+
+        for (skill_id, item) in metadata {
+            let trimmed_id = skill_id.trim();
+            if trimmed_id.is_empty() {
+                continue;
+            }
+
+            let tags = Self::normalize_skill_tags(&item.tags);
+            if tags.is_empty() {
+                continue;
+            }
+
+            normalized.insert(trimmed_id.to_string(), SkillMetadata { tags });
+        }
+
+        normalized
+    }
+
     pub fn new() -> Self {
         let config_path = Self::get_config_path();
         let manager = Self { config_path };
@@ -184,6 +222,12 @@ impl ConfigManager {
             updated = true;
         }
 
+        let normalized_skill_metadata = Self::normalize_skill_metadata(&config.skill_metadata);
+        if normalized_skill_metadata != config.skill_metadata {
+            config.skill_metadata = normalized_skill_metadata;
+            updated = true;
+        }
+
         // Keep marketplace sources constrained to supported providers.
         // Unknown legacy providers are removed during load to prevent stale config from surfacing.
         let default_sources = AppConfig::default().marketplace_sources.unwrap_or_default();
@@ -314,6 +358,7 @@ impl ConfigManager {
 
         let mut normalized = config.clone();
         normalized.skills_dir = normalize_path(&AppConfig::default_skills_dir());
+        normalized.skill_metadata = Self::normalize_skill_metadata(&normalized.skill_metadata);
         fs::create_dir_all(&normalized.skills_dir)
             .map_err(|e| format!("Failed to create skills directory: {}", e))?;
 
@@ -360,6 +405,7 @@ impl Default for ConfigManager {
 #[cfg(test)]
 mod tests {
     use super::ConfigManager;
+    use crate::models::SkillMetadata;
     use crate::test_support::with_temp_home;
     use serde_json::json;
     use std::fs;
@@ -480,6 +526,30 @@ mod tests {
 
             let loaded = manager.load().expect("load config");
             assert_eq!(loaded.skills_dir, expected_skills_dir);
+        });
+    }
+
+    #[test]
+    fn save_and_load_skill_tags_round_trip() {
+        with_temp_home(|_home_dir| {
+            let manager = ConfigManager::new();
+            let mut config = manager.init_default().expect("init default config");
+            config.skill_metadata.insert(
+                "react-playground".to_string(),
+                SkillMetadata {
+                    tags: vec!["react".to_string(), "frontend".to_string()],
+                },
+            );
+
+            manager.save(&config).expect("save config");
+
+            let loaded = manager.load().expect("load config");
+            assert_eq!(
+                loaded.skill_metadata.get("react-playground"),
+                Some(&SkillMetadata {
+                    tags: vec!["react".to_string(), "frontend".to_string()],
+                })
+            );
         });
     }
 }

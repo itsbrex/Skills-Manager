@@ -11,6 +11,12 @@ export interface Skill {
   path: string;
 }
 
+export interface SkillMetadata {
+  tags: string[];
+}
+
+export type SkillMetadataMap = Record<string, SkillMetadata>;
+
 export interface ToolConfig {
   enabled: boolean;
   detected: boolean;
@@ -167,6 +173,7 @@ export interface AppConfig {
   skills_dir: string;
   tools: Record<string, ToolConfig>;
   custom_tools?: Record<string, CustomToolConfig>;
+  skill_metadata?: SkillMetadataMap;
   preferences?: UserPreferences;
   marketplace_sources?: MarketplaceSource[];
   poll_client_state?: PollClientStateConfig | null;

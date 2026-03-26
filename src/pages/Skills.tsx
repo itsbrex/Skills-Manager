@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -6,7 +6,7 @@ import { ToastContainer, useToast } from "@/components/ui/toast";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoader } from "@/components/ui/loading";
-import { RelationToggleDialog } from "@/components/skills/RelationToggleDialog";
+import { Toggle } from "@/components/ui/toggle";
 import {
   CREATE_SKILL_MODAL_WIDTH,
   MODAL_LAYER_Z_INDEX,
@@ -14,6 +14,15 @@ import {
 } from "@/constants/modal";
 import { AppConfig, Skill, Tool } from "@/types";
 import { useTranslation, TranslationPath } from "@/i18n";
+import {
+  applyTagFilterAction,
+  buildSkillTagSummaries,
+  filterSkills,
+  getTagFilterSelectionSummary,
+  getSkillTags,
+  hasSelectableTagFilters,
+  normalizeSkillTags,
+} from "./skills/skillTags";
 import { orderToolIdsForSkill } from "./skills/orderToolIds";
 import { summarizeEnabledTools } from "./skills/summarizeEnabledTools";
 import { getEnabledToolIds } from "./skills/getEnabledToolIds";
@@ -45,6 +54,27 @@ function getSkillColor(name: string): { bg: string; icon: string } {
   return colors[index];
 }
 
+function buildTagFilterMenuItemStyle(active: boolean): CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    width: "100%",
+    padding: "8px 10px",
+    fontSize: "12px",
+    fontWeight: 500,
+    color: active ? "var(--primary)" : "var(--foreground)",
+    backgroundColor: active ? "rgba(9, 105, 218, 0.08)" : "var(--background)",
+    border: active ? "1px solid rgba(9, 105, 218, 0.28)" : "1px solid var(--border)",
+    borderRadius: "8px",
+    cursor: "pointer",
+    textAlign: "left",
+  };
+}
+
+type SkillEditorTab = "tools" | "tags";
+
 export function Skills() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -52,6 +82,8 @@ export function Skills() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [untaggedOnly, setUntaggedOnly] = useState(false);
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
   const [deletingSkill, setDeletingSkill] = useState<string | null>(null);
   const [toolEditorSkillId, setToolEditorSkillId] = useState<string | null>(null);
@@ -60,9 +92,14 @@ export function Skills() {
   const [bulkTogglingSkillId, setBulkTogglingSkillId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [showTagFilterMenu, setShowTagFilterMenu] = useState(false);
+  const [skillEditorTab, setSkillEditorTab] = useState<SkillEditorTab>("tools");
+  const [tagDraft, setTagDraft] = useState("");
+  const [savingTagsSkillId, setSavingTagsSkillId] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
+  const skillMetadata = config?.skill_metadata;
 
   // Handle opening a skill in editor
   const handleOpenSkill = useCallback(async (skill: Skill) => {
@@ -138,6 +175,90 @@ export function Skills() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const persistSkillTags = useCallback(async (skillId: string, nextTags: string[]) => {
+    if (!config) {
+      return;
+    }
+
+    const normalizedTags = normalizeSkillTags(nextTags);
+    const previousConfig = config;
+    const nextSkillMetadata = { ...(config.skill_metadata ?? {}) };
+
+    if (normalizedTags.length === 0) {
+      delete nextSkillMetadata[skillId];
+    } else {
+      nextSkillMetadata[skillId] = { tags: normalizedTags };
+    }
+
+    const nextConfig: AppConfig = {
+      ...config,
+      skill_metadata: nextSkillMetadata,
+    };
+
+    setConfig(nextConfig);
+    setSavingTagsSkillId(skillId);
+
+    try {
+      await invoke("save_config", { config: nextConfig });
+    } catch (err) {
+      setConfig(previousConfig);
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setSavingTagsSkillId(null);
+    }
+  }, [addToast, config]);
+
+  const toggleTagFilter = useCallback((tag: string) => {
+    const next = applyTagFilterAction(
+      { selectedTags, untaggedOnly },
+      { type: "toggle-tag", tag },
+    );
+    setSelectedTags(next.selectedTags);
+    setUntaggedOnly(next.untaggedOnly);
+    setShowTagFilterMenu(false);
+  }, [selectedTags, untaggedOnly]);
+
+  const handleToggleUntaggedOnly = useCallback(() => {
+    const next = applyTagFilterAction(
+      { selectedTags, untaggedOnly },
+      { type: "toggle-untagged" },
+    );
+    setSelectedTags(next.selectedTags);
+    setUntaggedOnly(next.untaggedOnly);
+    setShowTagFilterMenu(false);
+  }, [selectedTags, untaggedOnly]);
+
+  const handleResetTagFilters = useCallback(() => {
+    const next = applyTagFilterAction(
+      { selectedTags, untaggedOnly },
+      { type: "reset" },
+    );
+    setSelectedTags(next.selectedTags);
+    setUntaggedOnly(next.untaggedOnly);
+    setShowTagFilterMenu(false);
+  }, [selectedTags, untaggedOnly]);
+
+  const handleAddTag = useCallback(async (skillId: string) => {
+    const nextTag = normalizeSkillTags([tagDraft])[0];
+    if (!nextTag) {
+      return;
+    }
+
+    const currentTags = getSkillTags(skillId, skillMetadata);
+    if (currentTags.includes(nextTag)) {
+      setTagDraft("");
+      return;
+    }
+
+    await persistSkillTags(skillId, [...currentTags, nextTag]);
+    setTagDraft("");
+  }, [persistSkillTags, skillMetadata, tagDraft]);
+
+  const handleRemoveTag = useCallback(async (skillId: string, tag: string) => {
+    const nextTags = getSkillTags(skillId, skillMetadata).filter((item) => item !== tag);
+    await persistSkillTags(skillId, nextTags);
+  }, [persistSkillTags, skillMetadata]);
 
   const handleToggle = async (skillId: string, skillName: string, toolId: string, enabled: boolean) => {
     const toggleKey = `${skillId}:${toolId}`;
@@ -234,6 +355,23 @@ export function Skills() {
     setDeletingSkill(skill.id);
     try {
       await invoke("delete_skill", { skillId: skill.id });
+      if (toolEditorSkillId === skill.id) {
+        closeSkillEditor();
+      }
+      if (config?.skill_metadata?.[skill.id]) {
+        const nextConfig: AppConfig = {
+          ...config,
+          skill_metadata: Object.fromEntries(
+            Object.entries(config.skill_metadata).filter(([itemSkillId]) => itemSkillId !== skill.id),
+          ),
+        };
+        try {
+          await invoke("save_config", { config: nextConfig });
+          setConfig(nextConfig);
+        } catch (cleanupError) {
+          addToast(cleanupError instanceof Error ? cleanupError.message : String(cleanupError), "error");
+        }
+      }
       addToast(t("skills.deleteSuccess").replace("{name}", skill.name), "success");
       await reloadData();
     } catch (err) {
@@ -268,13 +406,48 @@ export function Skills() {
     }
   };
 
-  const filteredSkills = skills.filter((skill) => {
-    const query = searchQuery.toLowerCase();
-    return (
-      skill.name.toLowerCase().includes(query) ||
-      skill.id.toLowerCase().includes(query)
-    );
-  });
+  const filteredSkills = useMemo(() => (
+    filterSkills(skills, skillMetadata, {
+      searchQuery,
+      selectedTags,
+      untaggedOnly,
+    })
+  ), [searchQuery, selectedTags, skillMetadata, skills, untaggedOnly]);
+
+  const allTagSummaries = useMemo(
+    () => buildSkillTagSummaries(skills, skillMetadata),
+    [skillMetadata, skills],
+  );
+
+  const untaggedSkillsCount = useMemo(
+    () => skills.filter((skill) => getSkillTags(skill.id, skillMetadata).length === 0).length,
+    [skillMetadata, skills],
+  );
+
+  const showTagFilterControl = useMemo(
+    () => hasSelectableTagFilters(allTagSummaries),
+    [allTagSummaries],
+  );
+
+  const tagFilterSelection = useMemo(
+    () => getTagFilterSelectionSummary(selectedTags, untaggedOnly),
+    [selectedTags, untaggedOnly],
+  );
+
+  const tagFilterButtonLabel = useMemo(() => {
+    switch (tagFilterSelection.kind) {
+      case "untagged":
+        return t("skills.untagged");
+      case "single":
+        return `#${tagFilterSelection.tag}`;
+      case "multiple":
+        return t("skills.selectedTagsCountCompact").replace("{count}", String(tagFilterSelection.count));
+      default:
+        return t("skills.tagFilterButton");
+    }
+  }, [tagFilterSelection, t]);
+
+  const hasActiveSkillFilters = Boolean(searchQuery.trim()) || selectedTags.length > 0 || untaggedOnly;
 
   const toolIds = useMemo(
     () => getEnabledToolIds(tools),
@@ -379,16 +552,37 @@ export function Skills() {
     });
   }, [toolEditorFilteredToolIds, toolEditorIsBulkToggling, toolEditorSkill, togglingSkill, tools, t]);
 
-  const openToolEditor = useCallback((skillId: string) => {
+  const toolEditorTags = useMemo(
+    () => (toolEditorSkill ? getSkillTags(toolEditorSkill.id, skillMetadata) : []),
+    [skillMetadata, toolEditorSkill],
+  );
+
+  const toolEditorTagSuggestions = useMemo(() => {
+    if (!toolEditorSkill) {
+      return [];
+    }
+
+    return allTagSummaries
+      .map((item) => item.tag)
+      .filter((tag) => !toolEditorTags.includes(tag))
+      .slice(0, 8);
+  }, [allTagSummaries, toolEditorSkill, toolEditorTags]);
+
+  const openSkillEditor = useCallback((skillId: string, tab: SkillEditorTab = "tools") => {
     setToolEditorSkillId(skillId);
+    setSkillEditorTab(tab);
     setToolEditorQuery("");
     setToolEditorEnabledOnly(false);
+    setTagDraft("");
+    setShowTagFilterMenu(false);
   }, []);
 
-  const closeToolEditor = useCallback(() => {
+  const closeSkillEditor = useCallback(() => {
     setToolEditorSkillId(null);
+    setSkillEditorTab("tools");
     setToolEditorQuery("");
     setToolEditorEnabledOnly(false);
+    setTagDraft("");
   }, []);
 
   // Show loading state while initial data is being fetched
@@ -432,6 +626,138 @@ export function Skills() {
         actions={
           <>
             <RefreshButton onClick={handleRefresh} loading={refreshing} />
+
+            {showTagFilterControl && (
+              <div style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowTagFilterMenu((current) => !current)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "8px 12px",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: selectedTags.length > 0 || untaggedOnly ? "var(--primary)" : "var(--foreground)",
+                    backgroundColor: "var(--background)",
+                    border: selectedTags.length > 0 || untaggedOnly ? "1px solid rgba(9, 105, 218, 0.4)" : "1px solid var(--border)",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    minWidth: "124px",
+                    justifyContent: "space-between",
+                    boxShadow: selectedTags.length > 0 || untaggedOnly ? "0 0 0 3px rgba(9, 105, 218, 0.08)" : "none",
+                  }}
+                >
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 6h18M6 12h12M10 18h4" />
+                    </svg>
+                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {tagFilterButtonLabel}
+                    </span>
+                  </span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d={showTagFilterMenu ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"} />
+                  </svg>
+                </button>
+
+                {showTagFilterMenu && (
+                  <>
+                    <div
+                      style={{
+                        position: "fixed",
+                        inset: 0,
+                        zIndex: MODAL_LAYER_Z_INDEX - 1,
+                      }}
+                      onClick={() => setShowTagFilterMenu(false)}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "calc(100% + 8px)",
+                        right: 0,
+                        width: "260px",
+                        maxHeight: "360px",
+                        overflow: "auto",
+                        padding: "10px",
+                        backgroundColor: "var(--background)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "12px",
+                        boxShadow: "0 16px 40px rgba(0,0,0,0.16)",
+                        zIndex: MODAL_LAYER_Z_INDEX,
+                      }}
+                    >
+                      <div style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "12px",
+                        marginBottom: "10px",
+                      }}>
+                        <div>
+                          <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)" }}>
+                            {t("skills.tagFilterButton")}
+                          </div>
+                          <div style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "2px" }}>
+                            {t("skills.tagFilterHintCompact")}
+                          </div>
+                        </div>
+                        {(selectedTags.length > 0 || untaggedOnly) && (
+                          <button
+                            type="button"
+                            onClick={handleResetTagFilters}
+                            style={{
+                              fontSize: "11px",
+                              fontWeight: 600,
+                              color: "var(--muted-foreground)",
+                              backgroundColor: "transparent",
+                              border: "none",
+                              cursor: "pointer",
+                              padding: "4px 6px",
+                            }}
+                          >
+                            {t("common.reset")}
+                          </button>
+                        )}
+                      </div>
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <button
+                          type="button"
+                          onClick={handleResetTagFilters}
+                          style={buildTagFilterMenuItemStyle(tagFilterSelection.kind === "all")}
+                        >
+                          <span>{t("skills.allTags")}</span>
+                          <span style={{ opacity: 0.72 }}>{skills.length}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleToggleUntaggedOnly}
+                          style={buildTagFilterMenuItemStyle(untaggedOnly)}
+                        >
+                          <span>{t("skills.untagged")}</span>
+                          <span style={{ opacity: 0.72 }}>{untaggedSkillsCount}</span>
+                        </button>
+
+                        {allTagSummaries.map(({ tag, count }) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => toggleTagFilter(tag)}
+                            style={buildTagFilterMenuItemStyle(selectedTags.includes(tag))}
+                          >
+                            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>#{tag}</span>
+                            <span style={{ opacity: 0.72, flexShrink: 0 }}>{count}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             <div style={{ position: 'relative' }}>
               <svg
@@ -535,7 +861,7 @@ export function Skills() {
                 borderRadius: '12px',
                 border: '1px solid var(--border)',
               }}>
-                {searchQuery ? t("skills.noMatch") : t("skills.noSkills")}
+                {hasActiveSkillFilters ? t("skills.noMatch") : t("skills.noSkills")}
               </div>
             ) : (
               <div style={{
@@ -546,6 +872,7 @@ export function Skills() {
                 {filteredSkills.map((skill) => {
                   const color = getSkillColor(skill.name);
                   const orderedToolIds = orderToolIdsForSkill(toolIds, skill.enabled);
+                  const skillTags = getSkillTags(skill.id, skillMetadata);
                   return (
                     <div
                       key={skill.id}
@@ -649,6 +976,37 @@ export function Skills() {
                             <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                           </svg>
                         </button>
+                      </div>
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '8px',
+                          marginBottom: skillTags.length > 0 ? '16px' : '8px',
+                          minHeight: skillTags.length > 0 ? '24px' : '0',
+                        }}
+                      >
+                        {skillTags.map((tag) => (
+                          <span
+                            key={tag}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '11px',
+                              fontWeight: 500,
+                              color: 'rgba(17, 24, 39, 0.68)',
+                              backgroundColor: 'rgba(9, 105, 218, 0.04)',
+                              border: '1px solid rgba(9, 105, 218, 0.14)',
+                              borderRadius: '999px',
+                              padding: '3px 8px',
+                              lineHeight: 1.2,
+                            }}
+                          >
+                            #{tag}
+                          </span>
+                        ))}
                       </div>
 
                       {/* Bottom: Tool Summary */}
@@ -759,7 +1117,7 @@ export function Skills() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              openToolEditor(skill.id);
+                              openSkillEditor(skill.id, "tools");
                             }}
                             style={{
                               fontSize: '12px',
@@ -790,9 +1148,15 @@ export function Skills() {
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {toolEditorSkill && (
-        <RelationToggleDialog
-          title={t("skills.configureToolsTitle")}
-          description={t("skills.configureToolsDesc")
+        <SkillManageDialog
+          skillName={toolEditorSkill.name}
+          skillDescription={toolEditorSkill.description || t("skills.noDescription")}
+          activeTab={skillEditorTab}
+          onTabChange={setSkillEditorTab}
+          onClose={closeSkillEditor}
+          doneLabel={t("common.done")}
+          toolsTitle={t("skills.configureToolsTitle")}
+          toolsDescription={t("skills.configureToolsDesc")
             .replace("{skill}", toolEditorSkill.name)
             .replace("{enabled}", String(toolEditorEnabledCount))
             .replace("{total}", String(toolEditorOrderedToolIds.length))}
@@ -805,12 +1169,19 @@ export function Skills() {
           bulkToggleTitle={toolEditorBulkToggleTargets.length === 0 ? t("skills.bulkNoTarget") : undefined}
           items={toolEditorItems}
           emptyLabel={t("skills.noToolsInFilter")}
-          doneLabel={t("common.done")}
           onQueryChange={setToolEditorQuery}
           onEnabledOnlyChange={setToolEditorEnabledOnly}
           onToggle={(toolId, enabled) => handleToggle(toolEditorSkill.id, toolEditorSkill.name, toolId, enabled)}
           onBulkToggle={() => handleBulkToggle(toolEditorSkill, toolEditorFilteredToolIds)}
-          onClose={closeToolEditor}
+          tags={toolEditorTags}
+          tagDraft={tagDraft}
+          onTagDraftChange={setTagDraft}
+          onAddTag={() => void handleAddTag(toolEditorSkill.id)}
+          onRemoveTag={(tag) => void handleRemoveTag(toolEditorSkill.id, tag)}
+          tagSuggestions={toolEditorTagSuggestions}
+          onSelectTagSuggestion={(tag) => void persistSkillTags(toolEditorSkill.id, [...toolEditorTags, tag])}
+          savingTags={savingTagsSkillId === toolEditorSkill.id}
+          t={t}
         />
       )}
 
@@ -823,6 +1194,497 @@ export function Skills() {
           t={t}
         />
       )}
+    </div>
+  );
+}
+
+function SkillManageDialog({
+  skillName,
+  skillDescription,
+  activeTab,
+  onTabChange,
+  onClose,
+  doneLabel,
+  toolsTitle,
+  toolsDescription,
+  query,
+  enabledOnly,
+  searchPlaceholder,
+  enabledOnlyLabel,
+  bulkToggleLabel,
+  bulkToggleDisabled,
+  bulkToggleTitle,
+  items,
+  emptyLabel,
+  onQueryChange,
+  onEnabledOnlyChange,
+  onToggle,
+  onBulkToggle,
+  tags,
+  tagDraft,
+  onTagDraftChange,
+  onAddTag,
+  onRemoveTag,
+  tagSuggestions,
+  onSelectTagSuggestion,
+  savingTags,
+  t,
+}: {
+  skillName: string;
+  skillDescription: string;
+  activeTab: SkillEditorTab;
+  onTabChange: (tab: SkillEditorTab) => void;
+  onClose: () => void;
+  doneLabel: string;
+  toolsTitle: string;
+  toolsDescription: string;
+  query: string;
+  enabledOnly: boolean;
+  searchPlaceholder: string;
+  enabledOnlyLabel: string;
+  bulkToggleLabel: string;
+  bulkToggleDisabled: boolean;
+  bulkToggleTitle?: string;
+  items: Array<{
+    id: string;
+    label: string;
+    enabled: boolean;
+    disabled: boolean;
+    tooltip?: string;
+    dimmed?: boolean;
+  }>;
+  emptyLabel: string;
+  onQueryChange: (query: string) => void;
+  onEnabledOnlyChange: (enabledOnly: boolean) => void;
+  onToggle: (itemId: string, enabled: boolean) => void;
+  onBulkToggle: () => void;
+  tags: string[];
+  tagDraft: string;
+  onTagDraftChange: (value: string) => void;
+  onAddTag: () => void;
+  onRemoveTag: (tag: string) => void;
+  tagSuggestions: string[];
+  onSelectTagSuggestion: (tag: string) => void;
+  savingTags: boolean;
+  t: (key: TranslationPath) => string;
+}) {
+  const canAddTag = normalizeSkillTags([tagDraft]).length > 0;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: MODAL_OVERLAY_COLOR,
+        zIndex: MODAL_LAYER_Z_INDEX,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          width: "min(680px, calc(100vw - 48px))",
+          maxHeight: "calc(100vh - 72px)",
+          backgroundColor: "var(--background)",
+          borderRadius: "14px",
+          border: "1px solid var(--border)",
+          boxShadow: "0 20px 56px rgba(0,0,0,0.22)",
+          padding: "20px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "14px",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ margin: "0 0 6px 0", fontSize: "16px", fontWeight: 600, color: "var(--foreground)" }}>
+              {skillName}
+            </h3>
+            <p style={{ margin: 0, fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
+              {skillDescription}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              width: "30px",
+              height: "30px",
+              borderRadius: "8px",
+              border: "1px solid var(--border)",
+              backgroundColor: "var(--secondary)",
+              color: "var(--muted-foreground)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 0,
+              flexShrink: 0,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            padding: "4px",
+            backgroundColor: "var(--secondary)",
+            border: "1px solid var(--border)",
+            borderRadius: "10px",
+            width: "fit-content",
+          }}
+        >
+          {(["tools", "tags"] as SkillEditorTab[]).map((tab) => {
+            const active = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => onTabChange(tab)}
+                style={{
+                  padding: "7px 12px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  color: active ? "var(--primary-foreground)" : "var(--foreground)",
+                  backgroundColor: active ? "var(--foreground)" : "transparent",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                }}
+              >
+                {tab === "tools" ? t("skills.manageToolsTab") : t("skills.manageTagsTab")}
+              </button>
+            );
+          })}
+        </div>
+
+        {activeTab === "tools" ? (
+          <>
+            <div style={{ fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
+              <strong style={{ color: "var(--foreground)" }}>{toolsTitle}</strong>
+              <div>{toolsDescription}</div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              <div style={{ position: "relative", flex: "1 1 280px", minWidth: "200px" }}>
+                <svg
+                  style={{
+                    position: "absolute",
+                    left: "10px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "var(--muted-foreground)",
+                    pointerEvents: "none",
+                  }}
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.3-4.3" />
+                </svg>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => onQueryChange(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px 8px 32px",
+                    fontSize: "12px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    backgroundColor: "var(--secondary)",
+                    color: "var(--foreground)",
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontSize: "12px",
+                  color: "var(--muted-foreground)",
+                  userSelect: "none",
+                }}
+              >
+                <Toggle
+                  checked={enabledOnly}
+                  onChange={(checked) => onEnabledOnlyChange(checked)}
+                />
+                {enabledOnlyLabel}
+              </label>
+
+              <button
+                type="button"
+                onClick={onBulkToggle}
+                disabled={bulkToggleDisabled}
+                title={bulkToggleTitle}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "8px 10px",
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  color: "var(--foreground)",
+                  backgroundColor: "var(--secondary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  cursor: bulkToggleDisabled ? "not-allowed" : "pointer",
+                  opacity: bulkToggleDisabled ? 0.6 : 1,
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
+                </svg>
+                {bulkToggleLabel}
+              </button>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid var(--border)",
+                borderRadius: "10px",
+                backgroundColor: "var(--secondary)",
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ maxHeight: "360px", overflow: "auto", padding: "6px" }}>
+                {items.length === 0 ? (
+                  <div
+                    style={{
+                      padding: "30px 14px",
+                      textAlign: "center",
+                      fontSize: "12px",
+                      color: "var(--muted-foreground)",
+                    }}
+                  >
+                    {emptyLabel}
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                      gap: "8px",
+                    }}
+                  >
+                    {items.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "10px",
+                          minHeight: "48px",
+                          padding: "10px 12px",
+                          borderRadius: "8px",
+                          border: "1px solid var(--border)",
+                          backgroundColor: item.enabled ? "rgba(9, 105, 218, 0.08)" : "var(--background)",
+                          opacity: item.dimmed ? 0.6 : 1,
+                        }}
+                        title={item.tooltip}
+                      >
+                        <div
+                          style={{
+                            fontSize: "14px",
+                            fontWeight: 500,
+                            color: "var(--foreground)",
+                            lineHeight: 1.35,
+                            minWidth: 0,
+                            overflow: "hidden",
+                            whiteSpace: "nowrap",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {item.label}
+                        </div>
+                        <Toggle
+                          checked={item.enabled}
+                          disabled={item.disabled}
+                          onChange={(checked) => onToggle(item.id, checked)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+              border: "1px solid var(--border)",
+              borderRadius: "12px",
+              backgroundColor: "var(--secondary)",
+              padding: "14px",
+            }}
+          >
+            <div style={{ fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
+              {t("skills.tagEditorHint")}
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", minHeight: "30px" }}>
+              {tags.length === 0 ? (
+                <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                  {t("skills.noTags")}
+                </span>
+              ) : (
+                tags.map((tag) => (
+                  <span
+                    key={tag}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      fontSize: "11px",
+                      fontWeight: 500,
+                      color: "rgba(17, 24, 39, 0.72)",
+                      backgroundColor: "rgba(9, 105, 218, 0.04)",
+                      border: "1px solid rgba(9, 105, 218, 0.14)",
+                      borderRadius: "999px",
+                      padding: "3px 5px 3px 8px",
+                    }}
+                  >
+                    <span>#{tag}</span>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveTag(tag)}
+                      disabled={savingTags}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: "18px",
+                        height: "18px",
+                        padding: 0,
+                        color: "var(--muted-foreground)",
+                        backgroundColor: "transparent",
+                        border: "none",
+                        borderRadius: "999px",
+                        cursor: savingTags ? "wait" : "pointer",
+                      }}
+                      title={t("skills.removeTag")}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))
+              )}
+            </div>
+
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                type="text"
+                value={tagDraft}
+                placeholder={t("skills.tagInputPlaceholder")}
+                onChange={(e) => onTagDraftChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.key === "Enter" || e.key === ",") && !savingTags) {
+                    e.preventDefault();
+                    onAddTag();
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  padding: "8px 10px",
+                  fontSize: "12px",
+                  color: "var(--foreground)",
+                  backgroundColor: "var(--background)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  outline: "none",
+                }}
+              />
+              <button
+                type="button"
+                onClick={onAddTag}
+                disabled={savingTags || !canAddTag}
+                style={{
+                  padding: "8px 12px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  color: "var(--primary-foreground)",
+                  backgroundColor: "var(--foreground)",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: savingTags || !canAddTag ? "not-allowed" : "pointer",
+                  opacity: savingTags || !canAddTag ? 0.5 : 1,
+                }}
+              >
+                {t("skills.addTag")}
+              </button>
+            </div>
+
+            {tagSuggestions.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--muted-foreground)" }}>
+                  {t("skills.commonTags")}
+                </span>
+                {tagSuggestions.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => onSelectTagSuggestion(tag)}
+                    disabled={savingTags}
+                    style={{
+                      padding: "5px 10px",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      color: "var(--foreground)",
+                      backgroundColor: "var(--background)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "999px",
+                      cursor: savingTags ? "wait" : "pointer",
+                    }}
+                  >
+                    + {tag}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button
+            onClick={onClose}
+            style={{
+              fontSize: "12px",
+              fontWeight: 500,
+              color: "var(--primary-foreground)",
+              backgroundColor: "var(--foreground)",
+              border: "none",
+              borderRadius: "8px",
+              padding: "7px 12px",
+              cursor: "pointer",
+            }}
+          >
+            {doneLabel}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

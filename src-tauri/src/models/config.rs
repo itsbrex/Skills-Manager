@@ -53,6 +53,12 @@ pub struct UserPreferences {
     pub github_token: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct SkillMetadata {
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TelemetryConfig {
     #[serde(default)]
@@ -190,6 +196,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub custom_tools: HashMap<String, CustomToolConfig>,
     #[serde(default)]
+    pub skill_metadata: HashMap<String, SkillMetadata>,
+    #[serde(default)]
     pub preferences: Option<UserPreferences>,
     #[serde(default)]
     pub marketplace_sources: Option<Vec<MarketplaceSource>>,
@@ -237,6 +245,7 @@ impl Default for AppConfig {
             skills_dir: Self::default_skills_dir(),
             tools: HashMap::new(),
             custom_tools: HashMap::new(),
+            skill_metadata: HashMap::new(),
             preferences: Some(UserPreferences::default()),
             marketplace_sources: Some(default_marketplace_sources()),
             poll_client_state: Some(PollClientState::default()),
@@ -311,10 +320,12 @@ impl AppConfig {
 mod tests {
     use super::default_marketplace_sources;
     use super::AppConfig;
+    use super::SkillMetadata;
     use super::TelemetryConsent;
     use super::VaultBackupConsent;
     use crate::models::auth::{AuthProfile, AuthSession};
     use crate::models::SourceType;
+    use std::collections::HashMap;
 
     #[test]
     fn default_marketplace_sources_matches_remote_source_ids() {
@@ -429,5 +440,42 @@ mod tests {
             .and_then(|prefs| prefs.get("font_family"))
             .and_then(|value| value.as_str());
         assert_eq!(restored_font_family, Some("system"));
+    }
+
+    #[test]
+    fn skill_tags_default_to_empty_when_loading_legacy_config() {
+        let config_json = r#"{
+            "version": "2.0.0",
+            "skills_dir": "/tmp/skills",
+            "tools": {},
+            "custom_tools": {},
+            "initialized": true
+        }"#;
+
+        let config: AppConfig = serde_json::from_str(config_json).expect("deserialize config");
+        assert!(config.skill_metadata.is_empty());
+    }
+
+    #[test]
+    fn skill_tags_persist_through_config_serialization() {
+        let mut config = AppConfig::default();
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "react-playground".to_string(),
+            SkillMetadata {
+                tags: vec!["react".to_string(), "frontend".to_string()],
+            },
+        );
+        config.skill_metadata = metadata;
+
+        let json = serde_json::to_string(&config).expect("serialize config");
+        let restored: AppConfig = serde_json::from_str(&json).expect("deserialize config");
+
+        assert_eq!(
+            restored.skill_metadata.get("react-playground"),
+            Some(&SkillMetadata {
+                tags: vec!["react".to_string(), "frontend".to_string()],
+            })
+        );
     }
 }
