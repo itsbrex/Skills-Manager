@@ -4,6 +4,7 @@ pub mod config;
 pub mod editor;
 pub mod marketplace;
 pub mod skill;
+pub mod skill_package;
 pub mod tool;
 pub mod update;
 
@@ -18,4 +19,5 @@ pub use marketplace::{
     SourceType,
 };
 pub use skill::{MarketplaceMeta, Skill, SkillSource, VaultMeta};
+pub use skill_package::{InstalledSkillPackage, SkillPackageMeta};
 pub use tool::{Tool, ToolDefinition, ToolSource, SUPPORTED_TOOLS};

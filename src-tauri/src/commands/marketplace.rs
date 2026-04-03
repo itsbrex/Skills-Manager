@@ -169,6 +169,66 @@ fn build_reference_skill_id(
         .to_string()
 }
 
+fn is_remote_skill_manifest_name(name: &str) -> bool {
+    matches!(
+        name.trim().to_ascii_lowercase().as_str(),
+        "skill.md" | "readme.md"
+    )
+}
+
+fn expand_skill_group_reference(skill: &MarketplaceSkill, tree: &SkillFileNode) -> Vec<MarketplaceSkill> {
+    let root_has_manifest = tree.children.as_ref().is_some_and(|children| {
+        children
+            .iter()
+            .any(|child| !child.is_dir && is_remote_skill_manifest_name(&child.name))
+    });
+    if root_has_manifest {
+        return Vec::new();
+    }
+
+    let Some(children) = tree.children.as_ref() else {
+        return Vec::new();
+    };
+
+    children
+        .iter()
+        .filter(|child| child.is_dir)
+        .filter(|child| {
+            child.children.as_ref().is_some_and(|entries| {
+                entries
+                    .iter()
+                    .any(|entry| !entry.is_dir && is_remote_skill_manifest_name(&entry.name))
+            })
+        })
+        .map(|child| {
+            let child_path = child.path.clone();
+            MarketplaceSkill {
+                id: build_reference_skill_id(
+                    &skill.source_id,
+                    skill.repo_url.as_deref().unwrap_or_default(),
+                    &child_path,
+                    Some(child_path.as_str()),
+                ),
+                slug: Some(child_path.clone()),
+                name: child.name.clone(),
+                description: None,
+                author: None,
+                source_id: skill.source_id.clone(),
+                source_name: skill.source_name.clone(),
+                install_count: None,
+                install_url: skill.install_url.clone(),
+                created_at: skill.created_at,
+                repo_url: skill.repo_url.clone(),
+                skill_path: Some(child_path),
+                external_url: skill.external_url.clone(),
+                remote_revision: None,
+                tags: Vec::new(),
+                install_status: InstallStatus::NotInstalled,
+            }
+        })
+        .collect()
+}
+
 fn skill_display_name<'a>(
     slug: Option<&'a str>,
     repo_url: &'a str,
@@ -690,9 +750,35 @@ pub async fn install_marketplace_skill_by_ref(
     let github_token = github_token_from_config(&config);
 
     let skill = build_marketplace_skill_from_reference(reference)?;
-    let result =
-        MarketplaceService::install_skill(&skill, &config.skills_dir, github_token.as_deref())
+    let result = if let Some(repo_url) = skill.repo_url.as_deref() {
+        let requested_path = skill.skill_path.as_deref().unwrap_or_default();
+        let tree = MarketplaceService::fetch_skill_files(repo_url, requested_path, github_token.as_deref())
             .await?;
+        let group_members = expand_skill_group_reference(&skill, &tree);
+
+        if group_members.is_empty() {
+            MarketplaceService::install_skill(&skill, &config.skills_dir, github_token.as_deref())
+                .await?
+        } else {
+            for member in &group_members {
+                MarketplaceService::install_skill(
+                    member,
+                    &config.skills_dir,
+                    github_token.as_deref(),
+                )
+                .await?;
+            }
+            InstallResult {
+                success: true,
+                skill_id: skill.id.clone(),
+                message: Some(format!("已安装 {} 个 Skills", group_members.len())),
+                installed_path: Some(config.skills_dir.to_string_lossy().into_owned()),
+            }
+        }
+    } else {
+        MarketplaceService::install_skill(&skill, &config.skills_dir, github_token.as_deref())
+            .await?
+    };
 
     app_cache.invalidate_skills();
     marketplace_cache.invalidate();
@@ -877,13 +963,13 @@ mod tests {
     use crate::services::marketplace::{DIRECT_GITHUB_SOURCE_ID, DIRECT_GITHUB_SOURCE_NAME};
     use crate::models::{
         InstallStatus, MarketplaceMeta, MarketplaceSkill, MarketplaceSkillsResponse,
-        MarketplaceSource, Skill, SkillSource, SourceType,
+        MarketplaceSource, Skill, SkillFileNode, SkillSource, SourceType,
     };
     use crate::test_support::with_temp_home;
 
     use super::{
         build_marketplace_skill_from_reference, collect_installed_marketplace_skills,
-        load_last_update_check_time, persist_update_check_time,
+        expand_skill_group_reference, load_last_update_check_time, persist_update_check_time,
         prepend_missing_installed_marketplace_skills, resolve_cache_source_scope,
         should_hydrate_missing_installed_marketplace_skill, should_run_marketplace_update_check,
         MarketplaceSkillReference,
@@ -923,6 +1009,7 @@ mod tests {
                 remote_revision: Some("rev-local".to_string()),
             }),
             vault_meta: None,
+            package_meta: None,
             enabled: HashMap::new(),
             path: PathBuf::from(format!("/tmp/{id}")),
         }
@@ -1067,6 +1154,124 @@ mod tests {
     }
 
     #[test]
+    fn expand_skill_group_reference_returns_direct_child_skills_when_root_is_container() {
+        let skill = MarketplaceSkill {
+            id: "github-direct-baoyu-skills".to_string(),
+            slug: Some("skills".to_string()),
+            name: "skills".to_string(),
+            description: None,
+            author: None,
+            source_id: DIRECT_GITHUB_SOURCE_ID.to_string(),
+            source_name: DIRECT_GITHUB_SOURCE_NAME.to_string(),
+            install_count: None,
+            install_url: None,
+            created_at: None,
+            repo_url: Some("https://github.com/JimLiu/baoyu-skills".to_string()),
+            skill_path: Some("skills".to_string()),
+            external_url: Some("https://github.com/JimLiu/baoyu-skills/tree/main/skills".to_string()),
+            remote_revision: None,
+            tags: Vec::new(),
+            install_status: InstallStatus::NotInstalled,
+        };
+        let tree = SkillFileNode {
+            name: "skills".to_string(),
+            path: "skills".to_string(),
+            is_dir: true,
+            download_url: None,
+            sha: None,
+            children: Some(vec![
+                SkillFileNode {
+                    name: "baoyu-translate".to_string(),
+                    path: "skills/baoyu-translate".to_string(),
+                    is_dir: true,
+                    download_url: None,
+                    sha: None,
+                    children: Some(vec![SkillFileNode {
+                        name: "SKILL.md".to_string(),
+                        path: "skills/baoyu-translate/SKILL.md".to_string(),
+                        is_dir: false,
+                        download_url: Some("https://example.com/translate".to_string()),
+                        sha: None,
+                        children: None,
+                    }]),
+                },
+                SkillFileNode {
+                    name: "baoyu-slide-deck".to_string(),
+                    path: "skills/baoyu-slide-deck".to_string(),
+                    is_dir: true,
+                    download_url: None,
+                    sha: None,
+                    children: Some(vec![SkillFileNode {
+                        name: "SKILL.md".to_string(),
+                        path: "skills/baoyu-slide-deck/SKILL.md".to_string(),
+                        is_dir: false,
+                        download_url: Some("https://example.com/slides".to_string()),
+                        sha: None,
+                        children: None,
+                    }]),
+                },
+            ]),
+        };
+
+        let expanded = expand_skill_group_reference(&skill, &tree);
+
+        assert_eq!(expanded.len(), 2);
+        assert_eq!(
+            expanded
+                .iter()
+                .map(|item| item.skill_path.as_deref().unwrap_or_default())
+                .collect::<Vec<_>>(),
+            vec!["skills/baoyu-translate", "skills/baoyu-slide-deck"]
+        );
+        assert_eq!(
+            expanded
+                .iter()
+                .map(|item| item.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["baoyu-translate", "baoyu-slide-deck"]
+        );
+    }
+
+    #[test]
+    fn expand_skill_group_reference_returns_empty_for_regular_skill_root() {
+        let skill = MarketplaceSkill {
+            id: "github-direct-demo".to_string(),
+            slug: Some("skills/demo".to_string()),
+            name: "demo".to_string(),
+            description: None,
+            author: None,
+            source_id: DIRECT_GITHUB_SOURCE_ID.to_string(),
+            source_name: DIRECT_GITHUB_SOURCE_NAME.to_string(),
+            install_count: None,
+            install_url: None,
+            created_at: None,
+            repo_url: Some("https://github.com/example/demo".to_string()),
+            skill_path: Some("skills/demo".to_string()),
+            external_url: Some("https://github.com/example/demo/tree/main/skills/demo".to_string()),
+            remote_revision: None,
+            tags: Vec::new(),
+            install_status: InstallStatus::NotInstalled,
+        };
+        let tree = SkillFileNode {
+            name: "demo".to_string(),
+            path: "skills/demo".to_string(),
+            is_dir: true,
+            download_url: None,
+            sha: None,
+            children: Some(vec![SkillFileNode {
+                name: "SKILL.md".to_string(),
+                path: "skills/demo/SKILL.md".to_string(),
+                is_dir: false,
+                download_url: Some("https://example.com/demo".to_string()),
+                sha: None,
+                children: None,
+            }]),
+        };
+
+        assert!(expand_skill_group_reference(&skill, &tree).is_empty());
+    }
+
+    #[test]
     fn collect_installed_marketplace_skills_respects_source_filter_and_query() {
         let skills = vec![
             make_marketplace_skill("src_skills::alpha", "src_skills", "Alpha", Some("useful")),
@@ -1074,14 +1279,15 @@ mod tests {
             Skill {
                 id: "local-only".to_string(),
                 name: "Local".to_string(),
-                description: Some("ignore".to_string()),
-                version: "1.0.0".to_string(),
-                source: SkillSource::Local,
-                marketplace_meta: None,
-                vault_meta: None,
-                enabled: HashMap::new(),
-                path: PathBuf::from("/tmp/local-only"),
-            },
+            description: Some("ignore".to_string()),
+            version: "1.0.0".to_string(),
+            source: SkillSource::Local,
+            marketplace_meta: None,
+            vault_meta: None,
+            package_meta: None,
+            enabled: HashMap::new(),
+            path: PathBuf::from("/tmp/local-only"),
+        },
         ];
         let sources = vec![
             make_source("src_skills", true),

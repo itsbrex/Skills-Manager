@@ -74,6 +74,9 @@ export const zh = {
   },
   skills: {
     title: "Skills",
+    groups: "Skill 组",
+    groupMembersCount: "{count} 个成员",
+    openGroup: "打开技能组",
     newSkill: "新建 Skill",
     searchPlaceholder: "搜索 Skills",
     installed: "已安装",

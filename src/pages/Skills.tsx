@@ -12,7 +12,7 @@ import {
   MODAL_LAYER_Z_INDEX,
   MODAL_OVERLAY_COLOR,
 } from "@/constants/modal";
-import { AppConfig, Skill, Tool } from "@/types";
+import { AppConfig, InstalledSkillPackage, Skill, Tool } from "@/types";
 import { useTranslation, TranslationPath } from "@/i18n";
 import {
   applyTagFilterAction,
@@ -79,6 +79,7 @@ export function Skills() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [skillPackages, setSkillPackages] = useState<InstalledSkillPackage[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -118,15 +119,35 @@ export function Skills() {
     }
   }, [config, navigate, addToast]);
 
+  const handleOpenSkillPackage = useCallback(async (skillPackage: InstalledSkillPackage) => {
+    if (!skillPackage.path) {
+      return;
+    }
+
+    try {
+      const editorId = config?.preferences?.default_editor || "builtin";
+
+      if (editorId === "builtin") {
+        navigate(`/editor?root=${encodeURIComponent(skillPackage.path)}`);
+      } else {
+        await invoke("open_in_editor", { editorId, path: skillPackage.path });
+      }
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [config, navigate, addToast]);
+
   // Initial load - uses cached data via list_skills
   const loadData = useCallback(async () => {
     try {
-      const [skillsResult, configResult, toolsResult] = await Promise.all([
+      const [skillsResult, skillPackagesResult, configResult, toolsResult] = await Promise.all([
         invoke<Skill[]>("list_skills"),
+        invoke<InstalledSkillPackage[]>("list_skill_packages"),
         invoke<AppConfig>("get_config"),
         invoke<Tool[]>("detect_tools"),
       ]);
       setSkills(skillsResult);
+      setSkillPackages(skillPackagesResult);
       setConfig(configResult);
       setTools(toolsResult);
     } catch (err) {
@@ -140,12 +161,14 @@ export function Skills() {
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [skillsResult, configResult, toolsResult] = await Promise.all([
+      const [skillsResult, skillPackagesResult, configResult, toolsResult] = await Promise.all([
         invoke<Skill[]>("refresh_skills"),
+        invoke<InstalledSkillPackage[]>("list_skill_packages"),
         invoke<AppConfig>("get_config"),
         invoke<Tool[]>("detect_tools"),
       ]);
       setSkills(skillsResult);
+      setSkillPackages(skillPackagesResult);
       setConfig(configResult);
       setTools(toolsResult);
       addToast(t("common.refreshSuccess"), "success");
@@ -159,12 +182,14 @@ export function Skills() {
   // Reload data after toggle/delete operations
   const reloadData = useCallback(async () => {
     try {
-      const [skillsResult, configResult, toolsResult] = await Promise.all([
+      const [skillsResult, skillPackagesResult, configResult, toolsResult] = await Promise.all([
         invoke<Skill[]>("list_skills"),
+        invoke<InstalledSkillPackage[]>("list_skill_packages"),
         invoke<AppConfig>("get_config"),
         invoke<Tool[]>("detect_tools"),
       ]);
       setSkills(skillsResult);
+      setSkillPackages(skillPackagesResult);
       setConfig(configResult);
       setTools(toolsResult);
     } catch (err) {
@@ -413,6 +438,25 @@ export function Skills() {
       untaggedOnly,
     })
   ), [searchQuery, selectedTags, skillMetadata, skills, untaggedOnly]);
+
+  const filteredSkillPackages = useMemo(() => {
+    if (selectedTags.length > 0) {
+      return [];
+    }
+
+    const query = searchQuery.trim().toLowerCase();
+    return skillPackages.filter((skillPackage) => {
+      if (!query) {
+        return true;
+      }
+
+      return (
+        skillPackage.name.toLowerCase().includes(query)
+        || skillPackage.package_id.toLowerCase().includes(query)
+        || skillPackage.installed_members.some((memberId) => memberId.toLowerCase().includes(query))
+      );
+    });
+  }, [searchQuery, selectedTags.length, skillPackages]);
 
   const allTagSummaries = useMemo(
     () => buildSkillTagSummaries(skills, skillMetadata),
@@ -841,6 +885,154 @@ export function Skills() {
         padding: '24px 32px',
       }}>
         <div style={{ maxWidth: '1200px' }}>
+          {filteredSkillPackages.length > 0 && (
+            <section style={{ marginBottom: '28px' }}>
+              <h2 style={{
+                fontSize: '13px',
+                fontWeight: 500,
+                color: 'var(--muted-foreground)',
+                margin: '0 0 16px 0',
+              }}>
+                {t("skills.groups")} ({filteredSkillPackages.length})
+              </h2>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: '16px',
+              }}>
+                {filteredSkillPackages.map((skillPackage) => {
+                  const color = getSkillColor(skillPackage.name);
+                  const canOpen = Boolean(skillPackage.path);
+                  const visibleMembers = skillPackage.installed_members.slice(0, 3);
+                  const remainingMembers = Math.max(0, skillPackage.installed_members.length - visibleMembers.length);
+
+                  return (
+                    <div
+                      key={skillPackage.package_id}
+                      onClick={canOpen ? () => handleOpenSkillPackage(skillPackage) : undefined}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '14px',
+                        padding: '18px 20px',
+                        backgroundColor: 'var(--secondary)',
+                        borderRadius: '14px',
+                        border: '1px solid var(--border)',
+                        transition: canOpen ? 'border-color 0.2s, box-shadow 0.2s, transform 0.2s' : undefined,
+                        cursor: canOpen ? 'pointer' : 'default',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!canOpen) {
+                          return;
+                        }
+                        e.currentTarget.style.borderColor = 'var(--ring)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!canOpen) {
+                          return;
+                        }
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                        <div style={{
+                          width: '44px',
+                          height: '44px',
+                          borderRadius: '12px',
+                          background: color.bg,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                        }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color.icon} strokeWidth="2">
+                            <rect x="3" y="4" width="7" height="7" rx="1.5" />
+                            <rect x="14" y="4" width="7" height="7" rx="1.5" />
+                            <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                            <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                          </svg>
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{
+                            fontSize: '15px',
+                            fontWeight: 600,
+                            color: 'var(--foreground)',
+                            marginBottom: '4px',
+                            lineHeight: 1.3,
+                          }}>
+                            {skillPackage.name}
+                          </div>
+                          <p style={{
+                            fontSize: '13px',
+                            color: 'var(--muted-foreground)',
+                            margin: 0,
+                            lineHeight: 1.5,
+                          }}>
+                            {t("skills.groupMembersCount").replace("{count}", String(skillPackage.installed_members.length))}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: '8px',
+                      }}>
+                        {visibleMembers.map((memberId) => (
+                          <span
+                            key={memberId}
+                            style={{
+                              fontSize: '12px',
+                              fontWeight: 500,
+                              color: 'var(--primary)',
+                              backgroundColor: 'rgba(9, 105, 218, 0.08)',
+                              padding: '4px 8px',
+                              borderRadius: '999px',
+                              border: '1px solid rgba(9, 105, 218, 0.2)',
+                            }}
+                          >
+                            {memberId}
+                          </span>
+                        ))}
+                        {remainingMembers > 0 && (
+                          <span style={{
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            color: 'var(--muted-foreground)',
+                            padding: '4px 0',
+                          }}>
+                            +{remainingMembers}
+                          </span>
+                        )}
+                      </div>
+
+                      {skillPackage.path && (
+                        <div style={{
+                          paddingTop: '12px',
+                          borderTop: '1px solid var(--border)',
+                          fontSize: '12px',
+                          color: 'var(--muted-foreground)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {skillPackage.path}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           {/* Section: Installed */}
           <section>
             <h2 style={{

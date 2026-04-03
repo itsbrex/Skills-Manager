@@ -72,6 +72,9 @@ export const en = {
   },
   skills: {
     title: "Skills",
+    groups: "Skill groups",
+    groupMembersCount: "{count} members",
+    openGroup: "Open group",
     newSkill: "New skill",
     searchPlaceholder: "Search skills",
     installed: "Installed",

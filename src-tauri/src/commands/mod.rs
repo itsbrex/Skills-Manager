@@ -6,6 +6,7 @@ pub mod feedback;
 pub mod files;
 pub mod marketplace;
 pub mod polls;
+pub mod skill_packages;
 pub mod skills;
 pub mod sync;
 pub mod telemetry;
@@ -35,6 +36,9 @@ pub use marketplace::{
 pub use polls::{
     fetch_poll_results, fetch_polls, get_poll_client_state, save_poll_client_state,
     submit_poll_vote,
+};
+pub use skill_packages::{
+    install_skill_package_from_path, list_skill_packages, remove_skill_package,
 };
 pub use skills::{
     create_skill, delete_skill, disable_skill, enable_skill, import_skills_to_hub, list_skills,

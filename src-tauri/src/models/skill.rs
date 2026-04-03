@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::models::SkillPackageMeta;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Skill {
     pub id: String,
@@ -11,6 +13,8 @@ pub struct Skill {
     pub source: SkillSource,
     pub marketplace_meta: Option<MarketplaceMeta>,
     pub vault_meta: Option<VaultMeta>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_meta: Option<SkillPackageMeta>,
     pub enabled: HashMap<String, bool>,
     pub path: PathBuf,
 }
@@ -56,6 +60,7 @@ impl Skill {
             source: SkillSource::Local,
             marketplace_meta: None,
             vault_meta: None,
+            package_meta: None,
             enabled: HashMap::new(),
             path,
         }

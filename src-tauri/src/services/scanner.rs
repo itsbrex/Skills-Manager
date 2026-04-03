@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use crate::models::{AppConfig, MarketplaceMeta, Skill, SkillSource, VaultMeta};
+use crate::models::{AppConfig, MarketplaceMeta, Skill, SkillPackageMeta, SkillSource, VaultMeta};
 use crate::services::detector::DetectorService;
 use crate::services::linker::{is_symlink_or_junction, LinkerService};
 
@@ -17,6 +17,7 @@ pub struct SkillMeta {
     pub source: SkillSource,
     pub marketplace_meta: Option<MarketplaceMeta>,
     pub vault_meta: Option<VaultMeta>,
+    pub package_meta: Option<SkillPackageMeta>,
 }
 
 impl ScannerService {
@@ -122,6 +123,7 @@ impl ScannerService {
             source: meta.source,
             marketplace_meta: meta.marketplace_meta,
             vault_meta: meta.vault_meta,
+            package_meta: meta.package_meta,
             enabled,
             path: skill_path.to_path_buf(),
         })
@@ -211,6 +213,10 @@ impl ScannerService {
             vault_hash: Option<String>,
             vault_size: Option<u64>,
             vault_updated_at: Option<i64>,
+            package_id: Option<String>,
+            package_name: Option<String>,
+            package_member_id: Option<String>,
+            package_version: Option<String>,
         }
 
         let meta: MetaJson = serde_json::from_str(&content)
@@ -272,6 +278,16 @@ impl ScannerService {
             None
         };
 
+        let package_meta = match (meta.package_id, meta.package_member_id) {
+            (Some(package_id), Some(package_member_id)) => Some(SkillPackageMeta {
+                package_id,
+                package_name: meta.package_name,
+                package_member_id,
+                package_version: meta.package_version,
+            }),
+            _ => None,
+        };
+
         Ok(SkillMeta {
             name,
             description: meta.description,
@@ -279,6 +295,7 @@ impl ScannerService {
             source,
             marketplace_meta,
             vault_meta,
+            package_meta,
         })
     }
 
@@ -317,6 +334,7 @@ impl ScannerService {
             source: SkillSource::Local,
             marketplace_meta: None,
             vault_meta: None,
+            package_meta: None,
         })
     }
 
@@ -328,6 +346,7 @@ impl ScannerService {
             source: SkillSource::Local,
             marketplace_meta: None,
             vault_meta: None,
+            package_meta: None,
         }
     }
 
@@ -381,6 +400,7 @@ mod tests {
     use super::ScannerService;
     use crate::models::{AppConfig, SkillSource};
     use crate::test_support::with_temp_home;
+    use serde_json::json;
     use std::fs;
 
     #[test]
@@ -496,6 +516,68 @@ description: "Description from SKILL.md"
                 marketplace.skill_path,
                 Some(".claude/skills/mkt-skill".to_string())
             );
+        });
+    }
+
+    #[test]
+    fn load_skill_with_config_exposes_package_meta_from_meta_json() {
+        with_temp_home(|home| {
+            let config = AppConfig::default();
+            let skill_dir = home
+                .join(".skills-manager")
+                .join("skills")
+                .join("superpowers--brainstorming");
+            fs::create_dir_all(&skill_dir).expect("create skill dir");
+
+            let meta_content = r#"{
+  "name": "brainstorming",
+  "description": "Use before creative work",
+  "version": "1.0.0",
+  "package_id": "superpowers",
+  "package_name": "Superpowers",
+  "package_member_id": "brainstorming",
+  "package_version": "1.0.0"
+}"#;
+            fs::write(skill_dir.join("meta.json"), meta_content).expect("write meta.json");
+
+            let skill =
+                ScannerService::load_skill_with_config(&skill_dir, &config).expect("load skill");
+            let serialized = serde_json::to_value(skill).expect("serialize skill");
+
+            assert_eq!(
+                serialized.get("package_meta"),
+                Some(&json!({
+                    "package_id": "superpowers",
+                    "package_name": "Superpowers",
+                    "package_member_id": "brainstorming",
+                    "package_version": "1.0.0"
+                }))
+            );
+        });
+    }
+
+    #[test]
+    fn load_skill_with_config_keeps_package_meta_absent_for_plain_skill() {
+        with_temp_home(|home| {
+            let config = AppConfig::default();
+            let skill_dir = home.join(".skills-manager").join("skills").join("plain-skill");
+            fs::create_dir_all(&skill_dir).expect("create skill dir");
+
+            fs::write(
+                skill_dir.join("meta.json"),
+                r#"{
+  "name": "plain-skill",
+  "description": "A plain skill",
+  "version": "1.0.0"
+}"#,
+            )
+            .expect("write meta.json");
+
+            let skill =
+                ScannerService::load_skill_with_config(&skill_dir, &config).expect("load skill");
+            let serialized = serde_json::to_value(skill).expect("serialize skill");
+
+            assert_eq!(serialized.get("package_meta"), None);
         });
     }
 

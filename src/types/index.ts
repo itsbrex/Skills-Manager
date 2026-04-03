@@ -8,7 +8,27 @@ export interface Skill {
   version: string;
   source: "local" | "imported" | "marketplace" | "vault";
   enabled: Record<string, boolean>;
+  package_meta?: SkillPackageMeta | null;
   path: string;
+}
+
+export interface SkillPackageMeta {
+  package_id: string;
+  package_name?: string | null;
+  package_member_id: string;
+  package_version?: string | null;
+}
+
+export interface InstalledSkillPackage {
+  package_id: string;
+  name: string;
+  version: string;
+  installed_members: string[];
+  selected_members: string[];
+  path?: string | null;
+  manifest_hash?: string | null;
+  installed_at: number;
+  updated_at: number;
 }
 
 export interface SkillMetadata {
