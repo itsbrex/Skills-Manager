@@ -200,12 +200,26 @@ impl SkillPackageService {
     }
 
     pub fn remove_package(package_id: &str, skills_dir: &Path) -> Result<(), String> {
-        let state = Self::read_installed_package(package_id)?;
-        for skill_id in &state.installed_members {
-            let target_dir = skills_dir.join(skill_id);
-            if target_dir.exists() {
-                fs::remove_dir_all(&target_dir)
-                    .map_err(|e| format!("Failed to remove materialized member: {e}"))?;
+        let package = Self::list_discovered_packages(skills_dir)?
+            .into_iter()
+            .find(|item| item.package_id == package_id)
+            .ok_or_else(|| format!("Skill package not found: {}", package_id))?;
+
+        if package.path.is_some() {
+            if let Some(path) = &package.path {
+                let group_dir = PathBuf::from(path);
+                if group_dir.exists() {
+                    fs::remove_dir_all(&group_dir)
+                        .map_err(|e| format!("Failed to remove discovered package directory: {e}"))?;
+                }
+            }
+        } else {
+            for skill_id in &package.installed_members {
+                let target_dir = skills_dir.join(skill_id);
+                if target_dir.exists() {
+                    fs::remove_dir_all(&target_dir)
+                        .map_err(|e| format!("Failed to remove materialized member: {e}"))?;
+                }
             }
         }
 
@@ -641,6 +655,26 @@ path = "skills/brainstorming"
                     .join("superpowers")
                     .exists()
             );
+        });
+    }
+
+    #[test]
+    fn remove_skill_package_removes_discovered_container_group() {
+        with_temp_home(|home| {
+            let skills_dir = home.join(".skills-manager").join("skills");
+            let group_dir = skills_dir.join("team-pack");
+            let member_dir = group_dir.join("member-a");
+            fs::create_dir_all(&member_dir).expect("create member dir");
+            fs::write(
+                member_dir.join("SKILL.md"),
+                "---\nname: member-a\n---\n",
+            )
+            .expect("write member skill");
+
+            SkillPackageService::remove_package("team-pack", &skills_dir)
+                .expect("remove discovered group");
+
+            assert!(!group_dir.exists());
         });
     }
 
