@@ -17,40 +17,49 @@ import { useTranslation, TranslationPath } from "@/i18n";
 import {
   applyTagFilterAction,
   buildSkillTagSummaries,
-  filterSkills,
   getTagFilterSelectionSummary,
   getSkillTags,
   hasSelectableTagFilters,
   normalizeSkillTags,
 } from "./skills/skillTags";
 import { orderToolIdsForSkill } from "./skills/orderToolIds";
-import { summarizeEnabledTools } from "./skills/summarizeEnabledTools";
 import { getEnabledToolIds } from "./skills/getEnabledToolIds";
 import {
   getSkillBulkToggleConfirmKey,
   getSkillBulkToggleMode,
   getSkillBulkToggleTargets,
 } from "./skills/bulkToggleSkillTools";
+import {
+  buildUnifiedSkillItems,
+  filterUnifiedSkillItems,
+  getGroupBulkModeState,
+  getGroupMemberSkills,
+  getGroupToolLabel,
+  getGroupToolVisualState,
+  removeGroupSkillMetadataEntries,
+  shouldShowGroupToolInEnabledOnly,
+  type UnifiedSkillListItem,
+  sortUnifiedSkillItems,
+} from "./skills/buildUnifiedSkillItems";
 
 function getToolDisplayName(toolId: string, tools: Tool[]): string {
-  const tool = tools.find(t => t.id === toolId);
+  const tool = tools.find((t) => t.id === toolId);
   if (tool) return tool.name;
   return toolId;
 }
 
-// Generate consistent colors based on skill name
 function getSkillColor(name: string): { bg: string; icon: string } {
   const colors = [
-    { bg: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', icon: '#fff' },
-    { bg: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', icon: '#fff' },
-    { bg: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', icon: '#fff' },
-    { bg: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', icon: '#fff' },
-    { bg: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)', icon: '#fff' },
-    { bg: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', icon: '#fff' },
-    { bg: 'linear-gradient(135deg, #f6d365 0%, #fda085 100%)', icon: '#fff' },
-    { bg: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)', icon: '#fff' },
+    { bg: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)", icon: "#fff" },
+    { bg: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)", icon: "#fff" },
+    { bg: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)", icon: "#fff" },
+    { bg: "linear-gradient(135deg, #fa709a 0%, #fee140 100%)", icon: "#fff" },
+    { bg: "linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)", icon: "#fff" },
+    { bg: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", icon: "#fff" },
+    { bg: "linear-gradient(135deg, #f6d365 0%, #fda085 100%)", icon: "#fff" },
+    { bg: "linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)", icon: "#fff" },
   ];
-  const index = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
+  const index = name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
   return colors[index];
 }
 
@@ -75,6 +84,237 @@ function buildTagFilterMenuItemStyle(active: boolean): CSSProperties {
 
 type SkillEditorTab = "tools" | "tags";
 
+type SkillCardActionMenuProps = {
+  deleting: boolean;
+  editLabel: string;
+  deleteLabel: string;
+  moreActionsLabel: string;
+  onEdit: () => void;
+  onDelete: () => void;
+};
+
+function renderPreviewChips(chips: string[], overflowCount: number) {
+  if (chips.length === 0 && overflowCount === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      {chips.map((chip) => (
+        <span
+          key={chip}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "4px",
+            fontSize: "11px",
+            fontWeight: 500,
+            color: "rgba(17, 24, 39, 0.68)",
+            backgroundColor: "rgba(9, 105, 218, 0.04)",
+            border: "1px solid rgba(9, 105, 218, 0.14)",
+            borderRadius: "999px",
+            padding: "3px 8px",
+            lineHeight: 1.2,
+          }}
+        >
+          {chip}
+        </span>
+      ))}
+      {overflowCount > 0 && (
+        <span
+          style={{
+            fontSize: "11px",
+            fontWeight: 500,
+            color: "var(--muted-foreground)",
+            padding: "3px 0",
+          }}
+        >
+          +{overflowCount}
+        </span>
+      )}
+    </>
+  );
+}
+
+function getUnifiedItemMetaLabel(item: UnifiedSkillListItem, t: (key: TranslationPath) => string) {
+  if (item.kind === "group") {
+    return t("skills.groupMembersCount").replace("{count}", String(item.memberCount ?? 0));
+  }
+
+  const summary = item.toolSummary;
+  if (!summary || summary.state === "none") {
+    return t("skills.noToolsEnabled");
+  }
+
+  if (summary.state === "all") {
+    return t("skills.allEnabled");
+  }
+
+  return `${t("skills.enableFor")} ${summary.enabledCount}/${summary.totalCount}`;
+}
+
+function SkillCardActionMenu({
+  deleting,
+  editLabel,
+  deleteLabel,
+  moreActionsLabel,
+  onEdit,
+  onDelete,
+}: SkillCardActionMenuProps) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div style={{ position: "relative", flexShrink: 0 }}>
+      <button
+        type="button"
+        aria-label={moreActionsLabel}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((current) => !current);
+        }}
+        disabled={deleting}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "30px",
+          height: "30px",
+          padding: 0,
+          borderRadius: "8px",
+          border: "none",
+          backgroundColor: "transparent",
+          color: "var(--muted-foreground)",
+          cursor: deleting ? "wait" : "pointer",
+          opacity: deleting ? 0.6 : 1,
+          transition: "color 0.15s ease, background-color 0.15s ease",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = "var(--foreground)";
+          e.currentTarget.style.backgroundColor = "rgba(15, 23, 42, 0.04)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = "var(--muted-foreground)";
+          e.currentTarget.style.backgroundColor = "transparent";
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="5" cy="12" r="1.8" />
+          <circle cx="12" cy="12" r="1.8" />
+          <circle cx="19" cy="12" r="1.8" />
+        </svg>
+      </button>
+
+      {open && (
+        <>
+          <button
+            type="button"
+            aria-label={moreActionsLabel}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+            }}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              margin: 0,
+              cursor: "default",
+            }}
+          />
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "absolute",
+              top: "calc(100% + 8px)",
+              right: 0,
+              display: "flex",
+              flexDirection: "column",
+              gap: "2px",
+              minWidth: "132px",
+              padding: "4px",
+              backgroundColor: "rgba(255, 255, 255, 0.96)",
+              border: "1px solid rgba(15, 23, 42, 0.06)",
+              borderRadius: "8px",
+              boxShadow: "0 8px 24px rgba(15, 23, 42, 0.12)",
+              backdropFilter: "blur(10px)",
+              zIndex: MODAL_LAYER_Z_INDEX,
+            }}
+          >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                onEdit();
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                width: "100%",
+                padding: "10px 12px",
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "var(--foreground)",
+                backgroundColor: "transparent",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                textAlign: "left",
+                transition: "background-color 0.15s ease, color 0.15s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "rgba(15, 23, 42, 0.04)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+              }}
+            >
+              {editLabel}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                onDelete();
+              }}
+              disabled={deleting}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                width: "100%",
+                padding: "10px 12px",
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "#dc2626",
+                backgroundColor: "transparent",
+                border: "none",
+                borderRadius: "6px",
+                cursor: deleting ? "wait" : "pointer",
+                textAlign: "left",
+                opacity: deleting ? 0.6 : 1,
+                transition: "background-color 0.15s ease, color 0.15s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "rgba(220, 38, 38, 0.08)";
+                e.currentTarget.style.color = "#b91c1c";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+                e.currentTarget.style.color = "#dc2626";
+              }}
+            >
+              {deleteLabel}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function Skills() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -91,6 +331,12 @@ export function Skills() {
   const [toolEditorQuery, setToolEditorQuery] = useState("");
   const [toolEditorEnabledOnly, setToolEditorEnabledOnly] = useState(false);
   const [bulkTogglingSkillId, setBulkTogglingSkillId] = useState<string | null>(null);
+  const [groupEditorPackageId, setGroupEditorPackageId] = useState<string | null>(null);
+  const [groupEditorQuery, setGroupEditorQuery] = useState("");
+  const [groupEditorEnabledOnly, setGroupEditorEnabledOnly] = useState(false);
+  const [togglingGroupToolKey, setTogglingGroupToolKey] = useState<string | null>(null);
+  const [bulkTogglingGroupId, setBulkTogglingGroupId] = useState<string | null>(null);
+  const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [creating, setCreating] = useState(false);
   const [showTagFilterMenu, setShowTagFilterMenu] = useState(false);
@@ -102,25 +348,8 @@ export function Skills() {
   const { toasts, addToast, removeToast } = useToast();
   const skillMetadata = config?.skill_metadata;
 
-  // Handle opening a skill in editor
-  const handleOpenSkill = useCallback(async (skill: Skill) => {
-    try {
-      const editorId = config?.preferences?.default_editor || "builtin";
-
-      if (editorId === "builtin") {
-        // Open in built-in editor
-        navigate(`/editor?root=${encodeURIComponent(skill.path)}`);
-      } else {
-        // Open in external editor
-        await invoke("open_in_editor", { editorId, path: skill.path });
-      }
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : String(err), "error");
-    }
-  }, [config, navigate, addToast]);
-
-  const handleOpenSkillPackage = useCallback(async (skillPackage: InstalledSkillPackage) => {
-    if (!skillPackage.path) {
+  const handleOpenUnifiedItem = useCallback(async (item: UnifiedSkillListItem) => {
+    if (!item.openPath) {
       return;
     }
 
@@ -128,16 +357,15 @@ export function Skills() {
       const editorId = config?.preferences?.default_editor || "builtin";
 
       if (editorId === "builtin") {
-        navigate(`/editor?root=${encodeURIComponent(skillPackage.path)}`);
+        navigate(`/editor?root=${encodeURIComponent(item.openPath)}`);
       } else {
-        await invoke("open_in_editor", { editorId, path: skillPackage.path });
+        await invoke("open_in_editor", { editorId, path: item.openPath });
       }
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     }
   }, [config, navigate, addToast]);
 
-  // Initial load - uses cached data via list_skills
   const loadData = useCallback(async () => {
     try {
       const [skillsResult, skillPackagesResult, configResult, toolsResult] = await Promise.all([
@@ -157,7 +385,6 @@ export function Skills() {
     }
   }, [addToast]);
 
-  // Manual refresh - forces rescan via refresh_skills
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -179,7 +406,6 @@ export function Skills() {
     }
   }, [addToast, t]);
 
-  // Reload data after toggle/delete operations
   const reloadData = useCallback(async () => {
     try {
       const [skillsResult, skillPackagesResult, configResult, toolsResult] = await Promise.all([
@@ -304,6 +530,41 @@ export function Skills() {
     }
   };
 
+  const openSkillEditor = useCallback((skillId: string, tab: SkillEditorTab = "tools") => {
+    setToolEditorSkillId(skillId);
+    setGroupEditorPackageId(null);
+    setSkillEditorTab(tab);
+    setToolEditorQuery("");
+    setToolEditorEnabledOnly(false);
+    setGroupEditorQuery("");
+    setGroupEditorEnabledOnly(false);
+    setTagDraft("");
+    setShowTagFilterMenu(false);
+  }, []);
+
+  const openGroupEditor = useCallback((packageId: string) => {
+    setGroupEditorPackageId(packageId);
+    setToolEditorSkillId(null);
+    setSkillEditorTab("tools");
+    setToolEditorQuery("");
+    setToolEditorEnabledOnly(false);
+    setGroupEditorQuery("");
+    setGroupEditorEnabledOnly(false);
+    setTagDraft("");
+    setShowTagFilterMenu(false);
+  }, []);
+
+  const closeSkillEditor = useCallback(() => {
+    setToolEditorSkillId(null);
+    setGroupEditorPackageId(null);
+    setSkillEditorTab("tools");
+    setToolEditorQuery("");
+    setToolEditorEnabledOnly(false);
+    setGroupEditorQuery("");
+    setGroupEditorEnabledOnly(false);
+    setTagDraft("");
+  }, []);
+
   const handleBulkToggle = useCallback(async (skill: Skill, visibleToolIds: string[]) => {
     const bulkMode = getSkillBulkToggleMode(visibleToolIds, skill.enabled, tools);
     const targetToolIds = getSkillBulkToggleTargets(visibleToolIds, skill.enabled, tools, bulkMode);
@@ -325,7 +586,6 @@ export function Skills() {
 
     setBulkTogglingSkillId(skill.id);
 
-    // Optimistic update for quicker visual feedback in the dialog.
     setSkills((prevSkills) =>
       prevSkills.map((item) => {
         if (item.id !== skill.id) {
@@ -369,8 +629,7 @@ export function Skills() {
     }
   }, [addToast, reloadData, t, tools]);
 
-  const handleDelete = async (skill: Skill, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDelete = async (skill: Skill) => {
     const confirmed = await confirm(t("skills.deleteConfirm").replace("{name}", skill.name), {
       title: t("skills.delete"),
       kind: "warning",
@@ -416,7 +675,6 @@ export function Skills() {
       addToast(t("skills.createSuccess").replace("{name}", skillName), "success");
       setShowCreateDialog(false);
 
-      // Navigate to editor
       const editorId = config?.preferences?.default_editor || "builtin";
       if (editorId === "builtin") {
         navigate(`/editor?root=${encodeURIComponent(newSkill.path)}`);
@@ -430,33 +688,6 @@ export function Skills() {
       setCreating(false);
     }
   };
-
-  const filteredSkills = useMemo(() => (
-    filterSkills(skills, skillMetadata, {
-      searchQuery,
-      selectedTags,
-      untaggedOnly,
-    })
-  ), [searchQuery, selectedTags, skillMetadata, skills, untaggedOnly]);
-
-  const filteredSkillPackages = useMemo(() => {
-    if (selectedTags.length > 0) {
-      return [];
-    }
-
-    const query = searchQuery.trim().toLowerCase();
-    return skillPackages.filter((skillPackage) => {
-      if (!query) {
-        return true;
-      }
-
-      return (
-        skillPackage.name.toLowerCase().includes(query)
-        || skillPackage.package_id.toLowerCase().includes(query)
-        || skillPackage.installed_members.some((memberId) => memberId.toLowerCase().includes(query))
-      );
-    });
-  }, [searchQuery, selectedTags.length, skillPackages]);
 
   const allTagSummaries = useMemo(
     () => buildSkillTagSummaries(skills, skillMetadata),
@@ -493,9 +724,28 @@ export function Skills() {
 
   const hasActiveSkillFilters = Boolean(searchQuery.trim()) || selectedTags.length > 0 || untaggedOnly;
 
+  const unifiedItems = useMemo(() => buildUnifiedSkillItems({
+    skills,
+    skillPackages,
+    tools,
+    skillMetadata,
+    groupBadgeLabel: t("skills.groupBadge"),
+  }), [skillMetadata, skillPackages, skills, t, tools]);
+
+  const filteredUnifiedItems = useMemo(() => filterUnifiedSkillItems(unifiedItems, {
+    searchQuery,
+    selectedTags,
+    untaggedOnly,
+  }), [searchQuery, selectedTags, unifiedItems, untaggedOnly]);
+
+  const sortedUnifiedItems = useMemo(
+    () => sortUnifiedSkillItems(filteredUnifiedItems, searchQuery),
+    [filteredUnifiedItems, searchQuery],
+  );
+
   const toolIds = useMemo(
     () => getEnabledToolIds(tools),
-    [tools]
+    [tools],
   );
 
   const toolEditorSkill = useMemo(
@@ -612,36 +862,296 @@ export function Skills() {
       .slice(0, 8);
   }, [allTagSummaries, toolEditorSkill, toolEditorTags]);
 
-  const openSkillEditor = useCallback((skillId: string, tab: SkillEditorTab = "tools") => {
-    setToolEditorSkillId(skillId);
-    setSkillEditorTab(tab);
-    setToolEditorQuery("");
-    setToolEditorEnabledOnly(false);
-    setTagDraft("");
-    setShowTagFilterMenu(false);
-  }, []);
+  const groupEditorItem = useMemo(
+    () => unifiedItems.find((item) => item.kind === "group" && item.id === groupEditorPackageId) ?? null,
+    [groupEditorPackageId, unifiedItems],
+  );
 
-  const closeSkillEditor = useCallback(() => {
-    setToolEditorSkillId(null);
-    setSkillEditorTab("tools");
-    setToolEditorQuery("");
-    setToolEditorEnabledOnly(false);
-    setTagDraft("");
-  }, []);
+  const groupEditorOrderedToolIds = useMemo(() => {
+    if (!groupEditorItem?.groupToolStateById) {
+      return [];
+    }
 
-  // Show loading state while initial data is being fetched
+    return orderToolIdsForSkill(
+      toolIds,
+      getGroupBulkModeState(groupEditorItem.groupToolStateById),
+    );
+  }, [groupEditorItem, toolIds]);
+
+  const groupEditorFilteredToolIds = useMemo(() => {
+    if (!groupEditorItem?.groupToolStateById) {
+      return [];
+    }
+
+    const normalizedQuery = groupEditorQuery.trim().toLowerCase();
+    return groupEditorOrderedToolIds.filter((toolId) => {
+      const toolState = groupEditorItem.groupToolStateById?.[toolId];
+      if (!toolState) {
+        return false;
+      }
+
+      if (groupEditorEnabledOnly && !shouldShowGroupToolInEnabledOnly(toolState)) {
+        return false;
+      }
+
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      const displayName = getToolDisplayName(toolId, tools).toLowerCase();
+      return displayName.includes(normalizedQuery) || toolId.toLowerCase().includes(normalizedQuery);
+    });
+  }, [groupEditorEnabledOnly, groupEditorItem, groupEditorOrderedToolIds, groupEditorQuery, tools]);
+
+  const groupEditorEnabledCount = useMemo(() => {
+    if (!groupEditorItem?.groupToolStateById) {
+      return 0;
+    }
+
+    return Object.values(groupEditorItem.groupToolStateById).filter((state) => state.fullyEnabled).length;
+  }, [groupEditorItem]);
+
+  const groupEditorBulkToggleMode = useMemo(() => {
+    if (!groupEditorItem?.groupToolStateById) {
+      return "enable";
+    }
+
+    return getSkillBulkToggleMode(
+      groupEditorFilteredToolIds,
+      getGroupBulkModeState(groupEditorItem.groupToolStateById),
+      tools,
+    );
+  }, [groupEditorFilteredToolIds, groupEditorItem, tools]);
+
+  const groupEditorBulkToggleTargets = useMemo(() => {
+    if (!groupEditorItem?.groupToolStateById) {
+      return [];
+    }
+
+    return getSkillBulkToggleTargets(
+      groupEditorFilteredToolIds,
+      getGroupBulkModeState(groupEditorItem.groupToolStateById),
+      tools,
+      groupEditorBulkToggleMode,
+    );
+  }, [groupEditorBulkToggleMode, groupEditorFilteredToolIds, groupEditorItem, tools]);
+
+  const groupEditorIsBulkToggling = groupEditorItem ? bulkTogglingGroupId === groupEditorItem.id : false;
+  const groupEditorHasPendingSingleToggle = groupEditorItem
+    ? Boolean(togglingGroupToolKey?.startsWith(`${groupEditorItem.id}:`))
+    : false;
+  const groupEditorBulkToggleDisabled =
+    groupEditorIsBulkToggling || groupEditorHasPendingSingleToggle || groupEditorBulkToggleTargets.length === 0;
+  const groupEditorBulkToggleLabel = groupEditorIsBulkToggling
+    ? t("skills.bulkUpdating")
+    : groupEditorBulkToggleMode === "enable"
+      ? t("skills.bulkEnable")
+      : t("skills.bulkDisable");
+
+  const groupEditorItems = useMemo(() => {
+    if (!groupEditorItem?.groupToolStateById) {
+      return [];
+    }
+
+    return groupEditorFilteredToolIds.map((toolId) => {
+      const state = groupEditorItem.groupToolStateById?.[toolId];
+      const toggleKey = `${groupEditorItem.id}:${toolId}`;
+      const isToggling = togglingGroupToolKey === toggleKey;
+      const tool = tools.find((item) => item.id === toolId);
+      const isDetected = tool?.detected ?? false;
+      const isToolEnabled = tool?.config.enabled ?? false;
+      const isDisabled = groupEditorIsBulkToggling || isToggling || !isDetected || !isToolEnabled;
+      return {
+        id: toolId,
+        label: state ? getGroupToolLabel(getToolDisplayName(toolId, tools), state) : getToolDisplayName(toolId, tools),
+        enabled: state ? getGroupToolVisualState(state) : false,
+        disabled: isDisabled,
+        tooltip: !isDetected ? t("skills.toolNotDetected") : undefined,
+        dimmed: !isDetected,
+      };
+    });
+  }, [groupEditorFilteredToolIds, groupEditorIsBulkToggling, groupEditorItem, togglingGroupToolKey, tools, t]);
+
+  const handleGroupToggle = useCallback(async (groupItem: UnifiedSkillListItem, toolId: string, enabled: boolean) => {
+    const skillPackage = groupItem.skillPackage;
+    if (!skillPackage) {
+      return;
+    }
+
+    const memberSkills = getGroupMemberSkills(skillPackage, skills);
+    const targetSkillIds = memberSkills
+      .filter((skill) => enabled ? !skill.enabled[toolId] : Boolean(skill.enabled[toolId]))
+      .map((skill) => skill.id);
+    const affectedMemberCount = targetSkillIds.length;
+
+    if (targetSkillIds.length === 0) {
+      return;
+    }
+
+    const toggleKey = `${groupItem.id}:${toolId}`;
+    setTogglingGroupToolKey(toggleKey);
+    try {
+      const command = enabled ? "enable_skill" : "disable_skill";
+      const results = await Promise.allSettled(
+        targetSkillIds.map((skillId) => invoke(command, { skillId, toolId })),
+      );
+      const failedCount = results.filter((result) => result.status === "rejected").length;
+      const changedCount = targetSkillIds.length - failedCount;
+
+      if (changedCount > 0) {
+        const message = enabled ? t("skills.groupToolEnableSuccess") : t("skills.groupToolDisableSuccess");
+        addToast(message.replace("{count}", String(affectedMemberCount)).replace("{tool}", getToolDisplayName(toolId, tools)), "success");
+      }
+
+      if (failedCount > 0) {
+        addToast(t("skills.bulkTogglePartialFailed").replace("{count}", String(failedCount)), "error");
+      }
+
+      await reloadData();
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+      await reloadData();
+    } finally {
+      setTogglingGroupToolKey(null);
+    }
+  }, [addToast, reloadData, skills, t, tools]);
+
+  const handleGroupBulkToggle = useCallback(async (groupItem: UnifiedSkillListItem, visibleToolIds: string[]) => {
+    const skillPackage = groupItem.skillPackage;
+    const groupToolStateById = groupItem.groupToolStateById;
+    if (!skillPackage || !groupToolStateById) {
+      return;
+    }
+
+    const groupBulkModeState = getGroupBulkModeState(groupToolStateById);
+    const bulkMode = getSkillBulkToggleMode(
+      visibleToolIds,
+      groupBulkModeState,
+      tools,
+    );
+    const targetToolIds = getSkillBulkToggleTargets(
+      visibleToolIds,
+      groupBulkModeState,
+      tools,
+      bulkMode,
+    );
+    if (targetToolIds.length === 0) {
+      return;
+    }
+
+    const confirmed = await confirm(
+      bulkMode === "enable"
+        ? t("skills.groupBulkConfirmEnable")
+          .replace("{tools}", String(targetToolIds.length))
+          .replace("{members}", String(skillPackage.installed_members.length))
+        : t("skills.groupBulkConfirmDisable")
+          .replace("{tools}", String(targetToolIds.length))
+          .replace("{members}", String(skillPackage.installed_members.length)),
+      {
+        title: t("skills.bulkConfirmTitle"),
+        kind: "warning",
+      },
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const memberSkills = getGroupMemberSkills(skillPackage, skills);
+    const operations = targetToolIds.flatMap((toolId) => {
+      return memberSkills
+        .filter((skill) => bulkMode === "enable" ? !skill.enabled[toolId] : Boolean(skill.enabled[toolId]))
+        .map((skill) => ({ skillId: skill.id, toolId }));
+    });
+
+    if (operations.length === 0) {
+      return;
+    }
+
+    setBulkTogglingGroupId(groupItem.id);
+    try {
+      const command = bulkMode === "enable" ? "enable_skill" : "disable_skill";
+      const results = await Promise.allSettled(
+        operations.map(({ skillId, toolId }) => invoke(command, { skillId, toolId })),
+      );
+      const failedCount = results.filter((result) => result.status === "rejected").length;
+      const changedCount = operations.length - failedCount;
+
+      if (changedCount > 0) {
+        const successMessage = bulkMode === "enable" ? t("skills.groupBulkEnableSuccess") : t("skills.groupBulkDisableSuccess");
+        addToast(successMessage.replace("{count}", String(operations.length)), "success");
+      }
+
+      if (failedCount > 0) {
+        addToast(t("skills.bulkTogglePartialFailed").replace("{count}", String(failedCount)), "error");
+      }
+
+      await reloadData();
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+      await reloadData();
+    } finally {
+      setBulkTogglingGroupId(null);
+    }
+  }, [addToast, reloadData, skills, t, tools]);
+
+  const handleDeleteGroup = useCallback(async (groupItem: UnifiedSkillListItem) => {
+    const skillPackage = groupItem.skillPackage;
+    if (!skillPackage) {
+      return;
+    }
+
+    const confirmed = await confirm(
+      t("skills.groupDeleteConfirm")
+        .replace("{name}", groupItem.title)
+        .replace("{count}", String(skillPackage.installed_members.length)),
+      {
+        title: t("skills.delete"),
+        kind: "warning",
+      },
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingGroupId(groupItem.id);
+    try {
+      await invoke("remove_skill_package", { packageId: skillPackage.package_id });
+      if (groupEditorPackageId === groupItem.id) {
+        closeSkillEditor();
+      }
+      if (config?.skill_metadata) {
+        const nextConfig: AppConfig = {
+          ...config,
+          skill_metadata: removeGroupSkillMetadataEntries(config.skill_metadata, skillPackage.installed_members),
+        };
+        try {
+          await invoke("save_config", { config: nextConfig });
+          setConfig(nextConfig);
+        } catch (cleanupError) {
+          addToast(cleanupError instanceof Error ? cleanupError.message : String(cleanupError), "error");
+        }
+      }
+      addToast(t("skills.groupDeleteSuccess").replace("{name}", groupItem.title), "success");
+      await reloadData();
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setDeletingGroupId(null);
+    }
+  }, [addToast, closeSkillEditor, config, groupEditorPackageId, reloadData, t]);
+
   if (initialLoading) {
     return (
       <div style={{
         flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        overflow: 'hidden',
-        backgroundColor: 'var(--background)',
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        overflow: "hidden",
+        backgroundColor: "var(--background)",
       }}>
         <PageHeader title={t("skills.title")} />
-        <main style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
+        <main style={{ flex: 1, overflow: "auto", padding: "24px 32px" }}>
           <PageLoader />
         </main>
       </div>
@@ -650,7 +1160,7 @@ export function Skills() {
 
   if (!config) {
     return (
-      <div style={{ padding: '24px 32px', color: 'var(--muted-foreground)' }}>
+      <div style={{ padding: "24px 32px", color: "var(--muted-foreground)" }}>
         <PageLoader message={t("loading.skills")} />
       </div>
     );
@@ -659,11 +1169,11 @@ export function Skills() {
   return (
     <div style={{
       flex: 1,
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-      overflow: 'hidden',
-      backgroundColor: 'var(--background)',
+      display: "flex",
+      flexDirection: "column",
+      height: "100%",
+      overflow: "hidden",
+      backgroundColor: "var(--background)",
     }}>
       <PageHeader
         title={t("skills.title")}
@@ -803,15 +1313,15 @@ export function Skills() {
               </div>
             )}
 
-            <div style={{ position: 'relative' }}>
+            <div style={{ position: "relative" }}>
               <svg
                 style={{
-                  position: 'absolute',
-                  left: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'var(--muted-foreground)',
-                  pointerEvents: 'none',
+                  position: "absolute",
+                  left: "12px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "var(--muted-foreground)",
+                  pointerEvents: "none",
                 }}
                 width="14"
                 height="14"
@@ -820,8 +1330,8 @@ export function Skills() {
                 stroke="currentColor"
                 strokeWidth="2"
               >
-                <circle cx="11" cy="11" r="8"/>
-                <path d="m21 21-4.3-4.3"/>
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
               </svg>
               <input
                 type="text"
@@ -829,48 +1339,48 @@ export function Skills() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
-                  width: '200px',
-                  padding: '8px 12px 8px 36px',
-                  fontSize: '13px',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  backgroundColor: 'var(--background)',
-                  color: 'var(--foreground)',
-                  outline: 'none',
-                  transition: 'border-color 0.15s, box-shadow 0.15s',
+                  width: "200px",
+                  padding: "8px 12px 8px 36px",
+                  fontSize: "13px",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  backgroundColor: "var(--background)",
+                  color: "var(--foreground)",
+                  outline: "none",
+                  transition: "border-color 0.15s, box-shadow 0.15s",
                 }}
                 onFocus={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--ring)';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9, 105, 218, 0.1)';
+                  e.currentTarget.style.borderColor = "var(--ring)";
+                  e.currentTarget.style.boxShadow = "0 0 0 3px rgba(9, 105, 218, 0.1)";
                 }}
                 onBlur={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--border)';
-                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.borderColor = "var(--border)";
+                  e.currentTarget.style.boxShadow = "none";
                 }}
               />
             </div>
 
             <button
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 16px',
-                fontSize: '13px',
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "8px 16px",
+                fontSize: "13px",
                 fontWeight: 500,
-                color: 'var(--primary-foreground)',
-                backgroundColor: 'var(--foreground)',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                transition: 'opacity 0.15s',
+                color: "var(--primary-foreground)",
+                backgroundColor: "var(--foreground)",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                transition: "opacity 0.15s",
               }}
-              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.9"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
               onClick={() => setShowCreateDialog(true)}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14"/>
+                <path d="M12 5v14M5 12h14" />
               </svg>
               {t("skills.newSkill")}
             </button>
@@ -878,465 +1388,220 @@ export function Skills() {
         }
       />
 
-      {/* Content */}
       <main style={{
         flex: 1,
-        overflow: 'auto',
-        padding: '24px 32px',
+        overflow: "auto",
+        padding: "24px 32px",
       }}>
-        <div style={{ maxWidth: '1200px' }}>
-          {filteredSkillPackages.length > 0 && (
-            <section style={{ marginBottom: '28px' }}>
-              <h2 style={{
-                fontSize: '13px',
-                fontWeight: 500,
-                color: 'var(--muted-foreground)',
-                margin: '0 0 16px 0',
-              }}>
-                {t("skills.groups")} ({filteredSkillPackages.length})
-              </h2>
+        <div style={{ maxWidth: "1200px" }}>
+          {sortedUnifiedItems.length === 0 ? (
+            <div style={{
+              textAlign: "center",
+              padding: "48px 24px",
+              color: "var(--muted-foreground)",
+              backgroundColor: "var(--secondary)",
+              borderRadius: "12px",
+              border: "1px solid var(--border)",
+            }}>
+              {hasActiveSkillFilters ? t("skills.noMatch") : t("skills.noSkills")}
+            </div>
+          ) : (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+              gap: "16px",
+            }}>
+              {sortedUnifiedItems.map((item) => {
+                const color = getSkillColor(item.title);
+                const canOpen = Boolean(item.openPath);
+                const description = item.kind === "group"
+                  ? item.skillPackage?.package_id ?? getUnifiedItemMetaLabel(item, t)
+                  : item.description || t("skills.noDescription");
+                const previewChips = item.kind === "skill"
+                  ? item.previewChips.map((chip) => `#${chip}`)
+                  : item.previewChips;
 
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                gap: '16px',
-              }}>
-                {filteredSkillPackages.map((skillPackage) => {
-                  const color = getSkillColor(skillPackage.name);
-                  const canOpen = Boolean(skillPackage.path);
-                  const visibleMembers = skillPackage.installed_members.slice(0, 3);
-                  const remainingMembers = Math.max(0, skillPackage.installed_members.length - visibleMembers.length);
-
-                  return (
-                    <div
-                      key={skillPackage.package_id}
-                      onClick={canOpen ? () => handleOpenSkillPackage(skillPackage) : undefined}
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '14px',
-                        padding: '18px 20px',
-                        backgroundColor: 'var(--secondary)',
-                        borderRadius: '14px',
-                        border: '1px solid var(--border)',
-                        transition: canOpen ? 'border-color 0.2s, box-shadow 0.2s, transform 0.2s' : undefined,
-                        cursor: canOpen ? 'pointer' : 'default',
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!canOpen) {
-                          return;
-                        }
-                        e.currentTarget.style.borderColor = 'var(--ring)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!canOpen) {
-                          return;
-                        }
-                        e.currentTarget.style.borderColor = 'var(--border)';
-                        e.currentTarget.style.boxShadow = 'none';
-                        e.currentTarget.style.transform = 'translateY(0)';
-                      }}
-                    >
-                      <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
-                        <div style={{
-                          width: '44px',
-                          height: '44px',
-                          borderRadius: '12px',
-                          background: color.bg,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                        }}>
+                return (
+                  <div
+                    key={item.key}
+                    onClick={canOpen ? () => void handleOpenUnifiedItem(item) : undefined}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      padding: "18px 20px",
+                      backgroundColor: "var(--secondary)",
+                      borderRadius: "14px",
+                      border: "1px solid var(--border)",
+                      transition: canOpen ? "border-color 0.2s, box-shadow 0.2s, transform 0.2s" : undefined,
+                      cursor: canOpen ? "pointer" : "default",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!canOpen) {
+                        return;
+                      }
+                      e.currentTarget.style.borderColor = "var(--ring)";
+                      e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)";
+                      e.currentTarget.style.transform = "translateY(-2px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!canOpen) {
+                        return;
+                      }
+                      e.currentTarget.style.borderColor = "var(--border)";
+                      e.currentTarget.style.boxShadow = "none";
+                      e.currentTarget.style.transform = "translateY(0)";
+                    }}
+                  >
+                    <div style={{ display: "flex", gap: "14px", marginBottom: "16px", alignItems: "flex-start" }}>
+                      <div style={{
+                        width: "44px",
+                        height: "44px",
+                        borderRadius: "12px",
+                        background: color.bg,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                      }}>
+                        {item.kind === "group" ? (
                           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color.icon} strokeWidth="2">
                             <rect x="3" y="4" width="7" height="7" rx="1.5" />
                             <rect x="14" y="4" width="7" height="7" rx="1.5" />
                             <rect x="3" y="14" width="7" height="7" rx="1.5" />
                             <rect x="14" y="14" width="7" height="7" rx="1.5" />
                           </svg>
-                        </div>
-
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{
-                            fontSize: '15px',
-                            fontWeight: 600,
-                            color: 'var(--foreground)',
-                            marginBottom: '4px',
-                            lineHeight: 1.3,
-                          }}>
-                            {skillPackage.name}
-                          </div>
-                          <p style={{
-                            fontSize: '13px',
-                            color: 'var(--muted-foreground)',
-                            margin: 0,
-                            lineHeight: 1.5,
-                          }}>
-                            {t("skills.groupMembersCount").replace("{count}", String(skillPackage.installed_members.length))}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div style={{
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: '8px',
-                      }}>
-                        {visibleMembers.map((memberId) => (
-                          <span
-                            key={memberId}
-                            style={{
-                              fontSize: '12px',
-                              fontWeight: 500,
-                              color: 'var(--primary)',
-                              backgroundColor: 'rgba(9, 105, 218, 0.08)',
-                              padding: '4px 8px',
-                              borderRadius: '999px',
-                              border: '1px solid rgba(9, 105, 218, 0.2)',
-                            }}
-                          >
-                            {memberId}
-                          </span>
-                        ))}
-                        {remainingMembers > 0 && (
-                          <span style={{
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: 'var(--muted-foreground)',
-                            padding: '4px 0',
-                          }}>
-                            +{remainingMembers}
-                          </span>
+                        ) : (
+                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color.icon} strokeWidth="2">
+                            <path d="M12 3L13.5 8.5L19 10L13.5 11.5L12 17L10.5 11.5L5 10L10.5 8.5L12 3Z" />
+                          </svg>
                         )}
                       </div>
 
-                      {skillPackage.path && (
-                        <div style={{
-                          paddingTop: '12px',
-                          borderTop: '1px solid var(--border)',
-                          fontSize: '12px',
-                          color: 'var(--muted-foreground)',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px", flexWrap: "wrap" }}>
+                          <div style={{
+                            fontSize: "15px",
+                            fontWeight: 600,
+                            color: "var(--foreground)",
+                            lineHeight: 1.3,
+                            minWidth: 0,
+                          }}>
+                            {item.title}
+                          </div>
+                          {item.badgeLabel && (
+                            <span style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              height: "22px",
+                              padding: "0 8px",
+                              fontSize: "11px",
+                              fontWeight: 600,
+                              color: "var(--muted-foreground)",
+                              backgroundColor: "var(--background)",
+                              border: "1px solid var(--border)",
+                              borderRadius: "999px",
+                            }}>
+                              {item.badgeLabel}
+                            </span>
+                          )}
+                        </div>
+                        <p style={{
+                          fontSize: "13px",
+                          color: "var(--muted-foreground)",
+                          margin: 0,
+                          lineHeight: 1.5,
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
                         }}>
-                          {skillPackage.path}
+                          {description}
+                        </p>
+                      </div>
+
+                      {item.kind === "skill" && item.skill && (
+                        <SkillCardActionMenu
+                          deleting={deletingSkill === item.skill.id}
+                          editLabel={t("common.edit")}
+                          deleteLabel={t("skills.delete")}
+                          moreActionsLabel={t("skills.moreActions")}
+                          onEdit={() => openSkillEditor(item.skill!.id, "tools")}
+                          onDelete={() => void handleDelete(item.skill!)}
+                        />
+                      )}
+                      {item.kind === "group" && item.skillPackage && (
+                        <SkillCardActionMenu
+                          deleting={deletingGroupId === item.id}
+                          editLabel={t("common.edit")}
+                          deleteLabel={t("skills.delete")}
+                          moreActionsLabel={t("skills.moreActions")}
+                          onEdit={() => openGroupEditor(item.id)}
+                          onDelete={() => void handleDeleteGroup(item)}
+                        />
+                      )}
+                    </div>
+
+                    {renderPreviewChips(previewChips, item.previewOverflowCount) && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "14px", minHeight: "24px" }}>
+                        {renderPreviewChips(previewChips, item.previewOverflowCount)}
+                      </div>
+                    )}
+
+                    <div style={{
+                      paddingTop: "12px",
+                      borderTop: "1px solid var(--border)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                    }}>
+                      <div style={{
+                        fontSize: "12px",
+                        color: "var(--muted-foreground)",
+                        lineHeight: 1.5,
+                      }}>
+                        {getUnifiedItemMetaLabel(item, t)}
+                      </div>
+                      {item.kind === "skill" && item.toolSummary?.state === "partial" && item.toolSummary.visibleEnabledToolIds.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                          {item.toolSummary.visibleEnabledToolIds.map((toolId) => (
+                            <span
+                              key={toolId}
+                              style={{
+                                fontSize: "12px",
+                                fontWeight: 500,
+                                color: "var(--primary)",
+                                backgroundColor: "rgba(9, 105, 218, 0.12)",
+                                padding: "4px 8px",
+                                borderRadius: "6px",
+                                border: "1px solid rgba(9, 105, 218, 0.35)",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {getToolDisplayName(toolId, tools)}
+                            </span>
+                          ))}
+                          {item.toolSummary.remainingCount > 0 && (
+                            <span style={{
+                              fontSize: "12px",
+                              fontWeight: 500,
+                              color: "var(--muted-foreground)",
+                              whiteSpace: "nowrap",
+                            }}>
+                              +{item.toolSummary.remainingCount}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-            </section>
+                  </div>
+                );
+              })}
+            </div>
           )}
-
-          {/* Section: Installed */}
-          <section>
-            <h2 style={{
-              fontSize: '13px',
-              fontWeight: 500,
-              color: 'var(--muted-foreground)',
-              margin: '0 0 16px 0',
-            }}>
-              {t("skills.installed")} ({filteredSkills.length})
-            </h2>
-
-            {filteredSkills.length === 0 ? (
-              <div style={{
-                textAlign: 'center',
-                padding: '48px 24px',
-                color: 'var(--muted-foreground)',
-                backgroundColor: 'var(--secondary)',
-                borderRadius: '12px',
-                border: '1px solid var(--border)',
-              }}>
-                {hasActiveSkillFilters ? t("skills.noMatch") : t("skills.noSkills")}
-              </div>
-            ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                gap: '16px',
-              }}>
-                {filteredSkills.map((skill) => {
-                  const color = getSkillColor(skill.name);
-                  const orderedToolIds = orderToolIdsForSkill(toolIds, skill.enabled);
-                  const skillTags = getSkillTags(skill.id, skillMetadata);
-                  return (
-                    <div
-                      key={skill.id}
-                      onClick={() => handleOpenSkill(skill)}
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        padding: '18px 20px',
-                        backgroundColor: 'var(--secondary)',
-                        borderRadius: '14px',
-                        border: '1px solid var(--border)',
-                        transition: 'border-color 0.2s, box-shadow 0.2s, transform 0.2s',
-                        cursor: 'pointer',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--ring)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--border)';
-                        e.currentTarget.style.boxShadow = 'none';
-                        e.currentTarget.style.transform = 'translateY(0)';
-                      }}
-                    >
-                      {/* Top: Icon + Title + Description + Delete */}
-                      <div style={{ display: 'flex', gap: '14px', marginBottom: '16px' }}>
-                        {/* Icon */}
-                        <div style={{
-                          width: '44px',
-                          height: '44px',
-                          borderRadius: '12px',
-                          background: color.bg,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                        }}>
-                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color.icon} strokeWidth="2">
-                            <path d="M12 3L13.5 8.5L19 10L13.5 11.5L12 17L10.5 11.5L5 10L10.5 8.5L12 3Z"/>
-                          </svg>
-                        </div>
-
-                        {/* Title + Description */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{
-                            fontSize: '15px',
-                            fontWeight: 600,
-                            color: 'var(--foreground)',
-                            marginBottom: '4px',
-                            lineHeight: 1.3,
-                          }}>
-                            {skill.name}
-                          </div>
-                          <p style={{
-                            fontSize: '13px',
-                            color: 'var(--muted-foreground)',
-                            margin: 0,
-                            lineHeight: 1.5,
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                          }}>
-                            {skill.description || t("skills.noDescription")}
-                          </p>
-                        </div>
-
-                        {/* Delete Button */}
-                        <button
-                          onClick={(e) => handleDelete(skill, e)}
-                          disabled={deletingSkill === skill.id}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '32px',
-                            height: '32px',
-                            padding: 0,
-                            backgroundColor: 'transparent',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: deletingSkill === skill.id ? 'wait' : 'pointer',
-                            color: 'var(--muted-foreground)',
-                            opacity: deletingSkill === skill.id ? 0.5 : 1,
-                            transition: 'color 0.15s, background-color 0.15s',
-                            flexShrink: 0,
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.color = 'var(--color-error)';
-                            e.currentTarget.style.backgroundColor = 'var(--color-error-bg)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.color = 'var(--muted-foreground)';
-                            e.currentTarget.style.backgroundColor = 'transparent';
-                          }}
-                          title={t("skills.delete")}
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                          </svg>
-                        </button>
-                      </div>
-
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: '8px',
-                          marginBottom: skillTags.length > 0 ? '16px' : '8px',
-                          minHeight: skillTags.length > 0 ? '24px' : '0',
-                        }}
-                      >
-                        {skillTags.map((tag) => (
-                          <span
-                            key={tag}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '11px',
-                              fontWeight: 500,
-                              color: 'rgba(17, 24, 39, 0.68)',
-                              backgroundColor: 'rgba(9, 105, 218, 0.04)',
-                              border: '1px solid rgba(9, 105, 218, 0.14)',
-                              borderRadius: '999px',
-                              padding: '3px 8px',
-                              lineHeight: 1.2,
-                            }}
-                          >
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
-
-                      {/* Bottom: Tool Summary */}
-                      <div style={{
-                        paddingTop: '14px',
-                        borderTop: '1px solid var(--border)',
-                      }}>
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                        }}>
-                          <span style={{
-                            fontSize: '11px',
-                            fontWeight: 500,
-                            color: 'var(--muted-foreground)',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.5px',
-                            flexShrink: 0,
-                          }}>
-                            {t("skills.enableFor")}
-                          </span>
-                          {(() => {
-                            const toolSummary = summarizeEnabledTools(orderedToolIds, skill.enabled, 2);
-
-                            if (toolSummary.state === "none") {
-                              return (
-                                <span style={{
-                                  fontSize: '12px',
-                                  color: 'var(--muted-foreground)',
-                                  fontStyle: 'italic',
-                                  flex: 1,
-                                }}>
-                                  {t("skills.noToolsEnabled")}
-                                </span>
-                              );
-                            }
-
-                            if (toolSummary.state === "all") {
-                              return (
-                                <>
-                                  <span style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '4px',
-                                    fontSize: '12px',
-                                    fontWeight: 500,
-                                    color: 'var(--color-success)',
-                                    backgroundColor: 'var(--color-success-bg)',
-                                    padding: '4px 10px',
-                                    borderRadius: '6px',
-                                    border: '1px solid var(--color-success-border)',
-                                  }}>
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                      <polyline points="20 6 9 17 4 12"/>
-                                    </svg>
-                                    {t("skills.allEnabled")}
-                                  </span>
-                                  <div style={{ flex: 1 }} />
-                                </>
-                              );
-                            }
-
-                            return (
-                              <>
-                                <div style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  flex: 1,
-                                  minWidth: 0,
-                                  overflow: 'hidden',
-                                }}>
-                                  {toolSummary.visibleEnabledToolIds.map(toolId => (
-                                    <span
-                                      key={toolId}
-                                      style={{
-                                        fontSize: '12px',
-                                        fontWeight: 500,
-                                        color: 'var(--primary)',
-                                        backgroundColor: 'rgba(9, 105, 218, 0.12)',
-                                        padding: '4px 8px',
-                                        borderRadius: '6px',
-                                        border: '1px solid rgba(9, 105, 218, 0.35)',
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                      }}
-                                    >
-                                      {getToolDisplayName(toolId, tools)}
-                                    </span>
-                                  ))}
-                                </div>
-                                {toolSummary.remainingCount > 0 && (
-                                  <span style={{
-                                    fontSize: '12px',
-                                    fontWeight: 500,
-                                    color: 'var(--muted-foreground)',
-                                    whiteSpace: 'nowrap',
-                                    flexShrink: 0,
-                                  }}>
-                                    +{toolSummary.remainingCount}
-                                  </span>
-                                )}
-                              </>
-                            );
-                          })()}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openSkillEditor(skill.id, "tools");
-                            }}
-                            style={{
-                              fontSize: '12px',
-                              fontWeight: 500,
-                              color: 'var(--muted-foreground)',
-                              backgroundColor: 'transparent',
-                              border: 'none',
-                              cursor: 'pointer',
-                              padding: '5px 8px',
-                              flexShrink: 0,
-                              transition: 'color 0.15s',
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--foreground)'}
-                            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--muted-foreground)'}
-                          >
-                            {t("common.edit")}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
         </div>
       </main>
+
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {toolEditorSkill && (
@@ -1377,10 +1642,49 @@ export function Skills() {
         />
       )}
 
+      {groupEditorItem && groupEditorItem.skillPackage && (
+        <SkillManageDialog
+          skillName={groupEditorItem.title}
+          skillDescription={groupEditorItem.skillPackage.package_id}
+          activeTab="tools"
+          availableTabs={["tools"]}
+          onTabChange={setSkillEditorTab}
+          onClose={closeSkillEditor}
+          doneLabel={t("common.done")}
+          toolsTitle={t("skills.groupConfigureToolsTitle")}
+          toolsDescription={t("skills.groupConfigureToolsDesc")
+            .replace("{group}", groupEditorItem.title)
+            .replace("{enabled}", String(groupEditorEnabledCount))
+            .replace("{total}", String(groupEditorOrderedToolIds.length))}
+          query={groupEditorQuery}
+          enabledOnly={groupEditorEnabledOnly}
+          searchPlaceholder={t("skills.searchToolsPlaceholder")}
+          enabledOnlyLabel={t("skills.enabledOnly")}
+          bulkToggleLabel={groupEditorBulkToggleLabel}
+          bulkToggleDisabled={groupEditorBulkToggleDisabled}
+          bulkToggleTitle={groupEditorBulkToggleTargets.length === 0 ? t("skills.bulkNoTarget") : undefined}
+          items={groupEditorItems}
+          emptyLabel={t("skills.noToolsInFilter")}
+          onQueryChange={setGroupEditorQuery}
+          onEnabledOnlyChange={setGroupEditorEnabledOnly}
+          onToggle={(toolId, enabled) => void handleGroupToggle(groupEditorItem, toolId, enabled)}
+          onBulkToggle={() => void handleGroupBulkToggle(groupEditorItem, groupEditorFilteredToolIds)}
+          tags={[]}
+          tagDraft=""
+          onTagDraftChange={() => {}}
+          onAddTag={() => {}}
+          onRemoveTag={() => {}}
+          tagSuggestions={[]}
+          onSelectTagSuggestion={() => {}}
+          savingTags={false}
+          t={t}
+        />
+      )}
+
       {showCreateDialog && (
         <CreateSkillDialog
           creating={creating}
-          existingIds={skills.map(s => s.id)}
+          existingIds={skills.map((skill) => skill.id)}
           onCancel={() => setShowCreateDialog(false)}
           onCreate={handleCreateSkill}
           t={t}
@@ -1394,6 +1698,7 @@ function SkillManageDialog({
   skillName,
   skillDescription,
   activeTab,
+  availableTabs = ["tools", "tags"],
   onTabChange,
   onClose,
   doneLabel,
@@ -1425,6 +1730,7 @@ function SkillManageDialog({
   skillName: string;
   skillDescription: string;
   activeTab: SkillEditorTab;
+  availableTabs?: SkillEditorTab[];
   onTabChange: (tab: SkillEditorTab) => void;
   onClose: () => void;
   doneLabel: string;
@@ -1534,7 +1840,7 @@ function SkillManageDialog({
             width: "fit-content",
           }}
         >
-          {(["tools", "tags"] as SkillEditorTab[]).map((tab) => {
+          {availableTabs.map((tab) => {
             const active = activeTab === tab;
             return (
               <button
@@ -1946,7 +2252,6 @@ function CreateSkillDialog({
           {t("skills.createSkillDesc")}
         </p>
 
-        {/* Name */}
         <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "var(--foreground)", marginBottom: "6px" }}>
           {t("skills.skillName")}
         </label>
@@ -1974,7 +2279,6 @@ function CreateSkillDialog({
           <p style={{ fontSize: "12px", color: "var(--color-error)", margin: "0 0 12px 0" }}>{error}</p>
         )}
 
-        {/* Description */}
         <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "var(--foreground)", marginBottom: "6px" }}>
           {t("skills.skillDescription")}
         </label>
@@ -2002,7 +2306,6 @@ function CreateSkillDialog({
           }}
         />
 
-        {/* Actions */}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
           <button
             onClick={onCancel}
