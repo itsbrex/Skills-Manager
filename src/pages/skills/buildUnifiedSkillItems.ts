@@ -152,6 +152,14 @@ export function getGroupToolLabel(toolLabel: string, state: GroupToolState): str
   return `${toolLabel} · ${getGroupToolCoverageLabel(state)}`;
 }
 
+function getGroupMetadataKey(packageId: string): string {
+  return `group:${packageId}`;
+}
+
+function getGroupTags(packageId: string, skillMetadata?: SkillMetadataMap): string[] {
+  return normalizeSkillTags(skillMetadata?.[getGroupMetadataKey(packageId)]?.tags ?? []);
+}
+
 export function buildUnifiedSkillItems({
   skills,
   skillPackages,
@@ -186,7 +194,8 @@ export function buildUnifiedSkillItems({
   });
 
   const groupItems = skillPackages.map((skillPackage): UnifiedSkillListItem => {
-    const previewChips = skillPackage.installed_members.slice(0, 3);
+    const tags = getGroupTags(skillPackage.package_id, skillMetadata);
+    const previewChips = tags.length > 0 ? tags.slice(0, 3) : skillPackage.installed_members.slice(0, 3);
 
     return {
       kind: "group",
@@ -199,12 +208,16 @@ export function buildUnifiedSkillItems({
         skillPackage.name,
         skillPackage.package_id,
         ...skillPackage.installed_members,
+        ...tags,
       ]),
-      tags: [],
-      supportsTagFilter: false,
+      tags,
+      supportsTagFilter: tags.length > 0,
       badgeLabel: groupBadgeLabel,
       previewChips,
-      previewOverflowCount: Math.max(0, skillPackage.installed_members.length - previewChips.length),
+      previewOverflowCount: Math.max(
+        0,
+        (tags.length > 0 ? tags.length : skillPackage.installed_members.length) - previewChips.length,
+      ),
       sortName: skillPackage.name.toLowerCase(),
       sortPriority: 1,
       memberCount: skillPackage.installed_members.length,

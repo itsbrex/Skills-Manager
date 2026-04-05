@@ -51,6 +51,54 @@ export function getSkillTags(skillId: string, skillMetadata?: SkillMetadataMap):
   return normalizeSkillTags(skillMetadata?.[skillId]?.tags ?? []);
 }
 
+export function getGroupMetadataKey(groupId: string): string {
+  return `group:${groupId}`;
+}
+
+export function getGroupTags(groupId: string, skillMetadata?: SkillMetadataMap): string[] {
+  return normalizeSkillTags(skillMetadata?.[getGroupMetadataKey(groupId)]?.tags ?? []);
+}
+
+export function updateMetadataTags(
+  metadataKey: string,
+  nextTags: string[],
+  skillMetadata?: SkillMetadataMap,
+): SkillMetadataMap {
+  const normalizedTags = normalizeSkillTags(nextTags);
+  const nextMetadata = { ...(skillMetadata ?? {}) };
+
+  if (normalizedTags.length === 0) {
+    delete nextMetadata[metadataKey];
+  } else {
+    nextMetadata[metadataKey] = { tags: normalizedTags };
+  }
+
+  return nextMetadata;
+}
+
+export function removeMetadataEntry(
+  metadataKey: string,
+  skillMetadata?: SkillMetadataMap,
+): SkillMetadataMap {
+  const nextMetadata = { ...(skillMetadata ?? {}) };
+  delete nextMetadata[metadataKey];
+  return nextMetadata;
+}
+
+export function buildAllTagSummaries(skillMetadata?: SkillMetadataMap): SkillTagSummary[] {
+  const counts = new Map<string, number>();
+
+  for (const metadata of Object.values(skillMetadata ?? {})) {
+    for (const tag of normalizeSkillTags(metadata.tags ?? [])) {
+      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+  }
+
+  return Array.from(counts.entries())
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((left, right) => right.count - left.count || left.tag.localeCompare(right.tag));
+}
+
 export function buildSkillTagSummaries(
   skills: Skill[],
   skillMetadata?: SkillMetadataMap,
