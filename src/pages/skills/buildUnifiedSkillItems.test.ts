@@ -7,6 +7,7 @@ import {
   sortUnifiedSkillItems,
   getGroupToolVisualState,
   shouldShowGroupToolInEnabledOnly,
+  removeGroupSkillMetadataEntries,
 } from "./buildUnifiedSkillItems.ts";
 
 const tools: Tool[] = [
@@ -230,6 +231,25 @@ test("partial group tool should remain visible in enabled-only filter", () => {
   assert.ok(codexState);
   assert.equal(shouldShowGroupToolInEnabledOnly(claudeState), true);
   assert.equal(shouldShowGroupToolInEnabledOnly(codexState), false);
+});
+
+
+test("group delete should remove member metadata entries and the group metadata entry", () => {
+  const nextMetadata = removeGroupSkillMetadataEntries(
+    {
+      "skill-alpha": { tags: ["editor"] },
+      "skill-beta": { tags: ["team"] },
+      "group:pkg.team": { tags: ["workspace"] },
+      "other-skill": { tags: ["misc"] },
+    },
+    skillPackages[0].installed_members,
+    skillPackages[0].package_id,
+  );
+
+  assert.deepEqual(nextMetadata, {
+    "skill-beta": { tags: ["team"] },
+    "other-skill": { tags: ["misc"] },
+  });
 });
 
 

@@ -16,11 +16,14 @@ import { AppConfig, InstalledSkillPackage, Skill, Tool } from "@/types";
 import { useTranslation, TranslationPath } from "@/i18n";
 import {
   applyTagFilterAction,
-  buildSkillTagSummaries,
+  buildAllTagSummaries,
+  getGroupMetadataKey,
+  getGroupTags,
   getTagFilterSelectionSummary,
   getSkillTags,
   hasSelectableTagFilters,
   normalizeSkillTags,
+  updateMetadataTags,
 } from "./skills/skillTags";
 import { orderToolIdsForSkill } from "./skills/orderToolIds";
 import { getEnabledToolIds } from "./skills/getEnabledToolIds";
@@ -427,28 +430,20 @@ export function Skills() {
     loadData();
   }, [loadData]);
 
-  const persistSkillTags = useCallback(async (skillId: string, nextTags: string[]) => {
+  const persistMetadataTags = useCallback(async (metadataKey: string, nextTags: string[]) => {
     if (!config) {
       return;
     }
 
-    const normalizedTags = normalizeSkillTags(nextTags);
     const previousConfig = config;
-    const nextSkillMetadata = { ...(config.skill_metadata ?? {}) };
-
-    if (normalizedTags.length === 0) {
-      delete nextSkillMetadata[skillId];
-    } else {
-      nextSkillMetadata[skillId] = { tags: normalizedTags };
-    }
-
+    const nextSkillMetadata = updateMetadataTags(metadataKey, nextTags, config.skill_metadata);
     const nextConfig: AppConfig = {
       ...config,
       skill_metadata: nextSkillMetadata,
     };
 
     setConfig(nextConfig);
-    setSavingTagsSkillId(skillId);
+    setSavingTagsSkillId(metadataKey);
 
     try {
       await invoke("save_config", { config: nextConfig });
@@ -459,6 +454,10 @@ export function Skills() {
       setSavingTagsSkillId(null);
     }
   }, [addToast, config]);
+
+  const persistSkillTags = useCallback(async (skillId: string, nextTags: string[]) => {
+    await persistMetadataTags(skillId, nextTags);
+  }, [persistMetadataTags]);
 
   const toggleTagFilter = useCallback((tag: string) => {
     const next = applyTagFilterAction(
@@ -690,8 +689,8 @@ export function Skills() {
   };
 
   const allTagSummaries = useMemo(
-    () => buildSkillTagSummaries(skills, skillMetadata),
-    [skillMetadata, skills],
+    () => buildAllTagSummaries(skillMetadata),
+    [skillMetadata],
   );
 
   const untaggedSkillsCount = useMemo(
@@ -866,6 +865,27 @@ export function Skills() {
     () => unifiedItems.find((item) => item.kind === "group" && item.id === groupEditorPackageId) ?? null,
     [groupEditorPackageId, unifiedItems],
   );
+
+  const groupEditorMetadataKey = useMemo(
+    () => (groupEditorItem ? getGroupMetadataKey(groupEditorItem.id) : null),
+    [groupEditorItem],
+  );
+
+  const groupEditorTags = useMemo(
+    () => (groupEditorItem ? getGroupTags(groupEditorItem.id, skillMetadata) : []),
+    [groupEditorItem, skillMetadata],
+  );
+
+  const groupEditorTagSuggestions = useMemo(() => {
+    if (!groupEditorItem) {
+      return [];
+    }
+
+    return allTagSummaries
+      .map((item) => item.tag)
+      .filter((tag) => !groupEditorTags.includes(tag))
+      .slice(0, 8);
+  }, [allTagSummaries, groupEditorItem, groupEditorTags]);
 
   const groupEditorOrderedToolIds = useMemo(() => {
     if (!groupEditorItem?.groupToolStateById) {
@@ -1122,7 +1142,11 @@ export function Skills() {
       if (config?.skill_metadata) {
         const nextConfig: AppConfig = {
           ...config,
-          skill_metadata: removeGroupSkillMetadataEntries(config.skill_metadata, skillPackage.installed_members),
+          skill_metadata: removeGroupSkillMetadataEntries(
+            config.skill_metadata,
+            skillPackage.installed_members,
+            skillPackage.package_id,
+          ),
         };
         try {
           await invoke("save_config", { config: nextConfig });
@@ -1417,9 +1441,7 @@ export function Skills() {
                 const description = item.kind === "group"
                   ? item.skillPackage?.package_id ?? getUnifiedItemMetaLabel(item, t)
                   : item.description || t("skills.noDescription");
-                const previewChips = item.kind === "skill"
-                  ? item.previewChips.map((chip) => `#${chip}`)
-                  : item.previewChips;
+                const previewChips = item.previewChips.map((chip) => `#${chip}`);
 
                 return (
                   <div
@@ -1646,8 +1668,7 @@ export function Skills() {
         <SkillManageDialog
           skillName={groupEditorItem.title}
           skillDescription={groupEditorItem.skillPackage.package_id}
-          activeTab="tools"
-          availableTabs={["tools"]}
+          activeTab={skillEditorTab}
           onTabChange={setSkillEditorTab}
           onClose={closeSkillEditor}
           doneLabel={t("common.done")}
@@ -1669,14 +1690,41 @@ export function Skills() {
           onEnabledOnlyChange={setGroupEditorEnabledOnly}
           onToggle={(toolId, enabled) => void handleGroupToggle(groupEditorItem, toolId, enabled)}
           onBulkToggle={() => void handleGroupBulkToggle(groupEditorItem, groupEditorFilteredToolIds)}
-          tags={[]}
-          tagDraft=""
-          onTagDraftChange={() => {}}
-          onAddTag={() => {}}
-          onRemoveTag={() => {}}
-          tagSuggestions={[]}
-          onSelectTagSuggestion={() => {}}
-          savingTags={false}
+          tags={groupEditorTags}
+          tagDraft={tagDraft}
+          onTagDraftChange={setTagDraft}
+          onAddTag={() => {
+            if (!groupEditorMetadataKey) {
+              return;
+            }
+            const nextTag = normalizeSkillTags([tagDraft])[0];
+            if (!nextTag) {
+              return;
+            }
+            if (groupEditorTags.includes(nextTag)) {
+              setTagDraft("");
+              return;
+            }
+            void persistMetadataTags(groupEditorMetadataKey, [...groupEditorTags, nextTag]);
+            setTagDraft("");
+          }}
+          onRemoveTag={(tag) => {
+            if (!groupEditorMetadataKey) {
+              return;
+            }
+            void persistMetadataTags(
+              groupEditorMetadataKey,
+              groupEditorTags.filter((item) => item !== tag),
+            );
+          }}
+          tagSuggestions={groupEditorTagSuggestions}
+          onSelectTagSuggestion={(tag) => {
+            if (!groupEditorMetadataKey) {
+              return;
+            }
+            void persistMetadataTags(groupEditorMetadataKey, [...groupEditorTags, tag]);
+          }}
+          savingTags={savingTagsSkillId === groupEditorMetadataKey}
           t={t}
         />
       )}

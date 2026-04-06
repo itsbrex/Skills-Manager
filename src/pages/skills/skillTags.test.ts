@@ -3,11 +3,15 @@ import assert from "node:assert/strict";
 
 import {
   applyTagFilterAction,
+  buildAllTagSummaries,
   buildSkillTagSummaries,
   filterSkills,
+  getGroupMetadataKey,
+  getGroupTags,
   getTagFilterSelectionSummary,
   hasSelectableTagFilters,
   normalizeSkillTags,
+  updateMetadataTags,
 } from "./skillTags.ts";
 
 const skills = [
@@ -150,5 +154,38 @@ test("applyTagFilterAction closes the menu after selecting a tag, toggling untag
       { type: "reset" },
     ),
     { selectedTags: [], untaggedOnly: false, closeMenu: true },
+  );
+});
+
+test("group tag helpers normalize, persist, and read group tags by metadata key", () => {
+  const groupMetadataKey = getGroupMetadataKey("pkg.team");
+  const nextMetadata = updateMetadataTags(groupMetadataKey, [" Workspace ", "workspace", "Team Ops"], metadata);
+
+  assert.deepEqual(nextMetadata[groupMetadataKey], { tags: ["workspace", "team ops"] });
+  assert.deepEqual(getGroupTags("pkg.team", nextMetadata), ["workspace", "team ops"]);
+});
+
+test("group tag helpers remove the group metadata entry when tags become empty", () => {
+  const groupMetadataKey = getGroupMetadataKey("pkg.team");
+  const metadataWithGroup = updateMetadataTags(groupMetadataKey, ["workspace"], metadata);
+  const nextMetadata = updateMetadataTags(groupMetadataKey, [], metadataWithGroup);
+
+  assert.equal(groupMetadataKey in nextMetadata, false);
+  assert.deepEqual(getGroupTags("pkg.team", nextMetadata), []);
+});
+
+test("buildAllTagSummaries includes group tags so top-level filters can see them", () => {
+  assert.deepEqual(
+    buildAllTagSummaries({
+      ...metadata,
+      "group:pkg.team": { tags: ["workspace", "frontend"] },
+    }),
+    [
+      { tag: "frontend", count: 3 },
+      { tag: "agent flow", count: 1 },
+      { tag: "cli", count: 1 },
+      { tag: "react", count: 1 },
+      { tag: "workspace", count: 1 },
+    ],
   );
 });

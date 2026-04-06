@@ -126,11 +126,13 @@ export function shouldShowGroupToolInEnabledOnly(state: GroupToolState): boolean
 export function removeGroupSkillMetadataEntries(
   skillMetadata: SkillMetadataMap | undefined,
   memberSkillIds: string[],
+  packageId?: string,
 ): SkillMetadataMap {
   const memberSkillIdSet = new Set(memberSkillIds);
+  const groupMetadataKey = packageId ? getGroupMetadataKey(packageId) : null;
 
   return Object.fromEntries(
-    Object.entries(skillMetadata ?? {}).filter(([skillId]) => !memberSkillIdSet.has(skillId)),
+    Object.entries(skillMetadata ?? {}).filter(([skillId]) => !memberSkillIdSet.has(skillId) && skillId !== groupMetadataKey),
   );
 }
 
