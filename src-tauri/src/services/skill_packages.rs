@@ -134,6 +134,7 @@ impl SkillPackageService {
         Ok(packages)
     }
 
+    #[cfg(test)]
     pub fn read_installed_package(package_id: &str) -> Result<InstalledSkillPackage, String> {
         let state_path = Self::package_dir(package_id).join("state.json");
         let content = fs::read_to_string(&state_path)
