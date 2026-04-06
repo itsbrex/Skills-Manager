@@ -48,19 +48,54 @@ impl ScannerService {
 
         // Use rayon for parallel processing of skills
         // This significantly speeds up scanning on Windows where file I/O (especially canonicalize) is slow
-        let skills: Vec<Skill> = entries
+        let mut skills: Vec<Skill> = entries
             .par_iter()
-            .filter_map(|entry| {
+            .flat_map_iter(|entry| {
                 let path = entry.path();
-                if path.is_dir() && Self::is_skill_dir(&path) {
-                    Self::load_skill_with_config(&path, config).ok()
-                } else {
-                    None
+                if !path.is_dir() {
+                    return Vec::new();
                 }
+
+                if Self::is_skill_dir(&path) {
+                    return Self::load_skill_with_config(&path, config)
+                        .map(|skill| vec![skill])
+                        .unwrap_or_default();
+                }
+
+                fs::read_dir(&path)
+                    .ok()
+                    .into_iter()
+                    .flat_map(|children| children.filter_map(Result::ok))
+                    .filter_map(|child| {
+                        let child_path = child.path();
+                        if child_path.is_dir() && Self::is_skill_dir(&child_path) {
+                            Self::load_skill_with_config(&child_path, config).ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
             })
             .collect();
 
+        skills.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.path.cmp(&b.path)));
+        Self::ensure_unique_skill_ids(&skills)?;
         Ok(skills)
+    }
+
+    fn ensure_unique_skill_ids(skills: &[Skill]) -> Result<(), String> {
+        for pair in skills.windows(2) {
+            if pair[0].id == pair[1].id {
+                return Err(format!(
+                    "Duplicate skill id: {} ({} and {})",
+                    pair[0].id,
+                    pair[0].path.display(),
+                    pair[1].path.display()
+                ));
+            }
+        }
+
+        Ok(())
     }
 
     #[allow(dead_code)]
@@ -607,6 +642,70 @@ description: "Description from SKILL.md"
 
             let ids: Vec<&str> = skills.iter().map(|skill| skill.id.as_str()).collect();
             assert_eq!(ids, vec!["valid-skill"]);
+        });
+    }
+
+    #[test]
+    fn scan_skills_with_config_includes_legacy_group_member_skills() {
+        with_temp_home(|home| {
+            let config = AppConfig::default();
+            let skills_dir = home.join(".skills-manager").join("skills");
+            fs::create_dir_all(&skills_dir).expect("create skills root");
+
+            let translate_dir = skills_dir.join("baoyu-skills").join("baoyu-translate");
+            fs::create_dir_all(&translate_dir).expect("create translate dir");
+            fs::write(
+                translate_dir.join("SKILL.md"),
+                "---\nname: baoyu-translate\n---\n",
+            )
+            .expect("write translate skill");
+
+            let slide_dir = skills_dir.join("baoyu-skills").join("baoyu-slide-deck");
+            fs::create_dir_all(&slide_dir).expect("create slide dir");
+            fs::write(
+                slide_dir.join("SKILL.md"),
+                "---\nname: baoyu-slide-deck\n---\n",
+            )
+            .expect("write slide skill");
+
+            let mut skills =
+                ScannerService::scan_skills_with_config(&skills_dir, &config).expect("scan skills");
+            skills.sort_by(|a, b| a.id.cmp(&b.id));
+
+            let ids: Vec<&str> = skills.iter().map(|skill| skill.id.as_str()).collect();
+            assert_eq!(ids, vec!["baoyu-slide-deck", "baoyu-translate"]);
+        });
+    }
+
+    #[test]
+    fn scan_skills_with_config_rejects_duplicate_skill_ids_from_nested_and_top_level_dirs() {
+        with_temp_home(|home| {
+            let config = AppConfig::default();
+            let skills_dir = home.join(".skills-manager").join("skills");
+            fs::create_dir_all(&skills_dir).expect("create skills root");
+
+            let top_level_dir = skills_dir.join("duplicate-skill");
+            fs::create_dir_all(&top_level_dir).expect("create top level skill dir");
+            fs::write(
+                top_level_dir.join("SKILL.md"),
+                "---\nname: duplicate-skill\n---\n",
+            )
+            .expect("write top level skill");
+
+            let nested_dir = skills_dir.join("legacy-group").join("duplicate-skill");
+            fs::create_dir_all(&nested_dir).expect("create nested skill dir");
+            fs::write(
+                nested_dir.join("SKILL.md"),
+                "---\nname: duplicate-skill\n---\n",
+            )
+            .expect("write nested skill");
+
+            let error = ScannerService::scan_skills_with_config(&skills_dir, &config)
+                .expect_err("duplicate skill ids should fail");
+
+            assert!(error.contains("Duplicate skill id: duplicate-skill"));
+            assert!(error.contains(top_level_dir.to_string_lossy().as_ref()));
+            assert!(error.contains(nested_dir.to_string_lossy().as_ref()));
         });
     }
 }

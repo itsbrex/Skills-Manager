@@ -116,7 +116,7 @@ export function buildGroupToolStateById(
 }
 
 export function getGroupToolVisualState(state: GroupToolState): boolean {
-  return state.anyEnabled;
+  return state.fullyEnabled;
 }
 
 export function shouldShowGroupToolInEnabledOnly(state: GroupToolState): boolean {

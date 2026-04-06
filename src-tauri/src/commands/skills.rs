@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 use crate::models::{AppConfig, InstalledSkillPackage, Skill};
 use crate::services::{
@@ -114,11 +115,23 @@ fn batch_failure(
     }
 }
 
+fn resolve_skill_source_path(_config: &AppConfig, skill: &Skill) -> std::path::PathBuf {
+    skill.path.clone()
+}
+
+fn load_skill_by_id(config: &AppConfig, skill_id: &str) -> Result<Skill, String> {
+    ScannerService::scan_skills_with_config(&config.skills_dir, config)?
+        .into_iter()
+        .find(|item| item.id == skill_id)
+        .ok_or_else(|| format!("Skill not found: {}", skill_id))
+}
+
 fn apply_skill_tool_enabled(
     config: &AppConfig,
     skill_id: &str,
     tool_id: &str,
     enabled: bool,
+    skill_path: Option<&Path>,
 ) -> Result<(), String> {
     let tool_config = config
         .get_tool_config(tool_id)
@@ -129,7 +142,13 @@ fn apply_skill_tool_enabled(
     }
 
     if enabled {
-        let skill_path = config.skills_dir.join(skill_id);
+        let skill_path = match skill_path {
+            Some(path) => path.to_path_buf(),
+            None => {
+                let skill = load_skill_by_id(config, skill_id)?;
+                resolve_skill_source_path(config, &skill)
+            }
+        };
         if !skill_path.exists() {
             return Err(format!("Skill not found: {}", skill_id));
         }
@@ -138,6 +157,24 @@ fn apply_skill_tool_enabled(
     }
 
     LinkerService::disable_skill_for_tool(&tool_config.skills_path, skill_id, tool_id)
+}
+
+fn delete_skill_from_disk(config: &AppConfig, skill_id: &str) -> Result<(), String> {
+    let skill = load_skill_by_id(config, skill_id)?;
+    let skill_path = resolve_skill_source_path(config, &skill);
+    if !skill_path.exists() {
+        return Err(format!("Skill not found: {}", skill_id));
+    }
+
+    for (tool_id, tool_config) in config.collect_tool_configs() {
+        let _ =
+            LinkerService::disable_skill_for_tool(&tool_config.skills_path, skill_id, &tool_id);
+    }
+
+    std::fs::remove_dir_all(&skill_path)
+        .map_err(|e| format!("Failed to delete skill folder: {}", e))?;
+
+    Ok(())
 }
 
 fn resolve_batch_targets(
@@ -317,8 +354,11 @@ pub fn batch_set_skill_tools(
     let should_enable = matches!(request.action, BatchSkillToolAction::Enable);
 
     for operation in &operation_plan.operations {
+        let skill_path = skills_by_id
+            .get(&operation.skill_id)
+            .map(|skill| skill.path.as_path());
         if let Err(message) =
-            apply_skill_tool_enabled(&config, &operation.skill_id, &operation.tool_id, should_enable)
+            apply_skill_tool_enabled(&config, &operation.skill_id, &operation.tool_id, should_enable, skill_path)
         {
             failures.push(batch_failure(
                 operation.target_kind.clone(),
@@ -359,6 +399,8 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::models::{InstalledSkillPackage, SkillSource, ToolConfig};
+    use crate::test_support::with_temp_home;
+    use std::fs;
 
     use super::*;
 
@@ -378,6 +420,50 @@ mod tests {
                 .collect(),
             path: PathBuf::from(format!("/tmp/{id}")),
         }
+    }
+
+    fn create_nested_skill(id: &str, path: &str, enabled: &[(&str, bool)]) -> Skill {
+        Skill {
+            id: id.to_string(),
+            name: id.to_string(),
+            description: None,
+            version: "1.0.0".to_string(),
+            source: SkillSource::Local,
+            marketplace_meta: None,
+            vault_meta: None,
+            package_meta: None,
+            enabled: enabled
+                .iter()
+                .map(|(tool_id, value)| (tool_id.to_string(), *value))
+                .collect(),
+            path: PathBuf::from(path),
+        }
+    }
+
+    #[test]
+    fn resolve_skill_source_path_uses_skill_path_for_nested_group_member() {
+        let config = create_config(&[("claude", true)]);
+        let skill = create_nested_skill(
+            "baoyu-translate",
+            "/tmp/skills/baoyu-skills/baoyu-translate",
+            &[("claude", false)],
+        );
+
+        assert_eq!(
+            resolve_skill_source_path(&config, &skill),
+            PathBuf::from("/tmp/skills/baoyu-skills/baoyu-translate")
+        );
+    }
+
+    #[test]
+    fn resolve_skill_source_path_keeps_top_level_skill_path_stable() {
+        let config = create_config(&[("claude", true)]);
+        let skill = create_skill("plain-skill", &[("claude", false)]);
+
+        assert_eq!(
+            resolve_skill_source_path(&config, &skill),
+            PathBuf::from("/tmp/plain-skill")
+        );
     }
 
     fn create_package(package_id: &str, installed_members: &[&str]) -> InstalledSkillPackage {
@@ -423,6 +509,102 @@ mod tests {
             cloud_sync: None,
             initialized: true,
         }
+    }
+
+    #[test]
+    fn apply_skill_tool_enabled_enables_nested_group_member_from_real_skill_path() {
+        with_temp_home(|home| {
+            let skills_dir = home.join(".skills-manager").join("skills");
+            let nested_skill_dir = skills_dir.join("baoyu-skills").join("baoyu-translate");
+            fs::create_dir_all(&nested_skill_dir).expect("create nested skill dir");
+            fs::write(
+                nested_skill_dir.join("SKILL.md"),
+                "---\nname: baoyu-translate\n---\n",
+            )
+            .expect("write SKILL.md");
+
+            let tool_skills_dir = home.join(".claude").join("skills");
+            let config = AppConfig {
+                version: "2.0.1".to_string(),
+                skills_dir: skills_dir.clone(),
+                tools: HashMap::from([(
+                    "claude".to_string(),
+                    ToolConfig {
+                        enabled: true,
+                        detected: true,
+                        skills_path: tool_skills_dir.clone(),
+                        config_path: home.join(".claude"),
+                    },
+                )]),
+                custom_tools: HashMap::new(),
+                skill_metadata: HashMap::new(),
+                preferences: None,
+                marketplace_sources: None,
+                poll_client_state: None,
+                auth_session: None,
+                cloud_sync: None,
+                initialized: true,
+            };
+
+            apply_skill_tool_enabled(&config, "baoyu-translate", "claude", true, None)
+                .expect("enable nested group member");
+
+            let link_path = tool_skills_dir.join("baoyu-translate");
+            assert!(link_path.exists() || link_path.symlink_metadata().is_ok());
+            let target = fs::read_link(&link_path).expect("read created symlink");
+            assert_eq!(target, nested_skill_dir);
+        });
+    }
+
+    #[test]
+    fn delete_skill_from_disk_removes_nested_group_member_from_real_path() {
+        with_temp_home(|home| {
+            let skills_dir = home.join(".skills-manager").join("skills");
+            let nested_skill_dir = skills_dir.join("baoyu-skills").join("baoyu-translate");
+            fs::create_dir_all(&nested_skill_dir).expect("create nested skill dir");
+            fs::write(
+                nested_skill_dir.join("SKILL.md"),
+                "---\nname: baoyu-translate\n---\n",
+            )
+            .expect("write SKILL.md");
+
+            let tool_skills_dir = home.join(".claude").join("skills");
+            fs::create_dir_all(&tool_skills_dir).expect("create tool skills dir");
+            LinkerService::enable_skill_for_tool(
+                &nested_skill_dir,
+                &tool_skills_dir,
+                "baoyu-translate",
+                "claude",
+            )
+            .expect("create tool link");
+
+            let config = AppConfig {
+                version: "2.0.1".to_string(),
+                skills_dir: skills_dir.clone(),
+                tools: HashMap::from([(
+                    "claude".to_string(),
+                    ToolConfig {
+                        enabled: true,
+                        detected: true,
+                        skills_path: tool_skills_dir.clone(),
+                        config_path: home.join(".claude"),
+                    },
+                )]),
+                custom_tools: HashMap::new(),
+                skill_metadata: HashMap::new(),
+                preferences: None,
+                marketplace_sources: None,
+                poll_client_state: None,
+                auth_session: None,
+                cloud_sync: None,
+                initialized: true,
+            };
+
+            delete_skill_from_disk(&config, "baoyu-translate").expect("delete nested skill");
+
+            assert!(!nested_skill_dir.exists());
+            assert!(tool_skills_dir.join("baoyu-translate").symlink_metadata().is_err());
+        });
     }
 
     #[test]
@@ -570,7 +752,8 @@ pub fn enable_skill(
     let manager = ConfigManager::new();
     let config = manager.load()?;
 
-    apply_skill_tool_enabled(&config, &skill_id, &tool_id, true)?;
+    let skill = load_skill_by_id(&config, &skill_id)?;
+    apply_skill_tool_enabled(&config, &skill_id, &tool_id, true, Some(skill.path.as_path()))?;
 
     // Invalidate cache after modification
     cache.invalidate_skills();
@@ -586,7 +769,7 @@ pub fn disable_skill(
     let manager = ConfigManager::new();
     let config = manager.load()?;
 
-    apply_skill_tool_enabled(&config, &skill_id, &tool_id, false)?;
+    apply_skill_tool_enabled(&config, &skill_id, &tool_id, false, None)?;
 
     // Invalidate cache after modification
     cache.invalidate_skills();
@@ -617,20 +800,7 @@ pub fn delete_skill(skill_id: String, cache: State<AppCache>) -> Result<(), Stri
     let manager = ConfigManager::new();
     let config = manager.load()?;
 
-    let skill_path = config.skills_dir.join(&skill_id);
-    if !skill_path.exists() {
-        return Err(format!("Skill not found: {}", skill_id));
-    }
-
-    // First, remove all symlinks from tool directories
-    for (tool_id, tool_config) in config.collect_tool_configs() {
-        let _ =
-            LinkerService::disable_skill_for_tool(&tool_config.skills_path, &skill_id, &tool_id);
-    }
-
-    // Then delete the skill folder
-    std::fs::remove_dir_all(&skill_path)
-        .map_err(|e| format!("Failed to delete skill folder: {}", e))?;
+    delete_skill_from_disk(&config, &skill_id)?;
 
     // Invalidate cache after deletion
     cache.invalidate_skills();

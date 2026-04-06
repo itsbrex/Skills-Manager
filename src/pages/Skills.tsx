@@ -43,7 +43,6 @@ import {
   buildUnifiedSkillItems,
   filterUnifiedSkillItems,
   getGroupBulkModeState,
-  getGroupMemberSkills,
   getGroupToolLabel,
   getGroupToolVisualState,
   removeGroupSkillMetadataEntries,
@@ -66,6 +65,10 @@ import {
 import { getActionableToolIds } from "./skills/getActionableToolIds";
 import { BatchManageToolsDialog } from "./skills/BatchManageToolsDialog";
 import { buildBatchToolStateSummaries } from "./skills/buildBatchToolStates";
+import {
+  buildGroupBulkToolActionPlan,
+  buildGroupSingleToolActionRequest,
+} from "./skills/groupToolBatchActions";
 
 function getToolDisplayName(toolId: string, tools: Tool[]): string {
   const tool = tools.find((t) => t.id === toolId);
@@ -1169,36 +1172,26 @@ export function Skills() {
   }, [groupEditorFilteredToolIds, groupEditorIsBulkToggling, groupEditorItem, togglingGroupToolKey, tools, t]);
 
   const handleGroupToggle = useCallback(async (groupItem: UnifiedSkillListItem, toolId: string, enabled: boolean) => {
-    const skillPackage = groupItem.skillPackage;
-    if (!skillPackage) {
-      return;
-    }
-
-    const memberSkills = getGroupMemberSkills(skillPackage, skills);
-    const targetSkillIds = memberSkills
-      .filter((skill) => enabled ? !skill.enabled[toolId] : Boolean(skill.enabled[toolId]))
-      .map((skill) => skill.id);
-    if (targetSkillIds.length === 0) {
+    const request = buildGroupSingleToolActionRequest(groupItem, toolId, enabled);
+    if (!request) {
       return;
     }
 
     const toggleKey = `${groupItem.id}:${toolId}`;
     setTogglingGroupToolKey(toggleKey);
     try {
-      const command = enabled ? "enable_skill" : "disable_skill";
-      const results = await Promise.allSettled(
-        targetSkillIds.map((skillId) => invoke(command, { skillId, toolId })),
-      );
-      const failedCount = results.filter((result) => result.status === "rejected").length;
-      const changedCount = targetSkillIds.length - failedCount;
+      const response = await invoke<BatchSetSkillToolsResponse>("batch_set_skill_tools", { request });
 
-      if (changedCount > 0) {
+      if (response.applied_count > 0) {
         const message = enabled ? t("skills.groupToolEnableSuccess") : t("skills.groupToolDisableSuccess");
-        addToast(message.replace("{count}", String(changedCount)).replace("{tool}", getToolDisplayName(toolId, tools)), "success");
+        addToast(
+          message.replace("{count}", String(response.applied_count)).replace("{tool}", getToolDisplayName(toolId, tools)),
+          "success",
+        );
       }
 
-      if (failedCount > 0) {
-        addToast(t("skills.bulkTogglePartialFailed").replace("{count}", String(failedCount)), "error");
+      if (response.failed_count > 0) {
+        addToast(t("skills.bulkTogglePartialFailed").replace("{count}", String(response.failed_count)), "error");
       }
 
       await reloadData();
@@ -1208,38 +1201,22 @@ export function Skills() {
     } finally {
       setTogglingGroupToolKey(null);
     }
-  }, [addToast, reloadData, skills, t, tools]);
+  }, [addToast, reloadData, t, tools]);
 
   const handleGroupBulkToggle = useCallback(async (groupItem: UnifiedSkillListItem, visibleToolIds: string[]) => {
     const skillPackage = groupItem.skillPackage;
-    const groupToolStateById = groupItem.groupToolStateById;
-    if (!skillPackage || !groupToolStateById) {
-      return;
-    }
-
-    const groupBulkModeState = getGroupBulkModeState(groupToolStateById);
-    const bulkMode = getSkillBulkToggleMode(
-      visibleToolIds,
-      groupBulkModeState,
-      tools,
-    );
-    const targetToolIds = getSkillBulkToggleTargets(
-      visibleToolIds,
-      groupBulkModeState,
-      tools,
-      bulkMode,
-    );
-    if (targetToolIds.length === 0) {
+    const plan = buildGroupBulkToolActionPlan(groupItem, visibleToolIds, tools);
+    if (!skillPackage || !plan) {
       return;
     }
 
     const confirmed = await confirm(
-      bulkMode === "enable"
+      plan.bulkMode === "enable"
         ? t("skills.groupBulkConfirmEnable")
-          .replace("{tools}", String(targetToolIds.length))
+          .replace("{tools}", String(plan.targetToolIds.length))
           .replace("{members}", String(skillPackage.installed_members.length))
         : t("skills.groupBulkConfirmDisable")
-          .replace("{tools}", String(targetToolIds.length))
+          .replace("{tools}", String(plan.targetToolIds.length))
           .replace("{members}", String(skillPackage.installed_members.length)),
       {
         title: t("skills.bulkConfirmTitle"),
@@ -1250,33 +1227,17 @@ export function Skills() {
       return;
     }
 
-    const memberSkills = getGroupMemberSkills(skillPackage, skills);
-    const operations = targetToolIds.flatMap((toolId) => {
-      return memberSkills
-        .filter((skill) => bulkMode === "enable" ? !skill.enabled[toolId] : Boolean(skill.enabled[toolId]))
-        .map((skill) => ({ skillId: skill.id, toolId }));
-    });
-
-    if (operations.length === 0) {
-      return;
-    }
-
     setBulkTogglingGroupId(groupItem.id);
     try {
-      const command = bulkMode === "enable" ? "enable_skill" : "disable_skill";
-      const results = await Promise.allSettled(
-        operations.map(({ skillId, toolId }) => invoke(command, { skillId, toolId })),
-      );
-      const failedCount = results.filter((result) => result.status === "rejected").length;
-      const changedCount = operations.length - failedCount;
+      const response = await invoke<BatchSetSkillToolsResponse>("batch_set_skill_tools", { request: plan.request });
 
-      if (changedCount > 0) {
-        const successMessage = bulkMode === "enable" ? t("skills.groupBulkEnableSuccess") : t("skills.groupBulkDisableSuccess");
-        addToast(successMessage.replace("{count}", String(changedCount)), "success");
+      if (response.applied_count > 0) {
+        const successMessage = plan.bulkMode === "enable" ? t("skills.groupBulkEnableSuccess") : t("skills.groupBulkDisableSuccess");
+        addToast(successMessage.replace("{count}", String(response.applied_count)), "success");
       }
 
-      if (failedCount > 0) {
-        addToast(t("skills.bulkTogglePartialFailed").replace("{count}", String(failedCount)), "error");
+      if (response.failed_count > 0) {
+        addToast(t("skills.bulkTogglePartialFailed").replace("{count}", String(response.failed_count)), "error");
       }
 
       await reloadData();
@@ -1286,7 +1247,7 @@ export function Skills() {
     } finally {
       setBulkTogglingGroupId(null);
     }
-  }, [addToast, reloadData, skills, t, tools]);
+  }, [addToast, reloadData, t, tools]);
 
   const handleDeleteGroup = useCallback(async (groupItem: UnifiedSkillListItem) => {
     const skillPackage = groupItem.skillPackage;

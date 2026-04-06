@@ -209,7 +209,7 @@ test("group items expose aggregated tool state for member skills", () => {
   });
 });
 
-test("partial group tool should be treated as enabled in group editor visual state", () => {
+test("partial group tool should remain visually disabled so users can enable remaining members", () => {
   const items = createItems();
   const group = items.find((item) => item.kind === "group" && item.id === "pkg.team");
   const claudeState = group?.groupToolStateById?.claude;
@@ -217,7 +217,7 @@ test("partial group tool should be treated as enabled in group editor visual sta
 
   assert.ok(claudeState);
   assert.ok(codexState);
-  assert.equal(getGroupToolVisualState(claudeState), true);
+  assert.equal(getGroupToolVisualState(claudeState), false);
   assert.equal(getGroupToolVisualState(codexState), false);
 });
 
@@ -303,7 +303,7 @@ test("group bulk confirm should use group-specific copy rather than skill-specif
 });
 
 
-test("group visual state should report full coverage count separately from boolean state", () => {
+test("group visual state should distinguish partial coverage from fully enabled state", () => {
   const items = createItems();
   const group = items.find((item) => item.kind === "group" && item.id === "pkg.team");
   const claudeState = group?.groupToolStateById?.claude;
@@ -311,7 +311,7 @@ test("group visual state should report full coverage count separately from boole
   assert.ok(claudeState);
   assert.equal(claudeState.enabledMemberCount, 1);
   assert.equal(claudeState.memberCount, 2);
-  assert.equal(getGroupToolVisualState(claudeState), true);
+  assert.equal(getGroupToolVisualState(claudeState), false);
 });
 
 
@@ -369,7 +369,7 @@ test("group delete metadata cleanup should preserve empty metadata object shape 
 });
 
 
-test("group visual state should not confuse partial with disabled", () => {
+test("group visual state should keep partial coverage visually off but filter-visible", () => {
   const partialState = {
     toolId: "claude",
     enabledMemberCount: 1,
@@ -378,7 +378,7 @@ test("group visual state should not confuse partial with disabled", () => {
     anyEnabled: true,
   };
 
-  assert.equal(getGroupToolVisualState(partialState), true);
+  assert.equal(getGroupToolVisualState(partialState), false);
   assert.equal(shouldShowGroupToolInEnabledOnly(partialState), true);
 });
 
@@ -448,7 +448,7 @@ test("group copy regression guard keeps partial state visible in enabled-only mo
 });
 
 
-test("group copy regression guard keeps partial state visually on", () => {
+test("group copy regression guard keeps partial state visually off", () => {
   const partialState = {
     toolId: "claude",
     enabledMemberCount: 1,
@@ -457,7 +457,7 @@ test("group copy regression guard keeps partial state visually on", () => {
     anyEnabled: true,
   };
 
-  assert.equal(getGroupToolVisualState(partialState), true);
+  assert.equal(getGroupToolVisualState(partialState), false);
 });
 
 
@@ -531,7 +531,7 @@ test("group visual helpers handle zero-member groups defensively", () => {
 });
 
 
-test("group visual helpers rely on anyEnabled for partial visibility", () => {
+test("group visual helpers keep partial tools filter-visible while visually off", () => {
   const partialState = {
     toolId: "claude",
     enabledMemberCount: 1,
@@ -540,7 +540,7 @@ test("group visual helpers rely on anyEnabled for partial visibility", () => {
     anyEnabled: true,
   };
 
-  assert.equal(getGroupToolVisualState(partialState), true);
+  assert.equal(getGroupToolVisualState(partialState), false);
   assert.equal(shouldShowGroupToolInEnabledOnly(partialState), true);
 });
 
@@ -671,7 +671,7 @@ test("group helper functions should support review-requested partial semantics",
     anyEnabled: true,
   };
 
-  assert.equal(getGroupToolVisualState(partialState), true);
+  assert.equal(getGroupToolVisualState(partialState), false);
   assert.equal(shouldShowGroupToolInEnabledOnly(partialState), true);
 });
 
@@ -722,7 +722,7 @@ test("group delete cleanup boundary should not depend on skill list presence", (
 });
 
 
-test("group visual semantics should align with ability to disable all from partial state", () => {
+test("group visual semantics should align with ability to enable remaining members from partial state", () => {
   const partialState = {
     toolId: "claude",
     enabledMemberCount: 1,
@@ -731,7 +731,7 @@ test("group visual semantics should align with ability to disable all from parti
     anyEnabled: true,
   };
 
-  assert.equal(getGroupToolVisualState(partialState), true);
+  assert.equal(getGroupToolVisualState(partialState), false);
 });
 
 
@@ -856,7 +856,7 @@ test("group helper semantics preserve distinction between visibility and full co
     anyEnabled: true,
   };
 
-  assert.equal(getGroupToolVisualState(partialState), true);
+  assert.equal(getGroupToolVisualState(partialState), false);
   assert.equal(partialState.fullyEnabled, false);
 });
 
@@ -889,7 +889,7 @@ test("group helper semantics preserve distinction between full coverage and part
 });
 
 
-test("group review regression: partial state must not look disabled", () => {
+test("group review regression: partial state should look not-fully-enabled", () => {
   const partialState = {
     toolId: "claude",
     enabledMemberCount: 1,
@@ -898,7 +898,7 @@ test("group review regression: partial state must not look disabled", () => {
     anyEnabled: true,
   };
 
-  assert.notEqual(getGroupToolVisualState(partialState), false);
+  assert.equal(getGroupToolVisualState(partialState), false);
 });
 
 
@@ -1045,7 +1045,7 @@ test("group review regression: partial state still contributes to discoverabilit
 });
 
 
-test("group review regression: partial state still contributes to toggle on-appearance", () => {
+test("group review regression: partial state stays visually off while still discoverable", () => {
   const partialState = {
     toolId: "claude",
     enabledMemberCount: 1,
@@ -1054,7 +1054,7 @@ test("group review regression: partial state still contributes to toggle on-appe
     anyEnabled: true,
   };
 
-  assert.equal(getGroupToolVisualState(partialState), true);
+  assert.equal(getGroupToolVisualState(partialState), false);
 });
 
 
@@ -1231,7 +1231,7 @@ test("group review regression: partial-state behavior checks remain pure-functio
     anyEnabled: true,
   };
 
-  assert.equal(getGroupToolVisualState(state), true);
+  assert.equal(getGroupToolVisualState(state), false);
   assert.equal(shouldShowGroupToolInEnabledOnly(state), true);
 });
 
@@ -1289,7 +1289,7 @@ test("group review regression: partial state remains visible despite not being f
 });
 
 
-test("group review regression: partial state remains toggled-on visually despite not being fully enabled", () => {
+test("group review regression: partial state remains visually off despite not being fully enabled", () => {
   const state = {
     toolId: "claude",
     enabledMemberCount: 1,
@@ -1299,7 +1299,7 @@ test("group review regression: partial state remains toggled-on visually despite
   };
 
   assert.equal(state.fullyEnabled, false);
-  assert.equal(getGroupToolVisualState(state), true);
+  assert.equal(getGroupToolVisualState(state), false);
 });
 
 
@@ -1388,7 +1388,7 @@ test("group review regression: helper functions are enough to test the review-re
     anyEnabled: false,
   };
 
-  assert.equal(getGroupToolVisualState(partialState), true);
+  assert.equal(getGroupToolVisualState(partialState), false);
   assert.equal(shouldShowGroupToolInEnabledOnly(partialState), true);
   assert.equal(getGroupToolVisualState(noneState), false);
   assert.equal(shouldShowGroupToolInEnabledOnly(noneState), false);
@@ -1418,7 +1418,7 @@ test("group review regression: group aggregation still keeps claude partially en
 });
 
 
-test("group review regression: helper functions preserve distinction needed for single-toggle disable-all logic", () => {
+test("group review regression: helper functions preserve distinction needed for single-toggle enable-remaining logic", () => {
   const partialState = {
     toolId: "claude",
     enabledMemberCount: 1,
@@ -1427,7 +1427,7 @@ test("group review regression: helper functions preserve distinction needed for 
     anyEnabled: true,
   };
 
-  assert.equal(getGroupToolVisualState(partialState), true);
+  assert.equal(getGroupToolVisualState(partialState), false);
   assert.equal(partialState.enabledMemberCount > 0, true);
 });
 
@@ -1520,7 +1520,7 @@ test("group review regression: none-enabled helper behavior remains off", () => 
 });
 
 
-test("group review regression: partial-enabled helper behavior remains on", () => {
+test("group review regression: partial-enabled helper behavior remains filter-visible but visually off", () => {
   const partialState = {
     toolId: "claude",
     enabledMemberCount: 2,
@@ -1529,7 +1529,7 @@ test("group review regression: partial-enabled helper behavior remains on", () =
     anyEnabled: true,
   };
 
-  assert.equal(getGroupToolVisualState(partialState), true);
+  assert.equal(getGroupToolVisualState(partialState), false);
   assert.equal(shouldShowGroupToolInEnabledOnly(partialState), true);
 });
 
@@ -1551,7 +1551,7 @@ test("group review regression: review-requested pure helpers should not require 
     anyEnabled: true,
   };
 
-  assert.equal(getGroupToolVisualState(partialState), true);
+  assert.equal(getGroupToolVisualState(partialState), false);
 });
 
 
@@ -1602,7 +1602,7 @@ test("group review regression: helper semantics are stable for the exact partial
   const state = group?.groupToolStateById?.claude;
 
   assert.ok(state);
-  assert.equal(getGroupToolVisualState(state), true);
+  assert.equal(getGroupToolVisualState(state), false);
   assert.equal(shouldShowGroupToolInEnabledOnly(state), true);
 });
 
@@ -1675,7 +1675,7 @@ test("group review regression: partial state remains the minimal failing case fr
     anyEnabled: true,
   };
 
-  assert.equal(getGroupToolVisualState(state), true);
+  assert.equal(getGroupToolVisualState(state), false);
   assert.equal(shouldShowGroupToolInEnabledOnly(state), true);
 });
 
@@ -1714,7 +1714,7 @@ test("group review regression: helper semantics remain minimal and pure", () => 
     anyEnabled: true,
   };
 
-  assert.equal(getGroupToolVisualState(partialState), true);
+  assert.equal(getGroupToolVisualState(partialState), false);
 });
 
 
@@ -1860,7 +1860,7 @@ test("group review regression: final partial sanity check", () => {
     fullyEnabled: false,
     anyEnabled: true,
   };
-  assert.equal(getGroupToolVisualState(state), true);
+  assert.equal(getGroupToolVisualState(state), false);
 });
 
 
