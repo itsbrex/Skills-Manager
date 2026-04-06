@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, type CSSProperties } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
@@ -44,6 +44,10 @@ import {
   type UnifiedSkillListItem,
   sortUnifiedSkillItems,
 } from "./skills/buildUnifiedSkillItems";
+import {
+  saveSkillsListScrollOffset,
+  takeSkillsListScrollOffset,
+} from "./skills/skillsListScrollState";
 
 function getToolDisplayName(toolId: string, tools: Tool[]): string {
   const tool = tools.find((t) => t.id === toolId);
@@ -350,6 +354,8 @@ export function Skills() {
   const [refreshing, setRefreshing] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
   const skillMetadata = config?.skill_metadata;
+  const listContainerRef = useRef<HTMLElement | null>(null);
+  const hasRestoredScrollRef = useRef(false);
 
   const handleOpenUnifiedItem = useCallback(async (item: UnifiedSkillListItem) => {
     if (!item.openPath) {
@@ -360,6 +366,8 @@ export function Skills() {
       const editorId = config?.preferences?.default_editor || "builtin";
 
       if (editorId === "builtin") {
+        const currentScrollOffset = listContainerRef.current?.scrollTop ?? 0;
+        saveSkillsListScrollOffset(currentScrollOffset);
         navigate(`/editor?root=${encodeURIComponent(item.openPath)}`);
       } else {
         await invoke("open_in_editor", { editorId, path: item.openPath });
@@ -1164,6 +1172,26 @@ export function Skills() {
     }
   }, [addToast, closeSkillEditor, config, groupEditorPackageId, reloadData, t]);
 
+  useEffect(() => {
+    if (initialLoading || hasRestoredScrollRef.current) {
+      return;
+    }
+
+    const container = listContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const savedScrollOffset = takeSkillsListScrollOffset();
+    if (savedScrollOffset === null) {
+      hasRestoredScrollRef.current = true;
+      return;
+    }
+
+    container.scrollTop = savedScrollOffset;
+    hasRestoredScrollRef.current = true;
+  }, [initialLoading, sortedUnifiedItems.length]);
+
   if (initialLoading) {
     return (
       <div style={{
@@ -1412,11 +1440,14 @@ export function Skills() {
         }
       />
 
-      <main style={{
-        flex: 1,
-        overflow: "auto",
-        padding: "24px 32px",
-      }}>
+      <main
+        ref={listContainerRef}
+        style={{
+          flex: 1,
+          overflow: "auto",
+          padding: "24px 32px",
+        }}
+      >
         <div style={{ maxWidth: "1200px" }}>
           {sortedUnifiedItems.length === 0 ? (
             <div style={{
