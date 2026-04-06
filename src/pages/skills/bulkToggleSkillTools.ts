@@ -1,4 +1,5 @@
 import type { Tool } from "../../types";
+import { isActionableTool } from "./getActionableToolIds.ts";
 
 export type SkillBulkToggleMode = "enable" | "disable";
 export type SkillBulkToggleConfirmKey = "skills.bulkConfirmEnable" | "skills.bulkConfirmDisable";
@@ -6,10 +7,6 @@ export type SkillBulkToggleConfirmKey = "skills.bulkConfirmEnable" | "skills.bul
 type SkillEnabledMap = Record<string, boolean | undefined>;
 
 type ToolLike = Pick<Tool, "id" | "detected" | "config">;
-
-function isActionableTool(tool: ToolLike | undefined): boolean {
-  return Boolean(tool?.detected && tool.config.enabled);
-}
 
 function buildToolsById(tools: ToolLike[]): Map<string, ToolLike> {
   return new Map(tools.map((tool) => [tool.id, tool]));

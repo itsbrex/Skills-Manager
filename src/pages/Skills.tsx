@@ -12,7 +12,14 @@ import {
   MODAL_LAYER_Z_INDEX,
   MODAL_OVERLAY_COLOR,
 } from "@/constants/modal";
-import { AppConfig, InstalledSkillPackage, Skill, Tool } from "@/types";
+import {
+  AppConfig,
+  BatchSetSkillToolsRequest,
+  BatchSetSkillToolsResponse,
+  InstalledSkillPackage,
+  Skill,
+  Tool,
+} from "@/types";
 import { useTranslation, TranslationPath } from "@/i18n";
 import {
   applyTagFilterAction,
@@ -48,6 +55,17 @@ import {
   saveSkillsListScrollOffset,
   takeSkillsListScrollOffset,
 } from "./skills/skillsListScrollState";
+import {
+  buildBatchTargets,
+  getSelectedBatchItems,
+  pruneBatchSelectionToAvailable,
+  selectVisibleBatchItems,
+  summarizeBatchSelection,
+  toggleBatchSelection,
+} from "./skills/batchManageSelection";
+import { getActionableToolIds } from "./skills/getActionableToolIds";
+import { BatchManageToolsDialog } from "./skills/BatchManageToolsDialog";
+import { buildBatchToolStateSummaries } from "./skills/buildBatchToolStates";
 
 function getToolDisplayName(toolId: string, tools: Tool[]): string {
   const tool = tools.find((t) => t.id === toolId);
@@ -350,6 +368,11 @@ export function Skills() {
   const [skillEditorTab, setSkillEditorTab] = useState<SkillEditorTab>("tools");
   const [tagDraft, setTagDraft] = useState("");
   const [savingTagsSkillId, setSavingTagsSkillId] = useState<string | null>(null);
+  const [isBatchManageMode, setIsBatchManageMode] = useState(false);
+  const [selectedBatchItemKeys, setSelectedBatchItemKeys] = useState<Set<string>>(new Set());
+  const [isBatchToolDialogOpen, setIsBatchToolDialogOpen] = useState(false);
+  const [batchToolQuery, setBatchToolQuery] = useState("");
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
@@ -750,6 +773,151 @@ export function Skills() {
     [filteredUnifiedItems, searchQuery],
   );
 
+  const actionableToolIds = useMemo(
+    () => getActionableToolIds(tools),
+    [tools],
+  );
+
+  const visibleBatchItemKeys = useMemo(
+    () => sortedUnifiedItems.map((item) => item.key),
+    [sortedUnifiedItems],
+  );
+
+  const allBatchItemKeys = useMemo(
+    () => unifiedItems.map((item) => item.key),
+    [unifiedItems],
+  );
+
+  const selectedBatchItems = useMemo(
+    () => getSelectedBatchItems(unifiedItems, selectedBatchItemKeys),
+    [selectedBatchItemKeys, unifiedItems],
+  );
+
+  const batchSelectionSummary = useMemo(
+    () => summarizeBatchSelection(selectedBatchItems, skills),
+    [selectedBatchItems, skills],
+  );
+
+  const batchToolStates = useMemo(
+    () => buildBatchToolStateSummaries(selectedBatchItems, skills, tools),
+    [selectedBatchItems, skills, tools],
+  );
+
+  const enterBatchManageMode = useCallback(() => {
+    setIsBatchManageMode(true);
+  }, []);
+
+  const exitBatchManageMode = useCallback(() => {
+    setIsBatchManageMode(false);
+    setSelectedBatchItemKeys(new Set());
+    setIsBatchToolDialogOpen(false);
+    setBatchToolQuery("");
+  }, []);
+
+  const handleToggleBatchItemSelection = useCallback((itemKey: string) => {
+    setSelectedBatchItemKeys((current) => toggleBatchSelection(current, itemKey));
+  }, []);
+
+  const handleSelectAllVisibleItems = useCallback(() => {
+    setSelectedBatchItemKeys((current) => selectVisibleBatchItems(current, visibleBatchItemKeys));
+  }, [visibleBatchItemKeys]);
+
+  const handleClearBatchSelection = useCallback(() => {
+    setSelectedBatchItemKeys(new Set());
+  }, []);
+
+  const handleOpenBatchToolDialog = useCallback(() => {
+    if (selectedBatchItems.length === 0) {
+      addToast(t("skills.batchNoSelection"), "error");
+      return;
+    }
+
+    setIsBatchToolDialogOpen(true);
+  }, [addToast, selectedBatchItems.length, t]);
+
+  const handleCloseBatchToolDialog = useCallback(() => {
+    if (batchSubmitting) {
+      return;
+    }
+
+    setIsBatchToolDialogOpen(false);
+  }, [batchSubmitting]);
+
+  const handleSubmitBatchToolAction = useCallback(async (
+    action: "enable" | "disable",
+    toolIdsForAction: string[],
+    confirmMessage: string,
+    options?: { closeOnSuccess?: boolean },
+  ) => {
+    if (selectedBatchItems.length === 0) {
+      addToast(t("skills.batchNoSelection"), "error");
+      return;
+    }
+
+    if (toolIdsForAction.length === 0) {
+      addToast(t("skills.batchNoToolsSelected"), "error");
+      return;
+    }
+
+    const confirmed = await confirm(confirmMessage, {
+      title: t("skills.bulkConfirmTitle"),
+      kind: "warning",
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    setBatchSubmitting(true);
+
+    try {
+      const request: BatchSetSkillToolsRequest = {
+        targets: buildBatchTargets(selectedBatchItems),
+        tool_ids: toolIdsForAction,
+        action,
+      };
+      const response = await invoke<BatchSetSkillToolsResponse>("batch_set_skill_tools", { request });
+
+      if (response.applied_count > 0) {
+        addToast(t("skills.batchSubmitSuccess").replace("{count}", String(response.applied_count)), "success");
+      } else if (response.failed_count === 0 && response.skipped_count > 0) {
+        addToast(t("skills.batchNoChangesNeeded"), "success");
+      }
+
+      if (response.failed_count > 0) {
+        addToast(t("skills.batchSubmitPartialFailed").replace("{count}", String(response.failed_count)), "error");
+      }
+
+      await reloadData();
+      if (options?.closeOnSuccess ?? true) {
+        exitBatchManageMode();
+      }
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setBatchSubmitting(false);
+    }
+  }, [addToast, exitBatchManageMode, reloadData, selectedBatchItems, t]);
+
+  const handleBatchToolToggle = useCallback(async (toolId: string, enabled: boolean) => {
+    const confirmKey = enabled ? "skills.batchConfirmEnableSelectedTools" : "skills.batchConfirmDisableSelectedTools";
+    const confirmMessage = t(confirmKey)
+      .replace("{count}", String(batchSelectionSummary.totalCount))
+      .replace("{affected}", String(batchSelectionSummary.affectedSkillCount))
+      .replace("{tools}", "1");
+
+    await handleSubmitBatchToolAction(enabled ? "enable" : "disable", [toolId], confirmMessage, {
+      closeOnSuccess: false,
+    });
+  }, [batchSelectionSummary.totalCount, handleSubmitBatchToolAction, t]);
+
+  useEffect(() => {
+    if (!isBatchManageMode) {
+      return;
+    }
+
+    setSelectedBatchItemKeys((current) => pruneBatchSelectionToAvailable(current, allBatchItemKeys));
+  }, [allBatchItemKeys, isBatchManageMode]);
+
   const toolIds = useMemo(
     () => getEnabledToolIds(tools),
     [tools],
@@ -1010,8 +1178,6 @@ export function Skills() {
     const targetSkillIds = memberSkills
       .filter((skill) => enabled ? !skill.enabled[toolId] : Boolean(skill.enabled[toolId]))
       .map((skill) => skill.id);
-    const affectedMemberCount = targetSkillIds.length;
-
     if (targetSkillIds.length === 0) {
       return;
     }
@@ -1028,7 +1194,7 @@ export function Skills() {
 
       if (changedCount > 0) {
         const message = enabled ? t("skills.groupToolEnableSuccess") : t("skills.groupToolDisableSuccess");
-        addToast(message.replace("{count}", String(affectedMemberCount)).replace("{tool}", getToolDisplayName(toolId, tools)), "success");
+        addToast(message.replace("{count}", String(changedCount)).replace("{tool}", getToolDisplayName(toolId, tools)), "success");
       }
 
       if (failedCount > 0) {
@@ -1106,7 +1272,7 @@ export function Skills() {
 
       if (changedCount > 0) {
         const successMessage = bulkMode === "enable" ? t("skills.groupBulkEnableSuccess") : t("skills.groupBulkDisableSuccess");
-        addToast(successMessage.replace("{count}", String(operations.length)), "success");
+        addToast(successMessage.replace("{count}", String(changedCount)), "success");
       }
 
       if (failedCount > 0) {
@@ -1413,6 +1579,26 @@ export function Skills() {
             </div>
 
             <button
+              type="button"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "8px 14px",
+                fontSize: "13px",
+                fontWeight: 500,
+                color: isBatchManageMode ? "var(--primary-foreground)" : "var(--foreground)",
+                backgroundColor: isBatchManageMode ? "var(--foreground)" : "var(--background)",
+                border: isBatchManageMode ? "none" : "1px solid var(--border)",
+                borderRadius: "8px",
+                cursor: "pointer",
+              }}
+              onClick={isBatchManageMode ? exitBatchManageMode : enterBatchManageMode}
+            >
+              {isBatchManageMode ? t("skills.exitBatchManage") : t("skills.batchManage")}
+            </button>
+
+            <button
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -1424,18 +1610,46 @@ export function Skills() {
                 backgroundColor: "var(--foreground)",
                 border: "none",
                 borderRadius: "8px",
-                cursor: "pointer",
+                cursor: isBatchManageMode ? "not-allowed" : "pointer",
                 transition: "opacity 0.15s",
+                opacity: isBatchManageMode ? 0.5 : 1,
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.9"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
-              onClick={() => setShowCreateDialog(true)}
+              onMouseEnter={(e) => { if (!isBatchManageMode) e.currentTarget.style.opacity = "0.9"; }}
+              onMouseLeave={(e) => { if (!isBatchManageMode) e.currentTarget.style.opacity = "1"; }}
+              onClick={() => {
+                if (!isBatchManageMode) {
+                  setShowCreateDialog(true);
+                }
+              }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 5v14M5 12h14" />
               </svg>
               {t("skills.newSkill")}
             </button>
+            {isBatchManageMode && (
+              <button
+                type="button"
+                onClick={handleOpenBatchToolDialog}
+                disabled={selectedBatchItems.length === 0}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "8px 14px",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  color: "var(--foreground)",
+                  backgroundColor: "var(--secondary)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  cursor: selectedBatchItems.length === 0 ? "not-allowed" : "pointer",
+                  opacity: selectedBatchItems.length === 0 ? 0.6 : 1,
+                }}
+              >
+                {t("skills.batchConfigureTools")}
+              </button>
+            )}
           </>
         }
       />
@@ -1449,6 +1663,67 @@ export function Skills() {
         }}
       >
         <div style={{ maxWidth: "1200px" }}>
+          {isBatchManageMode && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "12px",
+                padding: "12px 14px",
+                marginBottom: "16px",
+                borderRadius: "12px",
+                border: "1px solid var(--border)",
+                backgroundColor: "var(--secondary)",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)" }}>
+                {t("skills.batchSelectedCount")
+                  .replace("{count}", String(batchSelectionSummary.totalCount))
+                  .replace("{skills}", String(batchSelectionSummary.skillCount))
+                  .replace("{groups}", String(batchSelectionSummary.groupCount))}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={handleSelectAllVisibleItems}
+                  disabled={visibleBatchItemKeys.length === 0}
+                  style={{
+                    padding: "7px 10px",
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    color: "var(--foreground)",
+                    backgroundColor: "var(--background)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "8px",
+                    cursor: visibleBatchItemKeys.length === 0 ? "not-allowed" : "pointer",
+                    opacity: visibleBatchItemKeys.length === 0 ? 0.6 : 1,
+                  }}
+                >
+                  {t("skills.batchSelectAllFiltered")}
+                </button>
+                {batchSelectionSummary.totalCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearBatchSelection}
+                    style={{
+                      padding: "7px 10px",
+                      fontSize: "12px",
+                      fontWeight: 500,
+                      color: "var(--foreground)",
+                      backgroundColor: "var(--background)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {t("skills.batchClearSelection")}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           {sortedUnifiedItems.length === 0 ? (
             <div style={{
               textAlign: "center",
@@ -1474,22 +1749,28 @@ export function Skills() {
                   : item.description || t("skills.noDescription");
                 const previewChips = item.previewChips.map((chip) => `#${chip}`);
 
+                const isBatchSelected = selectedBatchItemKeys.has(item.key);
+
                 return (
                   <div
                     key={item.key}
-                    onClick={canOpen ? () => void handleOpenUnifiedItem(item) : undefined}
+                    onClick={isBatchManageMode
+                      ? () => handleToggleBatchItemSelection(item.key)
+                      : canOpen
+                        ? () => void handleOpenUnifiedItem(item)
+                        : undefined}
                     style={{
                       display: "flex",
                       flexDirection: "column",
                       padding: "18px 20px",
-                      backgroundColor: "var(--secondary)",
+                      backgroundColor: isBatchSelected ? "rgba(9, 105, 218, 0.08)" : "var(--secondary)",
                       borderRadius: "14px",
-                      border: "1px solid var(--border)",
-                      transition: canOpen ? "border-color 0.2s, box-shadow 0.2s, transform 0.2s" : undefined,
-                      cursor: canOpen ? "pointer" : "default",
+                      border: isBatchSelected ? "1px solid rgba(9, 105, 218, 0.4)" : "1px solid var(--border)",
+                      transition: canOpen && !isBatchManageMode ? "border-color 0.2s, box-shadow 0.2s, transform 0.2s" : undefined,
+                      cursor: isBatchManageMode ? "pointer" : canOpen ? "pointer" : "default",
                     }}
                     onMouseEnter={(e) => {
-                      if (!canOpen) {
+                      if (!canOpen || isBatchManageMode) {
                         return;
                       }
                       e.currentTarget.style.borderColor = "var(--ring)";
@@ -1497,7 +1778,7 @@ export function Skills() {
                       e.currentTarget.style.transform = "translateY(-2px)";
                     }}
                     onMouseLeave={(e) => {
-                      if (!canOpen) {
+                      if (!canOpen || isBatchManageMode) {
                         return;
                       }
                       e.currentTarget.style.borderColor = "var(--border)";
@@ -1506,6 +1787,28 @@ export function Skills() {
                     }}
                   >
                     <div style={{ display: "flex", gap: "14px", marginBottom: "16px", alignItems: "flex-start" }}>
+                      {isBatchManageMode && (
+                        <div
+                          style={{
+                            width: "20px",
+                            height: "20px",
+                            marginTop: "12px",
+                            borderRadius: "6px",
+                            border: isBatchSelected ? "1px solid var(--primary)" : "1px solid var(--border)",
+                            backgroundColor: isBatchSelected ? "var(--foreground)" : "var(--background)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {isBatchSelected && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--primary-foreground)" strokeWidth="3">
+                              <path d="m5 12 5 5L20 7" />
+                            </svg>
+                          )}
+                        </div>
+                      )}
                       <div style={{
                         width: "44px",
                         height: "44px",
@@ -1573,7 +1876,7 @@ export function Skills() {
                         </p>
                       </div>
 
-                      {item.kind === "skill" && item.skill && (
+                      {!isBatchManageMode && item.kind === "skill" && item.skill && (
                         <SkillCardActionMenu
                           deleting={deletingSkill === item.skill.id}
                           editLabel={t("common.edit")}
@@ -1583,7 +1886,7 @@ export function Skills() {
                           onDelete={() => void handleDelete(item.skill!)}
                         />
                       )}
-                      {item.kind === "group" && item.skillPackage && (
+                      {!isBatchManageMode && item.kind === "group" && item.skillPackage && (
                         <SkillCardActionMenu
                           deleting={deletingGroupId === item.id}
                           editLabel={t("common.edit")}
@@ -1759,6 +2062,33 @@ export function Skills() {
           t={t}
         />
       )}
+
+      <BatchManageToolsDialog
+        open={isBatchToolDialogOpen}
+        selectedSummary={batchSelectionSummary}
+        tools={tools.filter((tool) => actionableToolIds.includes(tool.id))}
+        toolStates={batchToolStates}
+        query={batchToolQuery}
+        submitting={batchSubmitting}
+        onQueryChange={setBatchToolQuery}
+        onToggleTool={(toolId, enabled) => void handleBatchToolToggle(toolId, enabled)}
+        onSubmitEnableAll={() => void handleSubmitBatchToolAction(
+          "enable",
+          actionableToolIds,
+          t("skills.batchConfirmEnableAllTools")
+            .replace("{count}", String(batchSelectionSummary.totalCount))
+            .replace("{affected}", String(batchSelectionSummary.affectedSkillCount)),
+        )}
+        onSubmitDisableAll={() => void handleSubmitBatchToolAction(
+          "disable",
+          actionableToolIds,
+          t("skills.batchConfirmDisableAllTools")
+            .replace("{count}", String(batchSelectionSummary.totalCount))
+            .replace("{affected}", String(batchSelectionSummary.affectedSkillCount)),
+        )}
+        onClose={handleCloseBatchToolDialog}
+        t={t}
+      />
 
       {showCreateDialog && (
         <CreateSkillDialog

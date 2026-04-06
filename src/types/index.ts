@@ -229,6 +229,39 @@ export interface LinkReport {
   failed: LinkResult[];
 }
 
+export type BatchSkillToolTargetKind = "skill" | "group";
+export type BatchSkillToolAction = "enable" | "disable";
+
+export interface BatchSkillToolTarget {
+  kind: BatchSkillToolTargetKind;
+  id: string;
+}
+
+export interface BatchSetSkillToolsRequest {
+  targets: BatchSkillToolTarget[];
+  tool_ids: string[];
+  action: BatchSkillToolAction;
+}
+
+export interface BatchSetSkillToolsFailure {
+  target_kind: BatchSkillToolTargetKind;
+  target_id: string;
+  skill_id?: string | null;
+  tool_id?: string | null;
+  message: string;
+}
+
+export interface BatchSetSkillToolsResponse {
+  requested_target_count: number;
+  requested_tool_count: number;
+  resolved_skill_count: number;
+  attempted_operation_count: number;
+  applied_count: number;
+  skipped_count: number;
+  failed_count: number;
+  failures: BatchSetSkillToolsFailure[];
+}
+
 // Detected editor from backend
 export interface DetectedEditor {
   id: string;

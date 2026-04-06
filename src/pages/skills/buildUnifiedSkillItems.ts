@@ -138,7 +138,7 @@ export function removeGroupSkillMetadataEntries(
 
 export function getGroupBulkModeState(groupToolStateById: Record<string, GroupToolState>): Record<string, boolean> {
   return Object.fromEntries(
-    Object.entries(groupToolStateById).map(([toolId, state]) => [toolId, state.anyEnabled]),
+    Object.entries(groupToolStateById).map(([toolId, state]) => [toolId, state.fullyEnabled]),
   );
 }
 

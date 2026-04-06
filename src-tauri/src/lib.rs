@@ -5,7 +5,7 @@ mod services;
 mod test_support;
 
 use commands::{
-    check_marketplace_updates_if_stale, check_sync_status, check_update,
+    batch_set_skill_tools, check_marketplace_updates_if_stale, check_sync_status, check_update,
     cloud_sync_has_local_changes, cloud_sync_pull, cloud_sync_push, cloud_sync_resolve,
     create_custom_tool, create_skill, delete_custom_tool, delete_skill, detect_available_editors,
     detect_tools, disable_skill, enable_skill, exchange_github_auth, exchange_google_auth,
@@ -72,6 +72,7 @@ pub fn run() {
             list_skill_packages,
             enable_skill,
             disable_skill,
+            batch_set_skill_tools,
             delete_skill,
             create_skill,
             install_skill_package_from_path,
