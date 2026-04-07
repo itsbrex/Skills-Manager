@@ -171,7 +171,13 @@ fn apply_skill_tool_enabled(
     }
 
     let skill = load_skill_by_instance_id(config, instance_id)?;
-    match LinkerService::check_link_for_tool(&skill.path, &tool_config.skills_path, &skill.id, tool_id) {
+    match LinkerService::check_link_for_scoped_skill(
+        &skill.path,
+        &tool_config.skills_path,
+        &skill.id,
+        tool_id,
+        &skill.scope,
+    ) {
         crate::services::LinkStatus::Valid => {
             LinkerService::disable_skill_for_tool(&tool_config.skills_path, &skill.id, tool_id)
         }
@@ -188,7 +194,13 @@ fn delete_skill_from_disk(config: &AppConfig, instance_id: &str) -> Result<(), S
     }
 
     for (tool_id, tool_config) in config.collect_tool_configs() {
-        match LinkerService::check_link_for_tool(&skill.path, &tool_config.skills_path, &skill.id, &tool_id) {
+        match LinkerService::check_link_for_scoped_skill(
+            &skill.path,
+            &tool_config.skills_path,
+            &skill.id,
+            &tool_id,
+            &skill.scope,
+        ) {
             crate::services::LinkStatus::Valid => {
                 let _ = LinkerService::disable_skill_for_tool(&tool_config.skills_path, &skill.id, &tool_id);
             }

@@ -73,6 +73,10 @@ import {
   buildGroupBulkToolActionPlan,
   buildGroupSingleToolActionRequest,
 } from "./skills/groupToolBatchActions";
+import {
+  buildSkillsHeaderActionLayout,
+  type SkillsHeaderActionId,
+} from "./skills/headerActionLayout";
 
 function getToolDisplayName(toolId: string, tools: Tool[]): string {
   const tool = tools.find((t) => t.id === toolId);
@@ -810,6 +814,11 @@ export function Skills() {
     [selectedBatchItems, skills, tools],
   );
 
+  const headerActionLayout = useMemo(
+    () => buildSkillsHeaderActionLayout(isBatchManageMode),
+    [isBatchManageMode],
+  );
+
   const enterBatchManageMode = useCallback(() => {
     setIsBatchManageMode(true);
   }, []);
@@ -841,6 +850,99 @@ export function Skills() {
 
     setIsBatchToolDialogOpen(true);
   }, [addToast, selectedBatchItems.length, t]);
+
+  const renderHeaderActionButton = useCallback((actionId: SkillsHeaderActionId) => {
+    switch (actionId) {
+      case "batch-manage":
+        return (
+          <button
+            key={actionId}
+            type="button"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: isBatchManageMode ? "var(--primary-foreground)" : "var(--foreground)",
+              backgroundColor: isBatchManageMode ? "var(--foreground)" : "var(--background)",
+              border: isBatchManageMode ? "none" : "1px solid var(--border)",
+              borderRadius: "8px",
+              cursor: "pointer",
+            }}
+            onClick={isBatchManageMode ? exitBatchManageMode : enterBatchManageMode}
+          >
+            {isBatchManageMode ? t("skills.exitBatchManage") : t("skills.batchManage")}
+          </button>
+        );
+      case "batch-configure":
+        return (
+          <button
+            key={actionId}
+            type="button"
+            onClick={handleOpenBatchToolDialog}
+            disabled={selectedBatchItems.length === 0}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: "var(--foreground)",
+              backgroundColor: "var(--secondary)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              cursor: selectedBatchItems.length === 0 ? "not-allowed" : "pointer",
+              opacity: selectedBatchItems.length === 0 ? 0.6 : 1,
+            }}
+          >
+            {t("skills.batchConfigureTools")}
+          </button>
+        );
+      case "create-skill":
+        return (
+          <button
+            key={actionId}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 16px",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: "var(--primary-foreground)",
+              backgroundColor: "var(--foreground)",
+              border: "none",
+              borderRadius: "8px",
+              cursor: isBatchManageMode ? "not-allowed" : "pointer",
+              transition: "opacity 0.15s",
+              opacity: isBatchManageMode ? 0.5 : 1,
+            }}
+            onMouseEnter={(e) => { if (!isBatchManageMode) e.currentTarget.style.opacity = "0.9"; }}
+            onMouseLeave={(e) => { if (!isBatchManageMode) e.currentTarget.style.opacity = "1"; }}
+            onClick={() => {
+              if (!isBatchManageMode) {
+                setShowCreateDialog(true);
+              }
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            {t("skills.newSkill")}
+          </button>
+        );
+    }
+  }, [
+    enterBatchManageMode,
+    exitBatchManageMode,
+    handleOpenBatchToolDialog,
+    isBatchManageMode,
+    selectedBatchItems.length,
+    t,
+  ]);
 
   const handleCloseBatchToolDialog = useCallback(() => {
     if (batchSubmitting) {
@@ -1542,78 +1644,17 @@ export function Skills() {
               />
             </div>
 
-            <button
-              type="button"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "8px 14px",
-                fontSize: "13px",
-                fontWeight: 500,
-                color: isBatchManageMode ? "var(--primary-foreground)" : "var(--foreground)",
-                backgroundColor: isBatchManageMode ? "var(--foreground)" : "var(--background)",
-                border: isBatchManageMode ? "none" : "1px solid var(--border)",
-                borderRadius: "8px",
-                cursor: "pointer",
-              }}
-              onClick={isBatchManageMode ? exitBatchManageMode : enterBatchManageMode}
-            >
-              {isBatchManageMode ? t("skills.exitBatchManage") : t("skills.batchManage")}
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              {headerActionLayout.primaryActionIds.map((actionId) =>
+                renderHeaderActionButton(actionId),
+              )}
+            </div>
 
-            <button
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "8px 16px",
-                fontSize: "13px",
-                fontWeight: 500,
-                color: "var(--primary-foreground)",
-                backgroundColor: "var(--foreground)",
-                border: "none",
-                borderRadius: "8px",
-                cursor: isBatchManageMode ? "not-allowed" : "pointer",
-                transition: "opacity 0.15s",
-                opacity: isBatchManageMode ? 0.5 : 1,
-              }}
-              onMouseEnter={(e) => { if (!isBatchManageMode) e.currentTarget.style.opacity = "0.9"; }}
-              onMouseLeave={(e) => { if (!isBatchManageMode) e.currentTarget.style.opacity = "1"; }}
-              onClick={() => {
-                if (!isBatchManageMode) {
-                  setShowCreateDialog(true);
-                }
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              {t("skills.newSkill")}
-            </button>
-            {isBatchManageMode && (
-              <button
-                type="button"
-                onClick={handleOpenBatchToolDialog}
-                disabled={selectedBatchItems.length === 0}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  padding: "8px 14px",
-                  fontSize: "13px",
-                  fontWeight: 500,
-                  color: "var(--foreground)",
-                  backgroundColor: "var(--secondary)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  cursor: selectedBatchItems.length === 0 ? "not-allowed" : "pointer",
-                  opacity: selectedBatchItems.length === 0 ? 0.6 : 1,
-                }}
-              >
-                {t("skills.batchConfigureTools")}
-              </button>
-            )}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              {headerActionLayout.secondaryActionIds.map((actionId) =>
+                renderHeaderActionButton(actionId),
+              )}
+            </div>
           </>
         }
       />
@@ -2057,7 +2098,7 @@ export function Skills() {
       {showCreateDialog && (
         <CreateSkillDialog
           creating={creating}
-          existingIds={skills.map((skill) => skill.id)}
+          existingIds={skills.filter((skill) => skill.scope === "global").map((skill) => skill.id)}
           onCancel={() => setShowCreateDialog(false)}
           onCreate={handleCreateSkill}
           t={t}

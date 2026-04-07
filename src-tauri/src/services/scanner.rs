@@ -8,7 +8,7 @@ use crate::models::{
     SkillSource, VaultMeta,
 };
 use crate::services::detector::DetectorService;
-use crate::services::linker::{copy_mode_target_matches_source, is_symlink_or_junction, LinkerService};
+use crate::services::linker::LinkerService;
 
 pub struct ScannerService;
 
@@ -59,11 +59,18 @@ impl ScannerService {
         let mut skills = Self::scan_skills_in_root(&project_binding.skills_dir, config)?
             .into_iter()
             .map(|skill| {
-                skill.with_scope(
+                let mut scoped_skill = skill.with_scope(
                     SkillScope::Project,
                     Some(project_binding.id.clone()),
                     Some(project_binding.name.clone()),
-                )
+                );
+                scoped_skill.enabled = Self::check_enabled_status_for_scope(
+                    &scoped_skill.path,
+                    &scoped_skill.id,
+                    &scoped_skill.scope,
+                    config,
+                );
+                scoped_skill
             })
             .collect::<Vec<_>>();
         skills.sort_by(|a, b| a.instance_id.cmp(&b.instance_id));
@@ -210,7 +217,8 @@ impl ScannerService {
         }
 
         // Check enabled status by looking for symlinks in each tool's skills directory
-        let enabled = Self::check_enabled_status(skill_path, &id, config);
+        let enabled =
+            Self::check_enabled_status_for_scope(skill_path, &id, &SkillScope::Global, config);
 
         Ok(Skill {
             id: id.clone(),
@@ -231,55 +239,28 @@ impl ScannerService {
     }
 
     /// Check if this skill is enabled for each tool by looking for symlinks
-    fn check_enabled_status(
+    fn check_enabled_status_for_scope(
         skill_path: &Path,
         skill_id: &str,
+        scope: &SkillScope,
         config: &AppConfig,
     ) -> HashMap<String, bool> {
         let mut enabled = HashMap::new();
 
         for (tool_id, tool_config) in config.collect_tool_configs() {
-            if LinkerService::tool_uses_copy_mode(&tool_id) {
-                let copied_path = tool_config.skills_path.join(skill_id);
-                if copied_path.exists()
-                    && copied_path.is_dir()
-                    && copy_mode_target_matches_source(&copied_path, skill_id, skill_path)
-                {
+            match LinkerService::check_link_for_scoped_skill(
+                skill_path,
+                &tool_config.skills_path,
+                skill_id,
+                &tool_id,
+                scope,
+            ) {
+                crate::services::LinkStatus::Valid => {
                     enabled.insert(tool_id, true);
                 }
-                continue;
-            }
-
-            let link_path = tool_config.skills_path.join(skill_id);
-
-            // Check if a symlink or Junction (Windows) exists at the expected location
-            if is_symlink_or_junction(&link_path) {
-                // For symlinks, read_link gives us the target.
-                // For Junctions, read_link also works (returns the junction target).
-                if let Ok(target) = fs::read_link(&link_path) {
-                    let direct_match = target == skill_path;
-
-                    let is_enabled = if direct_match {
-                        true
-                    } else {
-                        let canonical_skill_path = skill_path.canonicalize().ok();
-
-                        let resolved_target = if target.is_relative() {
-                            link_path
-                                .parent()
-                                .map(|p| p.join(&target))
-                                .and_then(|p| p.canonicalize().ok())
-                        } else {
-                            target.canonicalize().ok()
-                        };
-
-                        match (&resolved_target, &canonical_skill_path) {
-                            (Some(t), Some(s)) => t == s,
-                            _ => false,
-                        }
-                    };
-
-                    enabled.insert(tool_id, is_enabled);
+                crate::services::LinkStatus::Missing => {}
+                _ => {
+                    enabled.insert(tool_id, false);
                 }
             }
         }
@@ -878,6 +859,46 @@ description: "Description from SKILL.md"
 
             assert_eq!(global.enabled.get("claude").copied(), Some(false));
             assert_eq!(project.enabled.get("claude").copied(), Some(true));
+        });
+    }
+
+    #[test]
+    fn scan_global_skills_keeps_legacy_copy_mode_skill_enabled_without_metadata() {
+        with_temp_home(|home| {
+            let global_skills_dir = home.join(".skills-manager").join("skills");
+            let global_skill_dir = global_skills_dir.join("shared-skill");
+            fs::create_dir_all(&global_skill_dir).expect("create global skill dir");
+            fs::write(global_skill_dir.join("SKILL.md"), "---\nname: shared-skill\n---\n")
+                .expect("write global skill");
+
+            let iflow_skills_dir = home.join(".iflow").join("skills");
+            let copied_skill_dir = iflow_skills_dir.join("shared-skill");
+            fs::create_dir_all(&copied_skill_dir).expect("create copied skill dir");
+            fs::write(copied_skill_dir.join("SKILL.md"), "---\nname: shared-skill\n---\n")
+                .expect("write copied skill");
+
+            let config: AppConfig = serde_json::from_value(json!({
+                "version": "2.0.1",
+                "skills_dir": global_skills_dir,
+                "tools": {
+                    "iflow": {
+                        "enabled": true,
+                        "detected": true,
+                        "skills_path": iflow_skills_dir,
+                        "config_path": home.join(".iflow")
+                    }
+                },
+                "custom_tools": {},
+                "initialized": true
+            })).expect("deserialize config");
+
+            let skills = ScannerService::scan_global_skills(&config).expect("scan global skills");
+            let global = skills
+                .iter()
+                .find(|skill| skill.instance_id == "global:shared-skill")
+                .expect("global skill");
+
+            assert_eq!(global.enabled.get("iflow").copied(), Some(true));
         });
     }
 

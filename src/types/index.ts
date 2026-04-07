@@ -131,6 +131,10 @@ export interface CloudSyncState {
 
 export interface CloudSyncSkill {
   id: string;
+  instance_id?: string | null;
+  scope?: SkillScope | null;
+  project_id?: string | null;
+  project_name?: string | null;
   name: string;
   source: "local" | "imported" | "marketplace" | "vault";
   version: string;

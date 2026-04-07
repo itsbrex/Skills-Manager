@@ -24,7 +24,11 @@ fn now_timestamp() -> i64 {
 
 fn payload_hash(payload: &CloudSyncPayload) -> Result<String, String> {
     let mut skills = payload.skills.clone();
-    skills.sort_by(|a, b| a.id.cmp(&b.id));
+    skills.sort_by(|a, b| {
+        let a_identity = a.instance_id.as_deref().unwrap_or(a.id.as_str());
+        let b_identity = b.instance_id.as_deref().unwrap_or(b.id.as_str());
+        a_identity.cmp(b_identity).then_with(|| a.id.cmp(&b.id))
+    });
     for skill in &mut skills {
         if let Some(meta) = skill.marketplace.as_mut() {
             if let Some(value) = meta.marketplace_source_id.as_mut() {
@@ -162,7 +166,7 @@ pub async fn cloud_sync_push() -> Result<CloudSyncPushResult, String> {
         .ok_or_else(|| "not authenticated".to_string())?;
 
     let access_token = resolve_access_token(&session)?;
-    let skills = ScannerService::scan_skills(&config.skills_dir)?;
+    let skills = ScannerService::scan_scoped_skills(&config)?;
     let payload = build_payload(&config, &skills);
     let hash = payload_hash(&payload)?;
 
@@ -220,7 +224,7 @@ pub async fn cloud_sync_resolve(payload: CloudSyncPayload) -> Result<i64, String
 pub fn cloud_sync_has_local_changes() -> Result<bool, String> {
     let manager = ConfigManager::new();
     let config = manager.load()?;
-    let skills = ScannerService::scan_skills(&config.skills_dir)?;
+    let skills = ScannerService::scan_scoped_skills(&config)?;
     let payload = build_payload(&config, &skills);
     let current_hash = payload_hash(&payload)?;
     let state = config.cloud_sync.as_ref();
@@ -237,10 +241,15 @@ pub fn cloud_sync_has_local_changes() -> Result<bool, String> {
 mod tests {
     use super::*;
     use crate::models::auth::{AuthProfile, AuthSession};
-    use crate::models::cloud_sync::{CloudSyncCustomTool, CloudSyncSkill, CloudSyncToolState};
+    use crate::models::cloud_sync::{
+        CloudSyncCustomTool, CloudSyncSkill, CloudSyncState, CloudSyncToolState,
+    };
+    use crate::models::{ProjectBinding, ToolConfig};
     use crate::models::config::UserPreferences;
     use crate::services::ConfigManager;
     use std::collections::HashMap;
+    use std::fs;
+    use std::path::PathBuf;
 
     #[test]
     fn cloud_sync_push_returns_conflict_payload() {
@@ -295,6 +304,82 @@ mod tests {
     }
 
     #[test]
+    fn cloud_sync_push_includes_scoped_enabled_skills() {
+        crate::test_support::with_temp_home(|home| {
+            let global_skills_dir = home.join(".skills-manager").join("skills");
+            fs::create_dir_all(&global_skills_dir).expect("create global skills dir");
+
+            let project_root = home.join("code").join("project-alpha");
+            let project_skills_dir = project_root.join(".claude").join("skills");
+            let project_skill_dir = project_skills_dir.join("shared-skill");
+            fs::create_dir_all(&project_skill_dir).expect("create project skill dir");
+            fs::write(
+                project_skill_dir.join("SKILL.md"),
+                "---\nname: shared-skill\n---\n",
+            )
+            .expect("write project skill");
+
+            let tool_skills_dir = home.join(".codex").join("skills");
+            fs::create_dir_all(&tool_skills_dir).expect("create tool skills dir");
+            std::os::unix::fs::symlink(&project_skill_dir, tool_skills_dir.join("shared-skill"))
+                .expect("link project skill");
+
+            let mut server = mockito::Server::new();
+            std::env::set_var("SKILLS_MARKET_API_BASE", format!("{}/api/v1", server.url()));
+            let _mock = server
+                .mock("POST", "/api/v1/sync/push")
+                .match_body(mockito::Matcher::Regex(
+                    "(?s).*project:project-alpha:shared-skill.*".to_string(),
+                ))
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(r#"{"revision":2}"#)
+                .create();
+
+            let manager = ConfigManager::new();
+            let mut config = manager.load().expect("load config");
+            if let Some(preferences) = config.preferences.as_mut() {
+                preferences.vault_backup_consent = crate::models::VaultBackupConsent::Granted;
+            }
+            config.auth_session = Some(AuthSession {
+                provider: "github".to_string(),
+                access_token: Some("at".to_string()),
+                refresh_token: Some("rt".to_string()),
+                profile: AuthProfile {
+                    username: "octo".to_string(),
+                    avatar_url: None,
+                },
+            });
+            config.skills_dir = global_skills_dir;
+            config.tools = HashMap::from([(
+                "codex".to_string(),
+                ToolConfig {
+                    enabled: true,
+                    detected: true,
+                    skills_path: tool_skills_dir,
+                    config_path: PathBuf::from("/tmp/codex/config"),
+                },
+            )]);
+            config.projects = vec![ProjectBinding {
+                id: "project-alpha".to_string(),
+                name: "Project Alpha".to_string(),
+                root_path: project_root,
+                skills_dir: project_skills_dir,
+            }];
+            config.active_project_id = Some("project-alpha".to_string());
+            manager.save(&config).expect("save config");
+
+            tauri::async_runtime::block_on(async {
+                let result = cloud_sync_push().await.expect("push");
+                match result {
+                    CloudSyncPushResult::Synced { revision } => assert_eq!(revision, 2),
+                    other => panic!("expected synced result, got: {other:?}"),
+                }
+            });
+        });
+    }
+
+    #[test]
     fn payload_hash_ignores_updated_at() {
         let payload = CloudSyncPayload {
             version: 1,
@@ -322,6 +407,10 @@ mod tests {
             skills: vec![
                 CloudSyncSkill {
                     id: "s1".to_string(),
+                    instance_id: None,
+                    scope: None,
+                    project_id: None,
+                    project_name: None,
                     name: "S1".to_string(),
                     source: "local".to_string(),
                     version: "1.0".to_string(),
@@ -330,6 +419,10 @@ mod tests {
                 },
                 CloudSyncSkill {
                     id: "s2".to_string(),
+                    instance_id: None,
+                    scope: None,
+                    project_id: None,
+                    project_name: None,
                     name: "S2".to_string(),
                     source: "local".to_string(),
                     version: "1.0".to_string(),
@@ -379,6 +472,10 @@ mod tests {
             skills: vec![
                 CloudSyncSkill {
                     id: "s2".to_string(),
+                    instance_id: None,
+                    scope: None,
+                    project_id: None,
+                    project_name: None,
                     name: "S2".to_string(),
                     source: "local".to_string(),
                     version: "1.0".to_string(),
@@ -387,6 +484,10 @@ mod tests {
                 },
                 CloudSyncSkill {
                     id: "s1".to_string(),
+                    instance_id: None,
+                    scope: None,
+                    project_id: None,
+                    project_name: None,
                     name: "S1".to_string(),
                     source: "local".to_string(),
                     version: "1.0".to_string(),
@@ -457,6 +558,70 @@ mod tests {
     }
 
     #[test]
+    fn cloud_sync_has_local_changes_detects_active_project_skill_enablement() {
+        crate::test_support::with_temp_home(|home| {
+            let global_skills_dir = home.join(".skills-manager").join("skills");
+            fs::create_dir_all(&global_skills_dir).expect("create global skills dir");
+
+            let project_root = home.join("code").join("project-alpha");
+            let project_skills_dir = project_root.join(".claude").join("skills");
+            let project_skill_dir = project_skills_dir.join("shared-skill");
+            fs::create_dir_all(&project_skill_dir).expect("create project skill dir");
+            fs::write(
+                project_skill_dir.join("SKILL.md"),
+                "---\nname: shared-skill\n---\n",
+            )
+            .expect("write project skill");
+
+            let tool_skills_dir = home.join(".codex").join("skills");
+            fs::create_dir_all(&tool_skills_dir).expect("create tool skills dir");
+            std::os::unix::fs::symlink(&project_skill_dir, tool_skills_dir.join("shared-skill"))
+                .expect("link project skill");
+
+            let manager = ConfigManager::new();
+            let mut config = manager.load().expect("load config");
+            let device_id = config
+                .cloud_sync
+                .as_ref()
+                .expect("cloud sync state")
+                .device_id
+                .clone();
+            if let Some(preferences) = config.preferences.as_mut() {
+                preferences.vault_backup_consent = crate::models::VaultBackupConsent::Granted;
+            }
+
+            config.skills_dir = global_skills_dir;
+            config.tools = HashMap::from([(
+                "codex".to_string(),
+                ToolConfig {
+                    enabled: true,
+                    detected: true,
+                    skills_path: tool_skills_dir,
+                    config_path: PathBuf::from("/tmp/codex/config"),
+                },
+            )]);
+            config.projects = vec![ProjectBinding {
+                id: "project-alpha".to_string(),
+                name: "Project Alpha".to_string(),
+                root_path: project_root,
+                skills_dir: project_skills_dir,
+            }];
+            config.active_project_id = Some("project-alpha".to_string());
+
+            let baseline_payload = build_payload(&config, &[]);
+            config.cloud_sync = Some(CloudSyncState {
+                device_id,
+                last_revision: 1,
+                last_synced_at: Some(1),
+                last_payload_hash: Some(payload_hash(&baseline_payload).expect("baseline hash")),
+            });
+            manager.save(&config).expect("save config");
+
+            assert!(cloud_sync_has_local_changes().expect("detect local changes"));
+        });
+    }
+
+    #[test]
     fn payload_hash_changes_when_marketplace_meta_changes() {
         let payload = CloudSyncPayload {
             version: 1,
@@ -464,6 +629,10 @@ mod tests {
             device_id: "d1".to_string(),
             skills: vec![CloudSyncSkill {
                 id: "s1".to_string(),
+                instance_id: None,
+                scope: None,
+                project_id: None,
+                project_name: None,
                 name: "S1".to_string(),
                 source: "marketplace".to_string(),
                 version: "1.0".to_string(),

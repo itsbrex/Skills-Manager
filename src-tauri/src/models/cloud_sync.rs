@@ -1,4 +1,5 @@
 use crate::models::config::UserPreferences;
+use crate::models::skill::SkillScope;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -26,6 +27,14 @@ impl CloudSyncState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CloudSyncSkill {
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<SkillScope>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_name: Option<String>,
     pub name: String,
     pub source: String,
     pub version: String,

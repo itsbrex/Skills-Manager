@@ -1,9 +1,17 @@
-export function computeMissingSkills<T extends { id: string }>(
+function getCloudSkillIdentity(skill: {
+  id: string;
+  instance_id?: string | null;
+}): string {
+  const instanceId = skill.instance_id?.trim();
+  return instanceId && instanceId.length > 0 ? instanceId : skill.id;
+}
+
+export function computeMissingSkills<T extends { id: string; instance_id?: string | null }>(
   remote: T[],
-  local: { id: string }[],
+  local: { id: string; instance_id?: string | null }[],
 ): T[] {
-  const localIds = new Set(local.map((skill) => skill.id));
-  return remote.filter((skill) => !localIds.has(skill.id));
+  const localIds = new Set(local.map(getCloudSkillIdentity));
+  return remote.filter((skill) => !localIds.has(getCloudSkillIdentity(skill)));
 }
 
 type ConsentValue = "unknown" | "granted" | "denied";
@@ -75,6 +83,10 @@ export function isNonBlockingRestoreError(message: string): boolean {
 
 type CloudSyncSkillLike = {
   id: string;
+  instance_id?: string | null;
+  scope?: "global" | "project" | null;
+  project_id?: string | null;
+  project_name?: string | null;
   name: string;
   source: string;
   marketplace?: {
@@ -92,11 +104,16 @@ type CloudSyncSkillLike = {
 
 export function buildMissingSkillRestores(
   remote: CloudSyncSkillLike[],
-  local: { id: string }[],
+  local: { id: string; instance_id?: string | null }[],
 ): MissingSkillRestore[] {
   const missing = computeMissingSkills(remote, local);
   const restores: MissingSkillRestore[] = [];
   for (const skill of missing) {
+    // Scoped project skills need an explicit target project binding and should
+    // not be restored into the global hub by mistake.
+    if (skill.scope === "project") {
+      continue;
+    }
     if (skill.marketplace?.repo_url && skill.marketplace?.skill_path) {
       restores.push({ type: "marketplace", skill });
       continue;

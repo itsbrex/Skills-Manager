@@ -22,13 +22,20 @@ fn resolve_sync_status(
     tool_id: &str,
     tool_config: &crate::models::ToolConfig,
 ) -> LinkStatus {
-    LinkerService::check_link_for_tool(&skill.path, &tool_config.skills_path, &skill.id, tool_id)
+    LinkerService::check_link_for_scoped_skill(
+        &skill.path,
+        &tool_config.skills_path,
+        &skill.id,
+        tool_id,
+        &skill.scope,
+    )
 }
 
 fn should_report_sync_issue(should_be_enabled: bool, current_status: LinkStatus) -> bool {
     match (should_be_enabled, current_status) {
         (true, LinkStatus::Valid) => false,
         (false, LinkStatus::Missing) => false,
+        (false, LinkStatus::WrongTarget) => false,
         _ => true,
     }
 }
@@ -156,7 +163,8 @@ pub fn fix_sync_issues() -> Result<LinkReport, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::collect_active_tool_configs;
+    use super::{collect_active_tool_configs, should_report_sync_issue};
+    use crate::services::LinkStatus;
     use crate::models::{AppConfig, CustomToolConfig, ToolConfig};
     use std::collections::HashMap;
     use std::path::PathBuf;
@@ -196,5 +204,11 @@ mod tests {
         ids.sort();
 
         assert_eq!(ids, vec!["active".to_string()]);
+    }
+
+    #[test]
+    fn should_report_sync_issue_ignores_wrong_target_for_disabled_skill() {
+        assert!(!should_report_sync_issue(false, LinkStatus::WrongTarget));
+        assert!(should_report_sync_issue(false, LinkStatus::NotALink));
     }
 }

@@ -91,7 +91,7 @@ export function buildGroupToolStateById(
   enabledToolIds: string[],
 ): Record<string, GroupToolState> {
   const memberSkills = getGroupMemberSkills(skillPackage, skills);
-  const memberCount = memberSkills.length;
+  const memberCount = skillPackage.installed_members.length;
 
   return Object.fromEntries(
     enabledToolIds.map((toolId) => {

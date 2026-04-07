@@ -17,6 +17,21 @@ test("computeMissingSkills returns skills that are missing locally", () => {
   );
 });
 
+test("computeMissingSkills distinguishes scoped instances when instance ids are available", () => {
+  const missing = computeMissingSkills(
+    [
+      { id: "shared-skill", instance_id: "global:shared-skill" },
+      { id: "shared-skill", instance_id: "project:project-alpha:shared-skill" },
+    ],
+    [{ id: "shared-skill", instance_id: "global:shared-skill" }],
+  );
+
+  assert.deepEqual(
+    missing.map((skill) => skill.instance_id),
+    ["project:project-alpha:shared-skill"],
+  );
+});
+
 test("buildMissingSkillRestores returns restore plan for missing skills", () => {
   const restores = buildMissingSkillRestores(
     [
@@ -42,6 +57,29 @@ test("buildMissingSkillRestores returns restore plan for missing skills", () => 
     restores.map((item) => item.type),
     ["marketplace", "vault"],
   );
+});
+
+test("buildMissingSkillRestores skips project-scoped skills until scoped restore is supported", () => {
+  const restores = buildMissingSkillRestores(
+    [
+      {
+        id: "shared-skill",
+        instance_id: "project:project-alpha:shared-skill",
+        scope: "project",
+        project_id: "project-alpha",
+        name: "Shared Skill",
+        source: "marketplace",
+        version: "1.0",
+        marketplace: {
+          repo_url: "https://github.com/acme/repo",
+          skill_path: ".claude/skills/shared-skill",
+        },
+      },
+    ],
+    [],
+  );
+
+  assert.deepEqual(restores, []);
 });
 
 test("buildMissingSkillRestores falls back to vault for local/imported skills", () => {

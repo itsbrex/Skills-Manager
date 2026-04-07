@@ -58,7 +58,7 @@ pub fn build_payload(config: &AppConfig, skills: &[Skill]) -> CloudSyncPayload {
         let enabled_skills: Vec<String> = filtered_skills
             .iter()
             .filter(|skill| skill.is_enabled_for(&tool_id))
-            .map(|skill| skill.id.clone())
+            .map(|skill| skill.instance_id.clone())
             .collect();
         tool_states.insert(
             tool_id,
@@ -85,6 +85,10 @@ pub fn build_payload(config: &AppConfig, skills: &[Skill]) -> CloudSyncPayload {
         .iter()
         .map(|skill| CloudSyncSkill {
             id: skill.id.clone(),
+            instance_id: Some(skill.instance_id.clone()),
+            scope: Some(skill.scope.clone()),
+            project_id: skill.project_id.clone(),
+            project_name: skill.project_name.clone(),
             name: skill.name.clone(),
             source: match skill.source {
                 SkillSource::Local => "local".to_string(),
@@ -247,7 +251,7 @@ pub async fn sync_resolve(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{CustomToolConfig, ToolConfig};
+    use crate::models::{CustomToolConfig, SkillScope, ToolConfig};
     use std::collections::HashMap;
 
     #[test]
@@ -423,10 +427,48 @@ mod tests {
         );
         assert_eq!(
             payload.tool_states["codex"].enabled_skills,
-            vec!["s1".to_string()]
+            vec!["global:s1".to_string()]
         );
         assert_eq!(payload.custom_tools.len(), 1);
         assert!(payload.preferences.is_some());
+    }
+
+    #[test]
+    fn build_payload_uses_instance_ids_for_scoped_enabled_skills() {
+        let mut config = AppConfig::default();
+        if let Some(prefs) = config.preferences.as_mut() {
+            prefs.vault_backup_consent = VaultBackupConsent::Granted;
+        }
+        config.tools.insert(
+            "codex".to_string(),
+            ToolConfig {
+                enabled: true,
+                detected: true,
+                skills_path: std::path::PathBuf::from("/tmp/codex/skills"),
+                config_path: std::path::PathBuf::from("/tmp/codex/config"),
+            },
+        );
+
+        let mut global = Skill::new("shared".to_string(), "Shared".to_string(), "/tmp/global".into());
+        global.enabled.insert("codex".to_string(), true);
+
+        let mut project = Skill::new("shared".to_string(), "Shared".to_string(), "/tmp/project".into())
+            .with_scope(
+                SkillScope::Project,
+                Some("project-alpha".to_string()),
+                Some("Project Alpha".to_string()),
+            );
+        project.enabled.insert("codex".to_string(), true);
+
+        let payload = super::build_payload(&config, &[global, project]);
+
+        assert_eq!(
+            payload.tool_states["codex"].enabled_skills,
+            vec![
+                "global:shared".to_string(),
+                "project:project-alpha:shared".to_string(),
+            ]
+        );
     }
 
     #[test]
@@ -458,7 +500,7 @@ mod tests {
         assert_eq!(payload.skills[0].id, "m1");
         assert_eq!(
             payload.tool_states["codex"].enabled_skills,
-            vec!["m1".to_string()]
+            vec!["global:m1".to_string()]
         );
     }
 }

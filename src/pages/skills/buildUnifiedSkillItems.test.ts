@@ -42,6 +42,10 @@ const tools: Tool[] = [
 const skills: Skill[] = [
   {
     id: "skill-alpha",
+    instance_id: "skill-alpha",
+    scope: "global",
+    project_id: null,
+    project_name: null,
     name: "Alpha Skill",
     description: "Editor workflows",
     version: "1.0.0",
@@ -51,6 +55,10 @@ const skills: Skill[] = [
   },
   {
     id: "skill-beta",
+    instance_id: "skill-beta",
+    scope: "global",
+    project_id: null,
+    project_name: null,
     name: "Beta Skill",
     description: "Team operations",
     version: "1.0.0",

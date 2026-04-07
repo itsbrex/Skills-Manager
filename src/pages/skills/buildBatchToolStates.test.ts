@@ -11,6 +11,10 @@ import {
 function createSkill(id: string, enabled: Record<string, boolean>): Skill {
   return {
     id,
+    instance_id: id,
+    scope: "global",
+    project_id: null,
+    project_name: null,
     name: id,
     description: null,
     version: "1.0.0",

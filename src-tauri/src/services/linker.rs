@@ -1,4 +1,5 @@
 use crate::services::config_manager::ConfigManager;
+use crate::models::SkillScope;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
@@ -34,6 +35,10 @@ struct CopyModeMetadata {
     source_path: String,
 }
 
+fn copy_mode_metadata_path(target_path: &Path) -> PathBuf {
+    target_path.join(COPY_MODE_METADATA_FILE)
+}
+
 fn write_copy_mode_metadata(target_path: &Path, skill_id: &str, skill_source: &Path) -> Result<(), String> {
     let metadata = CopyModeMetadata {
         skill_id: skill_id.to_string(),
@@ -41,12 +46,12 @@ fn write_copy_mode_metadata(target_path: &Path, skill_id: &str, skill_source: &P
     };
     let content = serde_json::to_string_pretty(&metadata)
         .map_err(|e| format!("Failed to serialize copy mode metadata: {}", e))?;
-    fs::write(target_path.join(COPY_MODE_METADATA_FILE), content)
+    fs::write(copy_mode_metadata_path(target_path), content)
         .map_err(|e| format!("Failed to write copy mode metadata: {}", e))
 }
 
 pub fn read_copy_mode_metadata(target_path: &Path) -> Option<(String, PathBuf)> {
-    let content = fs::read_to_string(target_path.join(COPY_MODE_METADATA_FILE)).ok()?;
+    let content = fs::read_to_string(copy_mode_metadata_path(target_path)).ok()?;
     let metadata: CopyModeMetadata = serde_json::from_str(&content).ok()?;
     Some((metadata.skill_id, PathBuf::from(metadata.source_path)))
 }
@@ -56,6 +61,10 @@ pub fn copy_mode_target_matches_source(target_path: &Path, skill_id: &str, skill
         Some((saved_skill_id, saved_source_path)) => saved_skill_id == skill_id && saved_source_path == skill_source,
         None => false,
     }
+}
+
+pub fn copy_mode_metadata_exists(target_path: &Path) -> bool {
+    copy_mode_metadata_path(target_path).exists()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -311,6 +320,7 @@ impl LinkerService {
         }
     }
 
+    #[cfg(test)]
     pub fn check_link_for_tool(
         skill_source: &Path,
         tool_skills_dir: &Path,
@@ -339,6 +349,44 @@ impl LinkerService {
         } else {
             LinkStatus::Missing
         }
+    }
+
+    pub fn check_link_for_scoped_skill(
+        skill_source: &Path,
+        tool_skills_dir: &Path,
+        skill_id: &str,
+        tool_id: &str,
+        scope: &SkillScope,
+    ) -> LinkStatus {
+        if !Self::tool_uses_copy_mode(tool_id) {
+            return Self::check_link(skill_source, tool_skills_dir, skill_id);
+        }
+
+        let copied_path = tool_skills_dir.join(skill_id);
+        if !copied_path.exists() {
+            return LinkStatus::Missing;
+        }
+        if !copied_path.is_dir() {
+            return LinkStatus::NotALink;
+        }
+
+        if copy_mode_target_matches_source(&copied_path, skill_id, skill_source) {
+            return if skill_source.exists() {
+                LinkStatus::Valid
+            } else {
+                LinkStatus::Broken
+            };
+        }
+
+        if !copy_mode_metadata_exists(&copied_path) && matches!(scope, SkillScope::Global) {
+            return if skill_source.exists() {
+                LinkStatus::Valid
+            } else {
+                LinkStatus::Broken
+            };
+        }
+
+        LinkStatus::WrongTarget
     }
 
     #[cfg(test)]
