@@ -1,4 +1,5 @@
 use crate::services::{ConfigManager, LinkReport, LinkStatus, LinkerService, ScannerService};
+use crate::services::linker::LinkResult;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,61 +17,138 @@ fn collect_active_tool_configs(
         .collect()
 }
 
+fn resolve_sync_status(
+    skill: &crate::models::Skill,
+    tool_id: &str,
+    tool_config: &crate::models::ToolConfig,
+) -> LinkStatus {
+    LinkerService::check_link_for_tool(&skill.path, &tool_config.skills_path, &skill.id, tool_id)
+}
+
+fn should_report_sync_issue(should_be_enabled: bool, current_status: LinkStatus) -> bool {
+    match (should_be_enabled, current_status) {
+        (true, LinkStatus::Valid) => false,
+        (false, LinkStatus::Missing) => false,
+        _ => true,
+    }
+}
+
+fn create_sync_result(
+    skill_id: String,
+    tool_id: String,
+    status: LinkStatus,
+    message: &str,
+) -> LinkResult {
+    LinkResult {
+        skill_id,
+        tool_id,
+        status,
+        message: Some(message.to_string()),
+    }
+}
+
+fn create_sync_error(
+    skill_id: String,
+    tool_id: String,
+    status: LinkStatus,
+    message: String,
+) -> LinkResult {
+    LinkResult {
+        skill_id,
+        tool_id,
+        status,
+        message: Some(message),
+    }
+}
+
 #[tauri::command]
 pub fn check_sync_status() -> Result<SyncReport, String> {
-    let manager = ConfigManager::new();
-    let config = manager.load()?;
+    let config = ConfigManager::new().load()?;
+    let skills = ScannerService::scan_scoped_skills(&config)?;
 
-    let skills = ScannerService::scan_skills(&config.skills_dir)?;
-    let mut issues_count = 0;
-
-    for (tool_id, tool_config) in collect_active_tool_configs(&config) {
-        for skill in &skills {
-            let status = LinkerService::check_link_for_tool(
-                &skill.path,
-                &tool_config.skills_path,
-                &skill.id,
-                &tool_id,
-            );
-
-            if status != LinkStatus::Valid && status != LinkStatus::Missing {
-                issues_count += 1;
-            }
-        }
-    }
+    let issues_count = collect_active_tool_configs(&config)
+        .into_iter()
+        .map(|(tool_id, tool_config)| {
+            skills
+                .iter()
+                .filter(|skill| {
+                    should_report_sync_issue(
+                        skill.is_enabled_for(&tool_id),
+                        resolve_sync_status(skill, &tool_id, &tool_config),
+                    )
+                })
+                .count()
+        })
+        .sum();
 
     Ok(SyncReport { issues_count })
 }
 
 #[tauri::command]
 pub fn fix_sync_issues() -> Result<LinkReport, String> {
-    let manager = ConfigManager::new();
-    let config = manager.load()?;
-
-    let skills = ScannerService::scan_skills(&config.skills_dir)?;
+    let config = ConfigManager::new().load()?;
+    let skills = ScannerService::scan_scoped_skills(&config)?;
     let mut combined_report = LinkReport::default();
 
     for (tool_id, tool_config) in collect_active_tool_configs(&config) {
-        let skill_data: Vec<(String, std::path::PathBuf)> = skills
-            .iter()
-            .map(|s| (s.id.clone(), s.path.clone()))
-            .collect();
+        for skill in &skills {
+            let should_be_enabled = skill.is_enabled_for(&tool_id);
+            let current_status = resolve_sync_status(skill, &tool_id, &tool_config);
 
-        let enabled_skills: Vec<String> = skills
-            .iter()
-            .filter(|s| s.is_enabled_for(&tool_id))
-            .map(|s| s.id.clone())
-            .collect();
+            if !should_report_sync_issue(should_be_enabled, current_status.clone()) {
+                continue;
+            }
 
-        let report = LinkerService::sync_all_for_tool(
-            &skill_data,
-            &tool_config.skills_path,
-            &enabled_skills,
-            &tool_id,
-        );
+            if should_be_enabled {
+                match LinkerService::enable_skill_for_tool(
+                    &skill.path,
+                    &tool_config.skills_path,
+                    &skill.id,
+                    &tool_id,
+                ) {
+                    Ok(_) => combined_report.success.push(create_sync_result(
+                        skill.instance_id.clone(),
+                        tool_id.clone(),
+                        LinkStatus::Valid,
+                        "Enabled successfully",
+                    )),
+                    Err(e) => combined_report.failed.push(create_sync_error(
+                        skill.instance_id.clone(),
+                        tool_id.clone(),
+                        LinkStatus::Broken,
+                        e,
+                    )),
+                }
+                continue;
+            }
 
-        combined_report.success.extend(report.success);
-        combined_report.failed.extend(report.failed);
+            match current_status {
+                LinkStatus::Valid => match LinkerService::disable_skill_for_tool(
+                    &tool_config.skills_path,
+                    &skill.id,
+                    &tool_id,
+                ) {
+                    Ok(_) => combined_report.success.push(create_sync_result(
+                        skill.instance_id.clone(),
+                        tool_id.clone(),
+                        LinkStatus::Missing,
+                        "Disabled successfully",
+                    )),
+                    Err(e) => combined_report.failed.push(create_sync_error(
+                        skill.instance_id.clone(),
+                        tool_id.clone(),
+                        LinkStatus::Broken,
+                        e,
+                    )),
+                },
+                status => combined_report.failed.push(create_sync_error(
+                    skill.instance_id.clone(),
+                    tool_id.clone(),
+                    status,
+                    "Target belongs to another instance or is invalid".to_string(),
+                )),
+            }
+        }
     }
 
     Ok(combined_report)

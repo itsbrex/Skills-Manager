@@ -2,7 +2,7 @@ import type { InstalledSkillPackage, Skill, SkillMetadataMap, Tool } from "../..
 import { getEnabledToolIds } from "./getEnabledToolIds.ts";
 import { orderToolIdsForSkill } from "./orderToolIds.ts";
 import { summarizeEnabledTools, type EnabledToolsSummary } from "./summarizeEnabledTools.ts";
-import { getSkillTags, normalizeSkillTags } from "./skillTags.ts";
+import { getGroupMetadataKey, getGroupTags, getSkillTagsForSkill, normalizeSkillTags } from "./skillTags.ts";
 
 export interface GroupToolState {
   toolId: string;
@@ -80,16 +80,9 @@ function getSearchRank(item: UnifiedSkillListItem, query: string): number {
   return 3;
 }
 
-export function getSkillsById(skills: Skill[]): Map<string, Skill> {
-  return new Map(skills.map((skill) => [skill.id, skill]));
-}
-
 export function getGroupMemberSkills(skillPackage: InstalledSkillPackage, skills: Skill[]): Skill[] {
-  const skillsById = getSkillsById(skills);
-
-  return skillPackage.installed_members
-    .map((memberId) => skillsById.get(memberId))
-    .filter((skill): skill is Skill => Boolean(skill));
+  const memberIds = new Set(skillPackage.installed_members);
+  return skills.filter((skill) => memberIds.has(skill.id) && skill.scope === "global");
 }
 
 export function buildGroupToolStateById(
@@ -98,7 +91,7 @@ export function buildGroupToolStateById(
   enabledToolIds: string[],
 ): Record<string, GroupToolState> {
   const memberSkills = getGroupMemberSkills(skillPackage, skills);
-  const memberCount = skillPackage.installed_members.length;
+  const memberCount = memberSkills.length;
 
   return Object.fromEntries(
     enabledToolIds.map((toolId) => {
@@ -154,12 +147,30 @@ export function getGroupToolLabel(toolLabel: string, state: GroupToolState): str
   return `${toolLabel} · ${getGroupToolCoverageLabel(state)}`;
 }
 
-function getGroupMetadataKey(packageId: string): string {
-  return `group:${packageId}`;
+function getSkillBadgeLabel(skill: Skill): string | null {
+  if (skill.scope === "project") {
+    return skill.project_name ?? skill.project_id ?? "Project";
+  }
+
+  return null;
 }
 
-function getGroupTags(packageId: string, skillMetadata?: SkillMetadataMap): string[] {
-  return normalizeSkillTags(skillMetadata?.[getGroupMetadataKey(packageId)]?.tags ?? []);
+function getSkillSearchText(skill: Skill, tags: string[]): string {
+  return buildSearchText([
+    skill.name,
+    skill.id,
+    skill.instance_id,
+    skill.description,
+    skill.scope,
+    skill.project_id ?? null,
+    skill.project_name ?? null,
+    ...tags,
+  ]);
+}
+
+function getSkillPreviewChips(skill: Skill, tags: string[]): string[] {
+  const scopeChip = skill.scope === "project" ? (skill.project_name ?? skill.project_id ?? "project") : null;
+  return scopeChip ? [scopeChip, ...tags].slice(0, 3) : tags.slice(0, 3);
 }
 
 export function buildUnifiedSkillItems({
@@ -172,24 +183,26 @@ export function buildUnifiedSkillItems({
   const enabledToolIds = getEnabledToolIds(tools);
 
   const skillItems = skills.map((skill): UnifiedSkillListItem => {
-    const tags = getSkillTags(skill.id, skillMetadata);
+    const tags = getSkillTagsForSkill(skill, skillMetadata);
     const orderedToolIds = orderToolIdsForSkill(enabledToolIds, skill.enabled);
+    const previewChips = getSkillPreviewChips(skill, tags);
+    const previewTotal = tags.length + (skill.scope === "project" ? 1 : 0);
 
     return {
       kind: "skill",
-      key: `skill:${skill.id}`,
-      id: skill.id,
+      key: `skill:${skill.instance_id}`,
+      id: skill.instance_id,
       title: skill.name,
       description: skill.description,
       openPath: skill.path,
-      searchText: buildSearchText([skill.name, skill.id, skill.description, ...tags]),
+      searchText: getSkillSearchText(skill, tags),
       tags,
       supportsTagFilter: true,
-      badgeLabel: null,
-      previewChips: tags.slice(0, 3),
-      previewOverflowCount: Math.max(0, tags.length - 3),
+      badgeLabel: getSkillBadgeLabel(skill),
+      previewChips,
+      previewOverflowCount: Math.max(0, previewTotal - previewChips.length),
       sortName: skill.name.toLowerCase(),
-      sortPriority: 0,
+      sortPriority: skill.scope === "project" ? 0 : 1,
       toolSummary: summarizeEnabledTools(orderedToolIds, skill.enabled, 2),
       skill,
     };
@@ -221,7 +234,7 @@ export function buildUnifiedSkillItems({
         (tags.length > 0 ? tags.length : skillPackage.installed_members.length) - previewChips.length,
       ),
       sortName: skillPackage.name.toLowerCase(),
-      sortPriority: 1,
+      sortPriority: 2,
       memberCount: skillPackage.installed_members.length,
       groupToolStateById: buildGroupToolStateById(skillPackage, skills, enabledToolIds),
       skillPackage,

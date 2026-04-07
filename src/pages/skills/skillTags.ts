@@ -51,6 +51,32 @@ export function getSkillTags(skillId: string, skillMetadata?: SkillMetadataMap):
   return normalizeSkillTags(skillMetadata?.[skillId]?.tags ?? []);
 }
 
+export function getSkillMetadataKey(skill: Pick<Skill, "id" | "scope" | "instance_id">): string {
+  return skill.scope === "project" ? skill.instance_id : skill.id;
+}
+
+export function getSkillTagsForSkill(skill: Skill, skillMetadata?: SkillMetadataMap): string[] {
+  return getSkillTags(getSkillMetadataKey(skill), skillMetadata);
+}
+
+export function hasSkillMetadataEntry(
+  skill: Pick<Skill, "id" | "scope" | "instance_id">,
+  skillMetadata?: SkillMetadataMap,
+): boolean {
+  return Boolean(skillMetadata?.[getSkillMetadataKey(skill)]);
+}
+
+export function removeSkillMetadataEntry(
+  skill: Pick<Skill, "id" | "scope" | "instance_id">,
+  skillMetadata?: SkillMetadataMap,
+): SkillMetadataMap {
+  return removeMetadataEntry(getSkillMetadataKey(skill), skillMetadata);
+}
+
+export function getUntaggedSkillsCount(skills: Skill[], skillMetadata?: SkillMetadataMap): number {
+  return skills.filter((skill) => getSkillTagsForSkill(skill, skillMetadata).length === 0).length;
+}
+
 export function getGroupMetadataKey(groupId: string): string {
   return `group:${groupId}`;
 }
@@ -106,7 +132,7 @@ export function buildSkillTagSummaries(
   const counts = new Map<string, number>();
 
   for (const skill of skills) {
-    for (const tag of getSkillTags(skill.id, skillMetadata)) {
+    for (const tag of getSkillTagsForSkill(skill, skillMetadata)) {
       counts.set(tag, (counts.get(tag) ?? 0) + 1);
     }
   }
@@ -184,6 +210,7 @@ function matchesSearch(skill: Skill, tags: string[], searchQuery: string): boole
   return (
     skill.name.toLowerCase().includes(query) ||
     skill.id.toLowerCase().includes(query) ||
+    skill.instance_id.toLowerCase().includes(query) ||
     (skill.description?.toLowerCase().includes(query) ?? false) ||
     tags.some((tag) => tag.includes(query))
   );
@@ -197,7 +224,7 @@ export function filterSkills(
   const selectedTags = normalizeSkillTags(filters.selectedTags);
 
   return skills.filter((skill) => {
-    const tags = getSkillTags(skill.id, skillMetadata);
+    const tags = getSkillTagsForSkill(skill, skillMetadata);
 
     if (!matchesSearch(skill, tags, filters.searchQuery)) {
       return false;

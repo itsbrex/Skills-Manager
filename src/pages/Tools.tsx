@@ -28,9 +28,9 @@ import {
   getToolBulkToggleTargets,
 } from "./tools/bulkToggleToolSkills";
 
-function getSkillDisplayName(skillId: string, skills: Skill[]): string {
-  const skill = skills.find((item) => item.id === skillId);
-  return skill?.name ?? skillId;
+function getSkillDisplayName(skillIdentity: string, skills: Skill[]): string {
+  const skill = skills.find((item) => item.instance_id === skillIdentity) ?? skills.find((item) => item.id === skillIdentity);
+  return skill?.name ?? skillIdentity;
 }
 
 export function Tools() {
@@ -94,60 +94,52 @@ export function Tools() {
     transition: 'background-color 0.15s, color 0.15s, border-color 0.15s',
   };
 
+  const fetchToolsAndSkills = useCallback(async (
+    toolsCommand: "detect_tools" | "refresh_tools",
+    skillsCommand: "list_skills" | "refresh_skills",
+  ) => {
+    setError(null);
+    const [toolsResult, skillsResult] = await Promise.all([
+      invoke<Tool[]>(toolsCommand),
+      invoke<Skill[]>(skillsCommand),
+    ]);
+    setTools(toolsResult);
+    setSkills(skillsResult);
+    setIconFallbackStage({});
+  }, []);
+
   // Initial load - uses cached data
   const loadTools = useCallback(async () => {
-    setError(null);
     try {
-      const [toolsResult, skillsResult] = await Promise.all([
-        invoke<Tool[]>("detect_tools"),
-        invoke<Skill[]>("list_skills"),
-      ]);
-      setTools(toolsResult);
-      setSkills(skillsResult);
-      setIconFallbackStage({});
+      await fetchToolsAndSkills("detect_tools", "list_skills");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setInitialLoading(false);
     }
-  }, []);
+  }, [fetchToolsAndSkills]);
 
   // Manual refresh - forces re-detection
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    setError(null);
     try {
-      const [toolsResult, skillsResult] = await Promise.all([
-        invoke<Tool[]>("refresh_tools"),
-        invoke<Skill[]>("refresh_skills"),
-      ]);
-      setTools(toolsResult);
-      setSkills(skillsResult);
-      setIconFallbackStage({});
+      await fetchToolsAndSkills("refresh_tools", "refresh_skills");
       addToast(t("common.refreshSuccess"), "success");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setRefreshing(false);
     }
-  }, [addToast, t]);
+  }, [addToast, fetchToolsAndSkills, t]);
 
   // Reload after operations - force re-detection to avoid stale cached list
   const reloadTools = useCallback(async () => {
-    setError(null);
     try {
-      const [toolsResult, skillsResult] = await Promise.all([
-        invoke<Tool[]>("refresh_tools"),
-        invoke<Skill[]>("list_skills"),
-      ]);
-      setTools(toolsResult);
-      setSkills(skillsResult);
-      setIconFallbackStage({});
+      await fetchToolsAndSkills("refresh_tools", "list_skills");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, []);
-
+  }, [fetchToolsAndSkills]);
   const toggleToolEnabled = useCallback(async (tool: Tool, enabled: boolean) => {
     // Undetected tools cannot be enabled, but still allow disabling if already enabled.
     if (enabled && !tool.detected) {
@@ -186,24 +178,24 @@ export function Tools() {
     setToolEditorEnabledOnly(false);
   }, []);
 
-  const handleToggleSkillForTool = useCallback(async (tool: Tool, skillId: string, enabled: boolean) => {
-    const toggleKey = `${tool.id}:${skillId}`;
+  const handleToggleSkillForTool = useCallback(async (tool: Tool, instanceId: string, enabled: boolean) => {
+    const toggleKey = `${tool.id}:${instanceId}`;
     setTogglingSkill(toggleKey);
 
     try {
       if (enabled) {
-        await invoke("enable_skill", { skillId, toolId: tool.id });
+        await invoke("enable_skill", { instanceId, toolId: tool.id });
         addToast(
           t("skills.enableSuccess")
-            .replace("{skill}", getSkillDisplayName(skillId, skills))
+            .replace("{skill}", getSkillDisplayName(instanceId, skills))
             .replace("{tool}", tool.name),
           "success",
         );
       } else {
-        await invoke("disable_skill", { skillId, toolId: tool.id });
+        await invoke("disable_skill", { instanceId, toolId: tool.id });
         addToast(
           t("skills.disableSuccess")
-            .replace("{skill}", getSkillDisplayName(skillId, skills))
+            .replace("{skill}", getSkillDisplayName(instanceId, skills))
             .replace("{tool}", tool.name),
           "success",
         );
@@ -219,7 +211,7 @@ export function Tools() {
   const handleBulkToggleToolSkills = useCallback(async (tool: Tool, visibleSkillIds: string[]) => {
     const enabledMap: Record<string, boolean> = {};
     skills.forEach((skill) => {
-      enabledMap[skill.id] = Boolean(skill.enabled[tool.id]);
+      enabledMap[skill.instance_id] = Boolean(skill.enabled[tool.id]);
     });
 
     const bulkMode = getToolBulkToggleMode(visibleSkillIds, enabledMap);
@@ -247,7 +239,7 @@ export function Tools() {
     // Optimistic update for immediate feedback.
     setSkills((prev) =>
       prev.map((skill) => {
-        if (!targetSkillIds.includes(skill.id)) {
+        if (!targetSkillIds.includes(skill.instance_id)) {
           return skill;
         }
         return {
@@ -263,7 +255,7 @@ export function Tools() {
     try {
       const command = enabled ? "enable_skill" : "disable_skill";
       const results = await Promise.allSettled(
-        targetSkillIds.map((skillId) => invoke(command, { skillId, toolId: tool.id })),
+        targetSkillIds.map((instanceId) => invoke(command, { instanceId, toolId: tool.id })),
       );
 
       const failedCount = results.filter((result) => result.status === "rejected").length;
@@ -608,7 +600,7 @@ export function Tools() {
   );
 
   const skillIds = useMemo(
-    () => skills.map((skill) => skill.id),
+    () => skills.map((skill) => skill.instance_id),
     [skills],
   );
 
@@ -618,7 +610,7 @@ export function Tools() {
     }
     const enabledMap: Record<string, boolean> = {};
     skills.forEach((skill) => {
-      enabledMap[skill.id] = Boolean(skill.enabled[toolEditorTool.id]);
+      enabledMap[skill.instance_id] = Boolean(skill.enabled[toolEditorTool.id]);
     });
     return enabledMap;
   }, [skills, toolEditorTool]);

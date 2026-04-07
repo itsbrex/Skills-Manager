@@ -320,14 +320,20 @@ function useCloudSyncAgent(): CloudSyncContextValue {
         continue;
       }
       const desired = new Set(toolState.enabled_skills);
+      const logicalIdCounts = new Map<string, number>();
+      skills.forEach((skill) => {
+        logicalIdCounts.set(skill.id, (logicalIdCounts.get(skill.id) ?? 0) + 1);
+      });
       for (const skill of skills) {
         const currentEnabled = Boolean(skill.enabled?.[toolId]);
-        const shouldEnable = desired.has(skill.id);
+        const wantsExactInstance = desired.has(skill.instance_id);
+        const wantsLegacyLogicalId = desired.has(skill.id) && (logicalIdCounts.get(skill.id) ?? 0) === 1;
+        const shouldEnable = wantsExactInstance || wantsLegacyLogicalId;
         if (shouldEnable && !currentEnabled) {
-          await invoke("enable_skill", { skillId: skill.id, toolId });
+          await invoke("enable_skill", { instanceId: skill.instance_id, toolId });
         }
         if (!shouldEnable && currentEnabled) {
-          await invoke("disable_skill", { skillId: skill.id, toolId });
+          await invoke("disable_skill", { instanceId: skill.instance_id, toolId });
         }
       }
     }

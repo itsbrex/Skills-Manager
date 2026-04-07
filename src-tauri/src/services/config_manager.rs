@@ -603,6 +603,74 @@ mod tests {
         });
     }
 
+    #[test]
+    fn load_and_save_round_trip_project_bindings() {
+        with_temp_home(|home_dir| {
+            let config_dir = home_dir.join(".skills-manager");
+            fs::create_dir_all(&config_dir).expect("create config dir");
+            let config_path = config_dir.join("config.json");
+
+            let legacy_config_json = json!({
+                "version": "2.0.1",
+                "skills_dir": config_dir.join("skills").to_string_lossy(),
+                "tools": {},
+                "custom_tools": {},
+                "initialized": true
+            });
+            fs::write(
+                &config_path,
+                serde_json::to_string_pretty(&legacy_config_json).expect("serialize config"),
+            )
+            .expect("write config");
+
+            let manager = ConfigManager::new();
+            let loaded = manager.load().expect("load legacy config");
+            let loaded_value = serde_json::to_value(&loaded).expect("serialize loaded config");
+
+            assert_eq!(loaded_value.get("projects"), Some(&json!([])));
+            assert_eq!(loaded_value.get("active_project_id"), Some(&serde_json::Value::Null));
+
+            let updated_config_json = json!({
+                "version": "2.0.1",
+                "skills_dir": config_dir.join("skills").to_string_lossy(),
+                "tools": {},
+                "custom_tools": {},
+                "projects": [
+                    {
+                        "id": "project-alpha",
+                        "name": "Project Alpha",
+                        "root_path": home_dir.join("code").join("alpha").to_string_lossy(),
+                        "skills_dir": home_dir.join("code").join("alpha").join(".claude").join("skills").to_string_lossy()
+                    }
+                ],
+                "active_project_id": "project-alpha",
+                "initialized": true
+            });
+            fs::write(
+                &config_path,
+                serde_json::to_string_pretty(&updated_config_json).expect("serialize config"),
+            )
+            .expect("write updated config");
+
+            let reloaded = manager.load().expect("reload config with projects");
+            manager.save(&reloaded).expect("save config with projects");
+
+            let saved_value: serde_json::Value = serde_json::from_str(
+                &fs::read_to_string(&config_path).expect("read saved config"),
+            )
+            .expect("parse saved config");
+
+            assert_eq!(saved_value.get("active_project_id"), Some(&json!("project-alpha")));
+            assert_eq!(
+                saved_value
+                    .get("projects")
+                    .and_then(|projects| projects.as_array())
+                    .map(|projects| projects.len()),
+                Some(1)
+            );
+        });
+    }
+
     #[cfg(unix)]
     #[test]
     fn save_replaces_existing_readonly_config_file() {

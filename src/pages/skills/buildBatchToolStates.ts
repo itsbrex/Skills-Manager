@@ -35,7 +35,7 @@ export function buildBatchToolStateSummaries(
     return [];
   });
 
-  const uniqueSkills = new Map(expandedSelections.map((skill) => [skill.id, skill]));
+  const uniqueSkills = new Map(expandedSelections.map((skill) => [skill.instance_id, skill]));
 
   return Object.fromEntries(
     tools.map((tool) => {

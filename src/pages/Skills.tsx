@@ -27,10 +27,14 @@ import {
   getGroupMetadataKey,
   getGroupTags,
   getTagFilterSelectionSummary,
-  getSkillTags,
+  getSkillMetadataKey,
+  getSkillTagsForSkill,
+  getUntaggedSkillsCount,
   hasSelectableTagFilters,
   normalizeSkillTags,
   updateMetadataTags,
+  hasSkillMetadataEntry,
+  removeSkillMetadataEntry,
 } from "./skills/skillTags";
 import { orderToolIdsForSkill } from "./skills/orderToolIds";
 import { getEnabledToolIds } from "./skills/getEnabledToolIds";
@@ -523,36 +527,38 @@ export function Skills() {
     setShowTagFilterMenu(false);
   }, [selectedTags, untaggedOnly]);
 
-  const handleAddTag = useCallback(async (skillId: string) => {
+  const handleAddTag = useCallback(async (skill: Skill) => {
     const nextTag = normalizeSkillTags([tagDraft])[0];
     if (!nextTag) {
       return;
     }
 
-    const currentTags = getSkillTags(skillId, skillMetadata);
+    const metadataKey = getSkillMetadataKey(skill);
+    const currentTags = getSkillTagsForSkill(skill, skillMetadata);
     if (currentTags.includes(nextTag)) {
       setTagDraft("");
       return;
     }
 
-    await persistSkillTags(skillId, [...currentTags, nextTag]);
+    await persistSkillTags(metadataKey, [...currentTags, nextTag]);
     setTagDraft("");
   }, [persistSkillTags, skillMetadata, tagDraft]);
 
-  const handleRemoveTag = useCallback(async (skillId: string, tag: string) => {
-    const nextTags = getSkillTags(skillId, skillMetadata).filter((item) => item !== tag);
-    await persistSkillTags(skillId, nextTags);
+  const handleRemoveTag = useCallback(async (skill: Skill, tag: string) => {
+    const metadataKey = getSkillMetadataKey(skill);
+    const nextTags = getSkillTagsForSkill(skill, skillMetadata).filter((item: string) => item !== tag);
+    await persistSkillTags(metadataKey, nextTags);
   }, [persistSkillTags, skillMetadata]);
 
-  const handleToggle = async (skillId: string, skillName: string, toolId: string, enabled: boolean) => {
-    const toggleKey = `${skillId}:${toolId}`;
+  const handleToggle = async (instanceId: string, skillName: string, toolId: string, enabled: boolean) => {
+    const toggleKey = `${instanceId}:${toolId}`;
     setTogglingSkill(toggleKey);
     try {
       if (enabled) {
-        await invoke("enable_skill", { skillId, toolId });
+        await invoke("enable_skill", { instanceId, toolId });
         addToast(t("skills.enableSuccess").replace("{skill}", skillName).replace("{tool}", getToolDisplayName(toolId, tools)), "success");
       } else {
-        await invoke("disable_skill", { skillId, toolId });
+        await invoke("disable_skill", { instanceId, toolId });
         addToast(t("skills.disableSuccess").replace("{skill}", skillName).replace("{tool}", getToolDisplayName(toolId, tools)), "success");
       }
       await reloadData();
@@ -563,8 +569,8 @@ export function Skills() {
     }
   };
 
-  const openSkillEditor = useCallback((skillId: string, tab: SkillEditorTab = "tools") => {
-    setToolEditorSkillId(skillId);
+  const openSkillEditor = useCallback((skillIdentity: string, tab: SkillEditorTab = "tools") => {
+    setToolEditorSkillId(skillIdentity);
     setGroupEditorPackageId(null);
     setSkillEditorTab(tab);
     setToolEditorQuery("");
@@ -617,11 +623,11 @@ export function Skills() {
       return;
     }
 
-    setBulkTogglingSkillId(skill.id);
+    setBulkTogglingSkillId(skill.instance_id);
 
     setSkills((prevSkills) =>
       prevSkills.map((item) => {
-        if (item.id !== skill.id) {
+        if (item.instance_id !== skill.instance_id) {
           return item;
         }
 
@@ -637,7 +643,7 @@ export function Skills() {
     try {
       const command = enabled ? "enable_skill" : "disable_skill";
       const results = await Promise.allSettled(
-        targetToolIds.map((toolId) => invoke(command, { skillId: skill.id, toolId })),
+        targetToolIds.map((toolId) => invoke(command, { instanceId: skill.instance_id, toolId })),
       );
 
       const failedCount = results.filter((result) => result.status === "rejected").length;
@@ -669,18 +675,16 @@ export function Skills() {
     });
     if (!confirmed) return;
 
-    setDeletingSkill(skill.id);
+    setDeletingSkill(skill.instance_id);
     try {
-      await invoke("delete_skill", { skillId: skill.id });
-      if (toolEditorSkillId === skill.id) {
+      await invoke("delete_skill", { instanceId: skill.instance_id });
+      if (toolEditorSkillId === skill.instance_id) {
         closeSkillEditor();
       }
-      if (config?.skill_metadata?.[skill.id]) {
+      if (config && hasSkillMetadataEntry(skill, config.skill_metadata)) {
         const nextConfig: AppConfig = {
           ...config,
-          skill_metadata: Object.fromEntries(
-            Object.entries(config.skill_metadata).filter(([itemSkillId]) => itemSkillId !== skill.id),
-          ),
+          skill_metadata: removeSkillMetadataEntry(skill, config.skill_metadata),
         };
         try {
           await invoke("save_config", { config: nextConfig });
@@ -728,7 +732,7 @@ export function Skills() {
   );
 
   const untaggedSkillsCount = useMemo(
-    () => skills.filter((skill) => getSkillTags(skill.id, skillMetadata).length === 0).length,
+    () => getUntaggedSkillsCount(skills, skillMetadata),
     [skillMetadata, skills],
   );
 
@@ -927,7 +931,7 @@ export function Skills() {
   );
 
   const toolEditorSkill = useMemo(
-    () => skills.find((skill) => skill.id === toolEditorSkillId) ?? null,
+    () => skills.find((skill) => skill.instance_id === toolEditorSkillId) ?? null,
     [skills, toolEditorSkillId],
   );
 
@@ -987,9 +991,9 @@ export function Skills() {
     );
   }, [toolEditorFilteredToolIds, toolEditorSkill, tools, toolEditorBulkToggleMode]);
 
-  const toolEditorIsBulkToggling = toolEditorSkill ? bulkTogglingSkillId === toolEditorSkill.id : false;
+  const toolEditorIsBulkToggling = toolEditorSkill ? bulkTogglingSkillId === toolEditorSkill.instance_id : false;
   const toolEditorHasPendingSingleToggle = toolEditorSkill
-    ? Boolean(togglingSkill?.startsWith(`${toolEditorSkill.id}:`))
+    ? Boolean(togglingSkill?.startsWith(`${toolEditorSkill.instance_id}:`))
     : false;
   const toolEditorBulkToggleDisabled =
     toolEditorIsBulkToggling || toolEditorHasPendingSingleToggle || toolEditorBulkToggleTargets.length === 0;
@@ -1006,7 +1010,7 @@ export function Skills() {
 
     return toolEditorFilteredToolIds.map((toolId) => {
       const isEnabled = toolEditorSkill.enabled[toolId] ?? false;
-      const toggleKey = `${toolEditorSkill.id}:${toolId}`;
+      const toggleKey = `${toolEditorSkill.instance_id}:${toolId}`;
       const isToggling = togglingSkill === toggleKey;
       const tool = tools.find((item) => item.id === toolId);
       const isDetected = tool?.detected ?? false;
@@ -1025,10 +1029,9 @@ export function Skills() {
   }, [toolEditorFilteredToolIds, toolEditorIsBulkToggling, toolEditorSkill, togglingSkill, tools, t]);
 
   const toolEditorTags = useMemo(
-    () => (toolEditorSkill ? getSkillTags(toolEditorSkill.id, skillMetadata) : []),
+    () => (toolEditorSkill ? getSkillTagsForSkill(toolEditorSkill, skillMetadata) : []),
     [skillMetadata, toolEditorSkill],
   );
-
   const toolEditorTagSuggestions = useMemo(() => {
     if (!toolEditorSkill) {
       return [];
@@ -1839,11 +1842,11 @@ export function Skills() {
 
                       {!isBatchManageMode && item.kind === "skill" && item.skill && (
                         <SkillCardActionMenu
-                          deleting={deletingSkill === item.skill.id}
+                          deleting={deletingSkill === item.skill.instance_id}
                           editLabel={t("common.edit")}
                           deleteLabel={t("skills.delete")}
                           moreActionsLabel={t("skills.moreActions")}
-                          onEdit={() => openSkillEditor(item.skill!.id, "tools")}
+                          onEdit={() => openSkillEditor(item.skill!.instance_id, "tools")}
                           onDelete={() => void handleDelete(item.skill!)}
                         />
                       )}
@@ -1945,16 +1948,16 @@ export function Skills() {
           emptyLabel={t("skills.noToolsInFilter")}
           onQueryChange={setToolEditorQuery}
           onEnabledOnlyChange={setToolEditorEnabledOnly}
-          onToggle={(toolId, enabled) => handleToggle(toolEditorSkill.id, toolEditorSkill.name, toolId, enabled)}
+          onToggle={(toolId, enabled) => handleToggle(toolEditorSkill.instance_id, toolEditorSkill.name, toolId, enabled)}
           onBulkToggle={() => handleBulkToggle(toolEditorSkill, toolEditorFilteredToolIds)}
           tags={toolEditorTags}
           tagDraft={tagDraft}
           onTagDraftChange={setTagDraft}
-          onAddTag={() => void handleAddTag(toolEditorSkill.id)}
-          onRemoveTag={(tag) => void handleRemoveTag(toolEditorSkill.id, tag)}
+          onAddTag={() => void handleAddTag(toolEditorSkill)}
+          onRemoveTag={(tag) => void handleRemoveTag(toolEditorSkill, tag)}
           tagSuggestions={toolEditorTagSuggestions}
-          onSelectTagSuggestion={(tag) => void persistSkillTags(toolEditorSkill.id, [...toolEditorTags, tag])}
-          savingTags={savingTagsSkillId === toolEditorSkill.id}
+          onSelectTagSuggestion={(tag) => void persistSkillTags(getSkillMetadataKey(toolEditorSkill), [...toolEditorTags, tag])}
+          savingTags={savingTagsSkillId === getSkillMetadataKey(toolEditorSkill)}
           t={t}
         />
       )}

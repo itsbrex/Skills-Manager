@@ -45,7 +45,10 @@ export function getSelectedBatchItems(
 }
 
 export function buildBatchTargets(items: UnifiedSkillListItem[]): BatchSkillToolTarget[] {
-  return items.map((item) => ({ kind: item.kind, id: item.id }));
+  return items.map((item) => ({
+    kind: item.kind,
+    id: item.kind === "skill" ? (item.skill?.instance_id ?? item.id) : item.id,
+  }));
 }
 
 function getAffectedSkillCount(items: UnifiedSkillListItem[], skills: Skill[]): number {
@@ -53,12 +56,12 @@ function getAffectedSkillCount(items: UnifiedSkillListItem[], skills: Skill[]): 
 
   items.forEach((item) => {
     if (item.kind === "skill") {
-      affectedSkillIds.add(item.skill?.id ?? item.id);
+      affectedSkillIds.add(item.skill?.instance_id ?? item.id);
       return;
     }
 
     if (item.skillPackage) {
-      getGroupMemberSkills(item.skillPackage, skills).forEach((skill) => affectedSkillIds.add(skill.id));
+      getGroupMemberSkills(item.skillPackage, skills).forEach((skill) => affectedSkillIds.add(skill.instance_id));
     }
   });
 

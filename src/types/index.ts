@@ -1,8 +1,14 @@
 // TypeScript type definitions matching Rust backend models
 // Note: Field names use snake_case to match Rust serde serialization
 
+export type SkillScope = "global" | "project";
+
 export interface Skill {
   id: string;
+  instance_id: string;
+  scope: SkillScope;
+  project_id?: string | null;
+  project_name?: string | null;
   name: string;
   description: string | null;
   version: string;
@@ -10,6 +16,13 @@ export interface Skill {
   enabled: Record<string, boolean>;
   package_meta?: SkillPackageMeta | null;
   path: string;
+}
+
+export interface ProjectBinding {
+  id: string;
+  name: string;
+  root_path: string;
+  skills_dir: string;
 }
 
 export interface SkillPackageMeta {
@@ -199,6 +212,8 @@ export interface AppConfig {
   poll_client_state?: PollClientStateConfig | null;
   auth_session?: AuthSession | null;
   cloud_sync?: CloudSyncState | null;
+  projects?: ProjectBinding[];
+  active_project_id?: string | null;
 }
 
 export interface PollClientStateConfig {

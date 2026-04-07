@@ -26,6 +26,38 @@ pub enum LinkStatus {
     Missing,
 }
 
+const COPY_MODE_METADATA_FILE: &str = ".skills-manager-source.json";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CopyModeMetadata {
+    skill_id: String,
+    source_path: String,
+}
+
+fn write_copy_mode_metadata(target_path: &Path, skill_id: &str, skill_source: &Path) -> Result<(), String> {
+    let metadata = CopyModeMetadata {
+        skill_id: skill_id.to_string(),
+        source_path: skill_source.to_string_lossy().to_string(),
+    };
+    let content = serde_json::to_string_pretty(&metadata)
+        .map_err(|e| format!("Failed to serialize copy mode metadata: {}", e))?;
+    fs::write(target_path.join(COPY_MODE_METADATA_FILE), content)
+        .map_err(|e| format!("Failed to write copy mode metadata: {}", e))
+}
+
+pub fn read_copy_mode_metadata(target_path: &Path) -> Option<(String, PathBuf)> {
+    let content = fs::read_to_string(target_path.join(COPY_MODE_METADATA_FILE)).ok()?;
+    let metadata: CopyModeMetadata = serde_json::from_str(&content).ok()?;
+    Some((metadata.skill_id, PathBuf::from(metadata.source_path)))
+}
+
+pub fn copy_mode_target_matches_source(target_path: &Path, skill_id: &str, skill_source: &Path) -> bool {
+    match read_copy_mode_metadata(target_path) {
+        Some((saved_skill_id, saved_source_path)) => saved_skill_id == skill_id && saved_source_path == skill_source,
+        None => false,
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkResult {
     pub skill_id: String,
@@ -119,6 +151,7 @@ impl LinkerService {
         }
 
         copy_dir_all_include_hidden(skill_source, &target_path)?;
+        write_copy_mode_metadata(&target_path, skill_id, skill_source)?;
         Ok(())
     }
 
@@ -291,6 +324,10 @@ impl LinkerService {
         let copied_path = tool_skills_dir.join(skill_id);
         if copied_path.exists() {
             if copied_path.is_dir() {
+                if !copy_mode_target_matches_source(&copied_path, skill_id, skill_source) {
+                    return LinkStatus::WrongTarget;
+                }
+
                 if skill_source.exists() {
                     LinkStatus::Valid
                 } else {
@@ -304,6 +341,7 @@ impl LinkerService {
         }
     }
 
+    #[cfg(test)]
     pub fn sync_all_for_tool(
         skills: &[(String, std::path::PathBuf)],
         tool_skills_dir: &Path,

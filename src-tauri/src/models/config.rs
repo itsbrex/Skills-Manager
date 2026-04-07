@@ -188,6 +188,14 @@ impl Default for TelemetryConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProjectBinding {
+    pub id: String,
+    pub name: String,
+    pub root_path: PathBuf,
+    pub skills_dir: PathBuf,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub version: String,
@@ -207,6 +215,10 @@ pub struct AppConfig {
     pub auth_session: Option<AuthSession>,
     #[serde(default)]
     pub cloud_sync: Option<CloudSyncState>,
+    #[serde(default)]
+    pub projects: Vec<ProjectBinding>,
+    #[serde(default)]
+    pub active_project_id: Option<String>,
     #[serde(default)]
     pub initialized: bool,
 }
@@ -251,6 +263,8 @@ impl Default for AppConfig {
             poll_client_state: Some(PollClientState::default()),
             auth_session: None,
             cloud_sync: Some(CloudSyncState::new()),
+            projects: Vec::new(),
+            active_project_id: None,
             initialized: false,
         }
     }

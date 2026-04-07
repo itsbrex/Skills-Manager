@@ -3,9 +3,12 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use crate::models::{AppConfig, MarketplaceMeta, Skill, SkillPackageMeta, SkillSource, VaultMeta};
+use crate::models::{
+    AppConfig, MarketplaceMeta, ProjectBinding, Skill, SkillPackageMeta, SkillScope,
+    SkillSource, VaultMeta,
+};
 use crate::services::detector::DetectorService;
-use crate::services::linker::{is_symlink_or_junction, LinkerService};
+use crate::services::linker::{copy_mode_target_matches_source, is_symlink_or_junction, LinkerService};
 
 pub struct ScannerService;
 
@@ -37,6 +40,52 @@ impl ScannerService {
         skills_dir: &Path,
         config: &AppConfig,
     ) -> Result<Vec<Skill>, String> {
+        let mut skills = Self::scan_skills_in_root(skills_dir, config)?;
+        skills.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.path.cmp(&b.path)));
+        Self::ensure_unique_skill_ids(&skills)?;
+        Ok(skills)
+    }
+
+    pub fn scan_global_skills(config: &AppConfig) -> Result<Vec<Skill>, String> {
+        let mut skills = Self::scan_skills_in_root(&config.skills_dir, config)?;
+        skills.sort_by(|a, b| a.instance_id.cmp(&b.instance_id));
+        Ok(skills)
+    }
+
+    pub fn scan_project_skills(
+        project_binding: &ProjectBinding,
+        config: &AppConfig,
+    ) -> Result<Vec<Skill>, String> {
+        let mut skills = Self::scan_skills_in_root(&project_binding.skills_dir, config)?
+            .into_iter()
+            .map(|skill| {
+                skill.with_scope(
+                    SkillScope::Project,
+                    Some(project_binding.id.clone()),
+                    Some(project_binding.name.clone()),
+                )
+            })
+            .collect::<Vec<_>>();
+        skills.sort_by(|a, b| a.instance_id.cmp(&b.instance_id));
+        Ok(skills)
+    }
+
+    pub fn scan_scoped_skills(config: &AppConfig) -> Result<Vec<Skill>, String> {
+        let mut skills = Self::scan_global_skills(config)?;
+
+        if let Some(active_project_id) = config.active_project_id.as_deref() {
+            if let Some(project_binding) = config.projects.iter().find(|project| project.id == active_project_id) {
+                let mut project_skills = Self::scan_project_skills(project_binding, config)?;
+                skills.append(&mut project_skills);
+            }
+        }
+
+        skills.sort_by(|a, b| a.instance_id.cmp(&b.instance_id).then_with(|| a.path.cmp(&b.path)));
+        Self::ensure_unique_instance_ids(&skills)?;
+        Ok(skills)
+    }
+
+    fn scan_skills_in_root(skills_dir: &Path, config: &AppConfig) -> Result<Vec<Skill>, String> {
         if !skills_dir.exists() {
             return Ok(Vec::new());
         }
@@ -46,8 +95,6 @@ impl ScannerService {
             .flatten()
             .collect();
 
-        // Use rayon for parallel processing of skills
-        // This significantly speeds up scanning on Windows where file I/O (especially canonicalize) is slow
         let mut skills: Vec<Skill> = entries
             .par_iter()
             .flat_map_iter(|entry| {
@@ -89,6 +136,21 @@ impl ScannerService {
                 return Err(format!(
                     "Duplicate skill id: {} ({} and {})",
                     pair[0].id,
+                    pair[0].path.display(),
+                    pair[1].path.display()
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn ensure_unique_instance_ids(skills: &[Skill]) -> Result<(), String> {
+        for pair in skills.windows(2) {
+            if pair[0].instance_id == pair[1].instance_id {
+                return Err(format!(
+                    "Duplicate skill instance id: {} ({} and {})",
+                    pair[0].instance_id,
                     pair[0].path.display(),
                     pair[1].path.display()
                 ));
@@ -152,6 +214,10 @@ impl ScannerService {
 
         Ok(Skill {
             id: id.clone(),
+            instance_id: Skill::global_instance_id(&id),
+            scope: SkillScope::Global,
+            project_id: None,
+            project_name: None,
             name: meta.name,
             description: meta.description,
             version: meta.version,
@@ -175,7 +241,10 @@ impl ScannerService {
         for (tool_id, tool_config) in config.collect_tool_configs() {
             if LinkerService::tool_uses_copy_mode(&tool_id) {
                 let copied_path = tool_config.skills_path.join(skill_id);
-                if copied_path.exists() && copied_path.is_dir() {
+                if copied_path.exists()
+                    && copied_path.is_dir()
+                    && copy_mode_target_matches_source(&copied_path, skill_id, skill_path)
+                {
                     enabled.insert(tool_id, true);
                 }
                 continue;
@@ -188,20 +257,13 @@ impl ScannerService {
                 // For symlinks, read_link gives us the target.
                 // For Junctions, read_link also works (returns the junction target).
                 if let Ok(target) = fs::read_link(&link_path) {
-                    // FAST PATH: String comparison
-                    // On Windows, canonicalize() causes excessive I/O.
-                    // Most of the time, checking if the target path ends with the skill ID is sufficient.
-                    let target_str = target.to_string_lossy();
-                    // Check for direct match or path ending (handling separators)
-                    let is_fast_match = target_str.ends_with(skill_id) || target == skill_path;
+                    let direct_match = target == skill_path;
 
-                    let is_enabled = if is_fast_match {
+                    let is_enabled = if direct_match {
                         true
                     } else {
-                        // SLOW PATH: Fallback to canonicalization only if simple check fails
                         let canonical_skill_path = skill_path.canonicalize().ok();
 
-                        // Resolve relative paths
                         let resolved_target = if target.is_relative() {
                             link_path
                                 .parent()
@@ -674,6 +736,148 @@ description: "Description from SKILL.md"
 
             let ids: Vec<&str> = skills.iter().map(|skill| skill.id.as_str()).collect();
             assert_eq!(ids, vec!["baoyu-slide-deck", "baoyu-translate"]);
+        });
+    }
+
+    #[test]
+    fn scan_skills_with_config_returns_global_and_active_project_skill_instances() {
+        with_temp_home(|home| {
+            let global_skills_dir = home.join(".skills-manager").join("skills");
+            fs::create_dir_all(&global_skills_dir).expect("create global skills root");
+
+            let project_root = home.join("code").join("project-alpha");
+            let project_skills_dir = project_root.join(".claude").join("skills");
+            fs::create_dir_all(&project_skills_dir).expect("create project skills root");
+
+            for skill_dir in [
+                global_skills_dir.join("shared-skill"),
+                global_skills_dir.join("global-only-skill"),
+                project_skills_dir.join("shared-skill"),
+                project_skills_dir.join("project-only-skill"),
+            ] {
+                fs::create_dir_all(&skill_dir).expect("create skill dir");
+                let skill_name = skill_dir
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .expect("skill dir name");
+                fs::write(
+                    skill_dir.join("SKILL.md"),
+                    format!("---\nname: {}\n---\n", skill_name),
+                )
+                .expect("write SKILL.md");
+            }
+
+            let mut config = AppConfig::default();
+            config.skills_dir = global_skills_dir.clone();
+            let config_value = json!({
+                "version": config.version,
+                "skills_dir": config.skills_dir,
+                "tools": config.tools,
+                "custom_tools": config.custom_tools,
+                "skill_metadata": config.skill_metadata,
+                "preferences": config.preferences,
+                "marketplace_sources": config.marketplace_sources,
+                "poll_client_state": config.poll_client_state,
+                "auth_session": config.auth_session,
+                "cloud_sync": config.cloud_sync,
+                "initialized": config.initialized,
+                "projects": [
+                    {
+                        "id": "project-alpha",
+                        "name": "Project Alpha",
+                        "root_path": project_root,
+                        "skills_dir": project_skills_dir
+                    }
+                ],
+                "active_project_id": "project-alpha"
+            });
+            let config: AppConfig =
+                serde_json::from_value(config_value).expect("deserialize config with projects");
+
+            let mut skills = ScannerService::scan_scoped_skills(&config)
+                .expect("scan scoped skills");
+            skills.sort_by(|a, b| a.instance_id.cmp(&b.instance_id));
+
+            assert_eq!(skills.len(), 4);
+            assert_eq!(
+                skills.iter().map(|skill| skill.instance_id.as_str()).collect::<Vec<_>>(),
+                vec![
+                    "global:global-only-skill",
+                    "global:shared-skill",
+                    "project:project-alpha:project-only-skill",
+                    "project:project-alpha:shared-skill",
+                ]
+            );
+
+            let global_shared = skills
+                .iter()
+                .find(|skill| skill.instance_id == "global:shared-skill")
+                .expect("global shared skill");
+            assert_eq!(global_shared.id, "shared-skill");
+            assert_eq!(serde_json::to_value(global_shared).expect("serialize global").get("scope"), Some(&json!("global")));
+            assert_eq!(global_shared.project_id, None);
+            assert_eq!(global_shared.project_name, None);
+
+            let project_shared = skills
+                .iter()
+                .find(|skill| skill.instance_id == "project:project-alpha:shared-skill")
+                .expect("project shared skill");
+            assert_eq!(project_shared.id, "shared-skill");
+            assert_eq!(serde_json::to_value(project_shared).expect("serialize project").get("scope"), Some(&json!("project")));
+            assert_eq!(project_shared.project_id.as_deref(), Some("project-alpha"));
+            assert_eq!(project_shared.project_name.as_deref(), Some("Project Alpha"));
+        });
+    }
+
+    #[test]
+    fn scan_scoped_skills_does_not_mark_same_id_instances_both_enabled() {
+        with_temp_home(|home| {
+            let global_skills_dir = home.join(".skills-manager").join("skills");
+            let global_skill_dir = global_skills_dir.join("shared-skill");
+            fs::create_dir_all(&global_skill_dir).expect("create global skill dir");
+            fs::write(global_skill_dir.join("SKILL.md"), "---\nname: shared-skill\n---\n")
+                .expect("write global skill");
+
+            let project_root = home.join("code").join("project-alpha");
+            let project_skills_dir = project_root.join(".claude").join("skills");
+            let project_skill_dir = project_skills_dir.join("shared-skill");
+            fs::create_dir_all(&project_skill_dir).expect("create project skill dir");
+            fs::write(project_skill_dir.join("SKILL.md"), "---\nname: shared-skill\n---\n")
+                .expect("write project skill");
+
+            let tool_skills_dir = home.join(".claude").join("skills");
+            fs::create_dir_all(&tool_skills_dir).expect("create tool skills dir");
+            std::os::unix::fs::symlink(&project_skill_dir, tool_skills_dir.join("shared-skill"))
+                .expect("link project skill");
+
+            let config: AppConfig = serde_json::from_value(json!({
+                "version": "2.0.1",
+                "skills_dir": global_skills_dir,
+                "tools": {
+                    "claude": {
+                        "enabled": true,
+                        "detected": true,
+                        "skills_path": tool_skills_dir,
+                        "config_path": home.join(".claude")
+                    }
+                },
+                "custom_tools": {},
+                "projects": [{
+                    "id": "project-alpha",
+                    "name": "Project Alpha",
+                    "root_path": project_root,
+                    "skills_dir": project_skills_dir
+                }],
+                "active_project_id": "project-alpha",
+                "initialized": true
+            })).expect("deserialize config");
+
+            let skills = ScannerService::scan_scoped_skills(&config).expect("scan scoped skills");
+            let global = skills.iter().find(|skill| skill.instance_id == "global:shared-skill").expect("global instance");
+            let project = skills.iter().find(|skill| skill.instance_id == "project:project-alpha:shared-skill").expect("project instance");
+
+            assert_eq!(global.enabled.get("claude").copied(), Some(false));
+            assert_eq!(project.enabled.get("claude").copied(), Some(true));
         });
     }
 
