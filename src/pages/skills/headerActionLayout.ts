@@ -14,7 +14,7 @@ export function buildSkillsHeaderActionLayout(
 ): SkillsHeaderActionLayout {
   return {
     primaryActionIds: isBatchManageMode
-      ? ["batch-manage", "batch-configure", "project-bindings"]
+      ? ["batch-manage", "batch-configure"]
       : ["batch-manage", "project-bindings"],
     secondaryActionIds: ["create-skill"],
   };

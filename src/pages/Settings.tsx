@@ -56,10 +56,9 @@ export function Settings() {
       };
       const nextActiveProjectId = resolveActiveProjectId(configResult.active_project_id, configResult.projects ?? []);
       if (nextActiveProjectId !== configResult.active_project_id) {
-        configResult.active_project_id = nextActiveProjectId;
         addToast(t("settings.currentProjectMissing"), "info");
       }
-      setConfig(configResult);
+      setConfig({ ...configResult, active_project_id: nextActiveProjectId });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -547,8 +546,6 @@ export function Settings() {
               />
             </SettingsRow>
           </SettingsCard>
-
-
 
           {/* Marketplace Section */}
           <SectionTitle>{t("settings.marketplace")}</SectionTitle>

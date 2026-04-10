@@ -1,6 +1,6 @@
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::{AppConfig, ProjectBinding, SkillMetadata, SourceType, ToolConfig, SUPPORTED_TOOLS};
@@ -114,7 +114,7 @@ impl ConfigManager {
         if changed { normalized } else { metadata.clone() }
     }
 
-    fn normalize_project_name_from_skills_dir(skills_dir: &PathBuf) -> String {
+    fn normalize_project_name_from_skills_dir(skills_dir: &Path) -> String {
         let segments = normalize_path(skills_dir)
             .iter()
             .map(|segment| segment.to_string_lossy().to_string())

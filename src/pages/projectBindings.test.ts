@@ -5,7 +5,6 @@ import type { ProjectBinding } from "../types";
 import {
   buildProjectBindingFromSkillsDir,
   hasProjectSkillsDirConflict,
-  renameProjectBinding,
   resolveActiveProjectId,
   resolveNextActiveProjectIdAfterAddition,
   resolveNextProjectBindingsAfterRemoval,
@@ -81,21 +80,6 @@ test("buildProjectBindingFromSkillsDir uses the parent directory name when the s
   const binding = buildProjectBindingFromSkillsDir("/Users/yjw/code/project-beta/skills");
 
   assert.equal(binding.name, "project-beta");
-});
-
-test("renameProjectBinding updates the project name without changing the id or skills dir", () => {
-  const binding = buildProjectBindingFromSkillsDir("/Users/yjw/code/project-alpha/custom-skills");
-
-  assert.deepEqual(renameProjectBinding(binding, "Alpha Workspace"), {
-    ...binding,
-    name: "Alpha Workspace",
-  });
-});
-
-test("renameProjectBinding rejects empty names", () => {
-  const binding = buildProjectBindingFromSkillsDir("/Users/yjw/code/project-alpha/custom-skills");
-
-  assert.throws(() => renameProjectBinding(binding, "   "), /Project name is required/);
 });
 
 test("hasProjectSkillsDirConflict only checks normalized skills dir", () => {

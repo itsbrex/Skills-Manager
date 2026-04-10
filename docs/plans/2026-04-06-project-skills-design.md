@@ -496,7 +496,6 @@ git commit -m "feat: support custom project skills directories"
 pub struct ProjectBinding {
     pub id: String,
     pub name: String,
-    pub root_path: PathBuf,
     pub skills_dir: PathBuf,
 }
 ```
@@ -513,7 +512,7 @@ pub active_project_id: Option<String>,
 1. 老配置缺失字段时必须可正常反序列化。
 2. `projects` 默认空数组。
 3. `active_project_id` 默认 `None`。
-4. 初版不要求后端强制校验 `root_path` 必须是 Git 仓库。
+4. 旧配置中的 `root_path` 通过 `LegacyProjectBinding` + `TryFrom` 迁移为 `skills_dir`。
 
 ### 2. Skill
 
@@ -535,7 +534,7 @@ project_name?: string | null
 
 ---
 
-## 六、剩余实施项（按质量优先排序）
+## 七、剩余实施项（按质量优先排序）
 
 ### Phase 1：先收口 identity 与边界规则
 

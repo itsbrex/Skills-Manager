@@ -78,6 +78,7 @@ export const zh = {
     title: "Skills",
     scopeGlobal: "全局",
     scopeProject: "项目",
+    scopeFilterAll: "全部",
     groups: "Skill 组",
     groupMembersCount: "{count} 个成员",
     groupBadge: "技能组",
@@ -314,6 +315,7 @@ export const zh = {
     currentProject: "当前项目",
     removeProject: "移除",
     confirmDelete: "确认删除？",
+    pressEscToCancel: "按 Esc 取消",
     projectCountSingular: "个项目绑定",
     projectCountPlural: "个项目绑定",
     // Account & Cloud Sync

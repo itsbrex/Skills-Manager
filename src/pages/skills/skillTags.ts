@@ -145,13 +145,6 @@ export function updateSkillTagsForSkill(
   return updateMetadataTags(getSkillMetadataKey(skill), nextTags, migratedMetadata);
 }
 
-export function getSkillTagsForSkillKey(
-  skill: Pick<Skill, "id" | "scope" | "instance_id">,
-  skillMetadata?: SkillMetadataMap,
-): string[] {
-  return getSkillTagsForSkill(skill as Skill, skillMetadata);
-}
-
 export function getUntaggedSkillsCount(skills: Skill[], skillMetadata?: SkillMetadataMap): number {
   return skills.filter((skill) => getSkillTagsForSkill(skill, skillMetadata).length === 0).length;
 }

@@ -86,16 +86,6 @@ export function buildProjectBindingFromSkillsDir(
   };
 }
 
-export function renameProjectBinding(
-  projectBinding: ProjectBinding,
-  projectName: string,
-): ProjectBinding {
-  return {
-    ...projectBinding,
-    name: normalizeProjectName(projectName),
-  };
-}
-
 export function hasProjectSkillsDirConflict(
   projects: ProjectBinding[] | null | undefined,
   nextProject: ProjectBinding,
