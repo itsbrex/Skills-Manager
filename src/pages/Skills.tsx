@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -17,6 +17,7 @@ import {
   BatchSetSkillToolsRequest,
   BatchSetSkillToolsResponse,
   InstalledSkillPackage,
+  ProjectBinding,
   Skill,
   Tool,
 } from "@/types";
@@ -33,8 +34,10 @@ import {
   hasSelectableTagFilters,
   normalizeSkillTags,
   updateMetadataTags,
+  updateSkillTagsForSkill,
   hasSkillMetadataEntry,
   removeSkillMetadataEntry,
+  migrateSkillMetadataToInstanceIds,
 } from "./skills/skillTags";
 import { orderToolIdsForSkill } from "./skills/orderToolIds";
 import { getEnabledToolIds } from "./skills/getEnabledToolIds";
@@ -77,6 +80,13 @@ import {
   buildSkillsHeaderActionLayout,
   type SkillsHeaderActionId,
 } from "./skills/headerActionLayout";
+import {
+  buildProjectBindingFromSkillsDir,
+  hasProjectSkillsDirConflict,
+  resolveActiveProjectId,
+  resolveNextActiveProjectIdAfterAddition,
+  resolveNextProjectBindingsAfterRemoval,
+} from "./projectBindings";
 
 function getToolDisplayName(toolId: string, tools: Tool[]): string {
   const tool = tools.find((t) => t.id === toolId);
@@ -361,6 +371,7 @@ export function Skills() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [untaggedOnly, setUntaggedOnly] = useState(false);
+  const [scopeFilter, setScopeFilter] = useState<"all" | "global" | "project">("all");
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
   const [deletingSkill, setDeletingSkill] = useState<string | null>(null);
   const [toolEditorSkillId, setToolEditorSkillId] = useState<string | null>(null);
@@ -374,7 +385,10 @@ export function Skills() {
   const [bulkTogglingGroupId, setBulkTogglingGroupId] = useState<string | null>(null);
   const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showProjectBindingsDialog, setShowProjectBindingsDialog] = useState(false);
+  const [pendingProjectBinding, setPendingProjectBinding] = useState<ProjectBinding | null>(null);
   const [creating, setCreating] = useState(false);
+  const [projectBindingsSaving, setProjectBindingsSaving] = useState(false);
   const [showTagFilterMenu, setShowTagFilterMenu] = useState(false);
   const [skillEditorTab, setSkillEditorTab] = useState<SkillEditorTab>("tools");
   const [tagDraft, setTagDraft] = useState("");
@@ -419,9 +433,16 @@ export function Skills() {
         invoke<AppConfig>("get_config"),
         invoke<Tool[]>("detect_tools"),
       ]);
+      const migratedSkillMetadata = migrateSkillMetadataToInstanceIds(skillsResult, configResult.skill_metadata);
+      const nextConfig = migratedSkillMetadata === configResult.skill_metadata
+        ? configResult
+        : { ...configResult, skill_metadata: migratedSkillMetadata };
+      if (nextConfig !== configResult) {
+        await invoke("save_config", { config: nextConfig });
+      }
       setSkills(skillsResult);
       setSkillPackages(skillPackagesResult);
-      setConfig(configResult);
+      setConfig(nextConfig);
       setTools(toolsResult);
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
@@ -497,9 +518,30 @@ export function Skills() {
     }
   }, [addToast, config]);
 
-  const persistSkillTags = useCallback(async (skillId: string, nextTags: string[]) => {
-    await persistMetadataTags(skillId, nextTags);
-  }, [persistMetadataTags]);
+  const persistSkillTags = useCallback(async (skill: Skill, nextTags: string[]) => {
+    if (!config) {
+      return;
+    }
+
+    const previousConfig = config;
+    const nextSkillMetadata = updateSkillTagsForSkill(skill, nextTags, config.skill_metadata);
+    const nextConfig: AppConfig = {
+      ...config,
+      skill_metadata: nextSkillMetadata,
+    };
+
+    setConfig(nextConfig);
+    setSavingTagsSkillId(getSkillMetadataKey(skill));
+
+    try {
+      await invoke("save_config", { config: nextConfig });
+    } catch (err) {
+      setConfig(previousConfig);
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setSavingTagsSkillId(null);
+    }
+  }, [addToast, config]);
 
   const toggleTagFilter = useCallback((tag: string) => {
     const next = applyTagFilterAction(
@@ -528,6 +570,7 @@ export function Skills() {
     );
     setSelectedTags(next.selectedTags);
     setUntaggedOnly(next.untaggedOnly);
+    setScopeFilter("all");
     setShowTagFilterMenu(false);
   }, [selectedTags, untaggedOnly]);
 
@@ -537,21 +580,19 @@ export function Skills() {
       return;
     }
 
-    const metadataKey = getSkillMetadataKey(skill);
     const currentTags = getSkillTagsForSkill(skill, skillMetadata);
     if (currentTags.includes(nextTag)) {
       setTagDraft("");
       return;
     }
 
-    await persistSkillTags(metadataKey, [...currentTags, nextTag]);
+    await persistSkillTags(skill, [...currentTags, nextTag]);
     setTagDraft("");
   }, [persistSkillTags, skillMetadata, tagDraft]);
 
   const handleRemoveTag = useCallback(async (skill: Skill, tag: string) => {
-    const metadataKey = getSkillMetadataKey(skill);
     const nextTags = getSkillTagsForSkill(skill, skillMetadata).filter((item: string) => item !== tag);
-    await persistSkillTags(metadataKey, nextTags);
+    await persistSkillTags(skill, nextTags);
   }, [persistSkillTags, skillMetadata]);
 
   const handleToggle = async (instanceId: string, skillName: string, toolId: string, enabled: boolean) => {
@@ -751,6 +792,9 @@ export function Skills() {
   );
 
   const tagFilterButtonLabel = useMemo(() => {
+    if (scopeFilter !== "all") {
+      return scopeFilter === "global" ? t("skills.scopeGlobal") : t("skills.scopeProject");
+    }
     switch (tagFilterSelection.kind) {
       case "untagged":
         return t("skills.untagged");
@@ -761,9 +805,9 @@ export function Skills() {
       default:
         return t("skills.tagFilterButton");
     }
-  }, [tagFilterSelection, t]);
+  }, [scopeFilter, tagFilterSelection, t]);
 
-  const hasActiveSkillFilters = Boolean(searchQuery.trim()) || selectedTags.length > 0 || untaggedOnly;
+  const hasActiveSkillFilters = Boolean(searchQuery.trim()) || selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all";
 
   const unifiedItems = useMemo(() => buildUnifiedSkillItems({
     skills,
@@ -773,11 +817,18 @@ export function Skills() {
     groupBadgeLabel: t("skills.groupBadge"),
   }), [skillMetadata, skillPackages, skills, t, tools]);
 
+  const scopeFilterCounts = useMemo(() => {
+    const globalCount = unifiedItems.filter((item) => item.scopeLabel === "global").length;
+    const projectCount = unifiedItems.filter((item) => item.scopeLabel === "project").length;
+    return { global: globalCount, project: projectCount };
+  }, [unifiedItems]);
+
   const filteredUnifiedItems = useMemo(() => filterUnifiedSkillItems(unifiedItems, {
     searchQuery,
     selectedTags,
     untaggedOnly,
-  }), [searchQuery, selectedTags, unifiedItems, untaggedOnly]);
+    scopeFilter,
+  }), [searchQuery, selectedTags, unifiedItems, untaggedOnly, scopeFilter]);
 
   const sortedUnifiedItems = useMemo(
     () => sortUnifiedSkillItems(filteredUnifiedItems, searchQuery),
@@ -901,6 +952,31 @@ export function Skills() {
             {t("skills.batchConfigureTools")}
           </button>
         );
+      case "project-bindings":
+        return (
+          <button
+            key={actionId}
+            type="button"
+            onClick={handleOpenProjectBindingsDialog}
+            disabled={isBatchManageMode}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: "var(--foreground)",
+              backgroundColor: "var(--background)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              cursor: isBatchManageMode ? "not-allowed" : "pointer",
+              opacity: isBatchManageMode ? 0.6 : 1,
+            }}
+          >
+            {t("settings.projectBindings")}
+          </button>
+        );
       case "create-skill":
         return (
           <button
@@ -951,6 +1027,148 @@ export function Skills() {
 
     setIsBatchToolDialogOpen(false);
   }, [batchSubmitting]);
+
+  const handleOpenProjectBindingsDialog = useCallback(() => {
+    if (isBatchManageMode) {
+      return;
+    }
+    setShowProjectBindingsDialog(true);
+  }, [isBatchManageMode]);
+
+  const saveProjectBindingsConfig = useCallback(async (nextConfig: AppConfig) => {
+    const previousConfig = config;
+    const previousSkills = skills;
+    setConfig(nextConfig);
+    setProjectBindingsSaving(true);
+
+    try {
+      await invoke("save_config", { config: nextConfig });
+      const refreshedSkills = await invoke<Skill[]>("refresh_skills");
+      setSkills(refreshedSkills);
+    } catch (err) {
+      if (previousConfig) {
+        setConfig(previousConfig);
+      }
+      setSkills(previousSkills);
+      addToast(err instanceof Error ? err.message : String(err), "error");
+      throw err;
+    } finally {
+      setProjectBindingsSaving(false);
+    }
+  }, [addToast, config, skills]);
+
+  const handleAddProjectBinding = useCallback(async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: t("settings.selectProjectSkillsDir"),
+    });
+
+    if (!selected || Array.isArray(selected)) {
+      return;
+    }
+
+    try {
+      setPendingProjectBinding(buildProjectBindingFromSkillsDir(selected));
+    } catch (err) {
+      if (err instanceof Error) {
+        addToast(err.message, "error");
+      } else if (typeof err === "string") {
+        addToast(err, "error");
+      }
+    }
+  }, [addToast, t]);
+
+  const handlePendingProjectNameChange = useCallback((name: string) => {
+    setPendingProjectBinding((current) => {
+      if (!current) {
+        return current;
+      }
+      return {
+        ...current,
+        name,
+      };
+    });
+  }, []);
+
+  const handleCancelPendingProjectBinding = useCallback(() => {
+    setPendingProjectBinding(null);
+  }, []);
+
+  const handleConfirmPendingProjectBinding = useCallback(async () => {
+    if (!config || !pendingProjectBinding) {
+      return;
+    }
+
+    try {
+      const nextProject = buildProjectBindingFromSkillsDir(
+        pendingProjectBinding.skills_dir,
+        pendingProjectBinding.name,
+      );
+      const existingProjects = config.projects ?? [];
+      if (hasProjectSkillsDirConflict(existingProjects, nextProject)) {
+        addToast(t("settings.projectAlreadyAdded").replace("{name}", nextProject.name), "error");
+        return;
+      }
+
+      const nextConfig: AppConfig = {
+        ...config,
+        projects: [...existingProjects, nextProject],
+        active_project_id: resolveNextActiveProjectIdAfterAddition(
+          config.active_project_id,
+          existingProjects,
+          nextProject,
+        ),
+      };
+      await saveProjectBindingsConfig(nextConfig);
+      setPendingProjectBinding(null);
+      addToast(t("settings.projectAdded").replace("{name}", nextProject.name), "success");
+    } catch (err) {
+      if (err instanceof Error) {
+        addToast(err.message, "error");
+      } else if (typeof err === "string") {
+        addToast(err, "error");
+      }
+    }
+  }, [addToast, config, pendingProjectBinding, saveProjectBindingsConfig, t]);
+
+  const handleCloseProjectBindingsDialog = useCallback(() => {
+    if (projectBindingsSaving) {
+      return;
+    }
+    setPendingProjectBinding(null);
+    setShowProjectBindingsDialog(false);
+  }, [projectBindingsSaving]);
+
+  const handleSetActiveProjectBinding = useCallback(async (projectId: string | null) => {
+    if (!config) {
+      return;
+    }
+
+    const nextConfig: AppConfig = {
+      ...config,
+      active_project_id: resolveActiveProjectId(projectId, config.projects ?? []),
+    };
+    await saveProjectBindingsConfig(nextConfig);
+  }, [config, saveProjectBindingsConfig]);
+
+  const handleRemoveProjectBinding = useCallback(async (projectId: string) => {
+    if (!config) {
+      return;
+    }
+
+    const nextProjectBindings = resolveNextProjectBindingsAfterRemoval(
+      config.projects,
+      projectId,
+      config.active_project_id,
+    );
+    const nextConfig: AppConfig = {
+      ...config,
+      projects: nextProjectBindings.projects,
+      active_project_id: nextProjectBindings.activeProjectId,
+    };
+    await saveProjectBindingsConfig(nextConfig);
+  }, [config, saveProjectBindingsConfig]);
 
   const handleSubmitBatchToolAction = useCallback(async (
     action: "enable" | "disable",
@@ -1477,14 +1695,14 @@ export function Skills() {
                     padding: "8px 12px",
                     fontSize: "13px",
                     fontWeight: 500,
-                    color: selectedTags.length > 0 || untaggedOnly ? "var(--primary)" : "var(--foreground)",
+                    color: selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all" ? "var(--primary)" : "var(--foreground)",
                     backgroundColor: "var(--background)",
-                    border: selectedTags.length > 0 || untaggedOnly ? "1px solid rgba(9, 105, 218, 0.4)" : "1px solid var(--border)",
+                    border: selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all" ? "1px solid rgba(9, 105, 218, 0.4)" : "1px solid var(--border)",
                     borderRadius: "8px",
                     cursor: "pointer",
                     minWidth: "124px",
                     justifyContent: "space-between",
-                    boxShadow: selectedTags.length > 0 || untaggedOnly ? "0 0 0 3px rgba(9, 105, 218, 0.08)" : "none",
+                    boxShadow: selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all" ? "0 0 0 3px rgba(9, 105, 218, 0.08)" : "none",
                   }}
                 >
                   <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
@@ -1541,7 +1759,7 @@ export function Skills() {
                             {t("skills.tagFilterHintCompact")}
                           </div>
                         </div>
-                        {(selectedTags.length > 0 || untaggedOnly) && (
+                        {(selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all") && (
                           <button
                             type="button"
                             onClick={handleResetTagFilters}
@@ -1558,6 +1776,47 @@ export function Skills() {
                             {t("common.reset")}
                           </button>
                         )}
+                      </div>
+
+                      <div style={{
+                        display: "flex",
+                        gap: "4px",
+                        padding: "4px",
+                        marginBottom: "8px",
+                        backgroundColor: "var(--muted)",
+                        borderRadius: "8px",
+                      }}>
+                        {([
+                          { value: "all" as const, label: t("skills.scopeFilterAll"), count: unifiedItems.length },
+                          { value: "global" as const, label: t("skills.scopeGlobal"), count: scopeFilterCounts.global },
+                          { value: "project" as const, label: t("skills.scopeProject"), count: scopeFilterCounts.project },
+                        ]).map(({ value, label, count }) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => { setScopeFilter(value); setShowTagFilterMenu(false); }}
+                            style={{
+                              flex: 1,
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              gap: "1px",
+                              padding: "5px 0",
+                              fontSize: "11px",
+                              fontWeight: scopeFilter === value ? 600 : 400,
+                              color: scopeFilter === value ? "var(--primary)" : "var(--muted-foreground)",
+                              backgroundColor: scopeFilter === value ? "var(--background)" : "transparent",
+                              border: "none",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              boxShadow: scopeFilter === value ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                              transition: "background-color 0.15s, color 0.15s",
+                            }}
+                          >
+                            <span>{label}</span>
+                            <span style={{ fontSize: "10px", opacity: 0.72 }}>{count}</span>
+                          </button>
+                        ))}
                       </div>
 
                       <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -1850,6 +2109,31 @@ export function Skills() {
                           }}>
                             {item.title}
                           </div>
+                          {item.scopeLabel && (
+                            <span style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              height: "18px",
+                              padding: "0 6px",
+                              fontSize: "10px",
+                              fontWeight: 600,
+                              letterSpacing: "0.02em",
+                              color: item.scopeLabel === "project"
+                                ? "var(--primary-foreground, #fff)"
+                                : "var(--muted-foreground)",
+                              backgroundColor: item.scopeLabel === "project"
+                                ? "var(--primary, #6366f1)"
+                                : "var(--background)",
+                              border: item.scopeLabel === "project"
+                                ? "none"
+                                : "1px solid var(--border)",
+                              borderRadius: "4px",
+                            }}>
+                              {item.scopeLabel === "project"
+                                ? t("skills.scopeProject")
+                                : t("skills.scopeGlobal")}
+                            </span>
+                          )}
                           {item.badgeLabel && (
                             <span style={{
                               display: "inline-flex",
@@ -1997,7 +2281,7 @@ export function Skills() {
           onAddTag={() => void handleAddTag(toolEditorSkill)}
           onRemoveTag={(tag) => void handleRemoveTag(toolEditorSkill, tag)}
           tagSuggestions={toolEditorTagSuggestions}
-          onSelectTagSuggestion={(tag) => void persistSkillTags(getSkillMetadataKey(toolEditorSkill), [...toolEditorTags, tag])}
+          onSelectTagSuggestion={(tag) => void persistSkillTags(toolEditorSkill, [...toolEditorTags, tag])}
           savingTags={savingTagsSkillId === getSkillMetadataKey(toolEditorSkill)}
           t={t}
         />
@@ -2103,6 +2387,720 @@ export function Skills() {
           onCreate={handleCreateSkill}
           t={t}
         />
+      )}
+
+      {showProjectBindingsDialog && config && (
+        <ProjectBindingsDialog
+          open={showProjectBindingsDialog}
+          projects={config.projects ?? []}
+          activeProjectId={resolveActiveProjectId(config.active_project_id, config.projects ?? [])}
+          pendingProjectBinding={pendingProjectBinding}
+          saving={projectBindingsSaving}
+          onAddProject={() => void handleAddProjectBinding()}
+          onPendingProjectNameChange={handlePendingProjectNameChange}
+          onConfirmPendingProject={handleConfirmPendingProjectBinding}
+          onCancelPendingProject={handleCancelPendingProjectBinding}
+          onSetActiveProject={(projectId) => void handleSetActiveProjectBinding(projectId)}
+          onRemoveProject={(projectId) => void handleRemoveProjectBinding(projectId)}
+          onClose={handleCloseProjectBindingsDialog}
+          t={t}
+        />
+      )}
+    </div>
+  );
+}
+
+function ProjectBindingsDialog({
+  open,
+  projects,
+  activeProjectId,
+  pendingProjectBinding,
+  saving,
+  onAddProject,
+  onPendingProjectNameChange,
+  onConfirmPendingProject,
+  onCancelPendingProject,
+  onSetActiveProject,
+  onRemoveProject,
+  onClose,
+  t,
+}: {
+  open: boolean;
+  projects: AppConfig["projects"];
+  activeProjectId: string | null;
+  pendingProjectBinding: ProjectBinding | null;
+  saving: boolean;
+  onAddProject: () => void;
+  onPendingProjectNameChange: (name: string) => void;
+  onConfirmPendingProject: () => void;
+  onCancelPendingProject: () => void;
+  onSetActiveProject: (projectId: string | null) => void;
+  onRemoveProject: (projectId: string) => void;
+  onClose: () => void;
+  t: (key: TranslationPath) => string;
+}) {
+  if (!open) {
+    return null;
+  }
+
+  const currentProjects = projects ?? [];
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    if (!open || saving) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (confirmDeleteId) {
+          setConfirmDeleteId(null);
+        } else if (pendingProjectBinding) {
+          onCancelPendingProject();
+        } else {
+          onClose();
+        }
+      }
+      if (e.key === "Enter" && pendingProjectBinding && !saving) {
+        e.preventDefault();
+        onConfirmPendingProject();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open, saving, confirmDeleteId, pendingProjectBinding, onClose, onCancelPendingProject, onConfirmPendingProject]);
+
+  const handleDragStart = useCallback((e: React.DragEvent, projectId: string) => {
+    setDraggedId(projectId);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", projectId);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, projectId: string) => {
+    e.preventDefault();
+    if (draggedId && draggedId !== projectId) {
+      setDragOverId(projectId);
+    }
+  }, [draggedId]);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverId(null);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDraggedId(null);
+    setDragOverId(null);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedId(null);
+    setDragOverId(null);
+  }, []);
+
+  const handleDeleteClick = useCallback((projectId: string) => {
+    setConfirmDeleteId(projectId);
+  }, []);
+
+  const handleConfirmDelete = useCallback(() => {
+    if (confirmDeleteId) {
+      onRemoveProject(confirmDeleteId);
+      setConfirmDeleteId(null);
+    }
+  }, [confirmDeleteId, onRemoveProject]);
+
+  const handleCancelDelete = useCallback(() => {
+    setConfirmDeleteId(null);
+  }, []);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: MODAL_OVERLAY_COLOR,
+        zIndex: MODAL_LAYER_Z_INDEX,
+      }}
+      onClick={saving ? undefined : onClose}
+    >
+      <div
+        style={{
+          width: "min(680px, calc(100vw - 48px))",
+          maxHeight: "calc(100vh - 72px)",
+          backgroundColor: "var(--background)",
+          borderRadius: "16px",
+          border: "1px solid var(--border)",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.24)",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div
+          style={{
+            padding: "20px 24px 16px",
+            borderBottom: "1px solid var(--border)",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: "16px",
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <h3
+              style={{
+                margin: "0 0 4px 0",
+                fontSize: "17px",
+                fontWeight: 600,
+                color: "var(--foreground)",
+                letterSpacing: "-0.01em",
+              }}
+            >
+              {t("settings.projectBindings")}
+            </h3>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "13px",
+                color: "var(--muted-foreground)",
+                lineHeight: 1.5,
+              }}
+            >
+              {t("settings.projectBindingsDesc")}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            style={{
+              width: "32px",
+              height: "32px",
+              borderRadius: "8px",
+              border: "1px solid var(--border)",
+              backgroundColor: "transparent",
+              color: "var(--muted-foreground)",
+              cursor: saving ? "wait" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 0,
+              flexShrink: 0,
+              transition: "all 0.15s ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "var(--secondary)";
+              e.currentTarget.style.color = "var(--foreground)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+              e.currentTarget.style.color = "var(--muted-foreground)";
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Add Form - slides in from bottom */}
+        {pendingProjectBinding && (
+          <div
+            style={{
+              padding: "20px 24px",
+              backgroundColor: "var(--secondary)",
+              borderBottom: "1px solid var(--border)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px",
+              animation: "slideDown 0.2s ease-out",
+            }}
+          >
+            <style>{`
+              @keyframes slideDown {
+                from { opacity: 0; transform: translateY(-8px); }
+                to { opacity: 1; transform: translateY(0); }
+              }
+            `}</style>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "10px",
+                  backgroundColor: "var(--primary)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary-foreground)" strokeWidth="2">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </div>
+              <div>
+                <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)" }}>
+                  {t("settings.addProject")}
+                </div>
+                <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                  {t("settings.addProjectHint")}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--muted-foreground)" }}>
+                  {t("settings.projectName")}
+                </span>
+                <input
+                  type="text"
+                  value={pendingProjectBinding.name}
+                  onChange={(e) => onPendingProjectNameChange(e.target.value)}
+                  disabled={saving}
+                  autoFocus
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    fontSize: "14px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "10px",
+                    backgroundColor: "var(--background)",
+                    color: "var(--foreground)",
+                    outline: "none",
+                    boxSizing: "border-box",
+                    transition: "border-color 0.15s ease",
+                  }}
+                  onFocus={(e) => {
+                    e.currentTarget.style.borderColor = "var(--primary)";
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.style.borderColor = "var(--border)";
+                  }}
+                />
+              </label>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                  padding: "12px",
+                  backgroundColor: "var(--background)",
+                  borderRadius: "10px",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <span style={{ fontSize: "11px", fontWeight: 500, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  {t("settings.projectSkillsPath")}
+                </span>
+                <code
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    fontSize: "13px",
+                    color: "var(--foreground)",
+                    fontFamily: "ui-monospace, monospace",
+                    whiteSpace: "normal",
+                    overflowWrap: "anywhere",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {pendingProjectBinding.skills_dir}
+                </code>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={onCancelPendingProject}
+                disabled={saving}
+                style={{
+                  padding: "9px 16px",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  color: "var(--muted-foreground)",
+                  backgroundColor: "transparent",
+                  border: "1px solid var(--border)",
+                  borderRadius: "10px",
+                  cursor: saving ? "wait" : "pointer",
+                  transition: "all 0.15s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "var(--secondary)";
+                  e.currentTarget.style.color = "var(--foreground)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                  e.currentTarget.style.color = "var(--muted-foreground)";
+                }}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmPendingProject}
+                disabled={saving || !pendingProjectBinding.name.trim()}
+                style={{
+                  padding: "9px 16px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  color: "var(--primary-foreground)",
+                  backgroundColor: "var(--primary)",
+                  border: "none",
+                  borderRadius: "10px",
+                  cursor: saving || !pendingProjectBinding.name.trim() ? "not-allowed" : "pointer",
+                  opacity: saving || !pendingProjectBinding.name.trim() ? 0.6 : 1,
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {saving ? t("common.saving") : t("common.add")}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Project List */}
+        <div style={{ flex: 1, overflow: "auto", padding: "8px 0" }}>
+          {currentProjects.length === 0 ? (
+            <div
+              style={{
+                padding: "48px 24px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "12px",
+                color: "var(--muted-foreground)",
+              }}
+            >
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "14px",
+                  backgroundColor: "var(--secondary)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: "4px",
+                }}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+              </div>
+              <div style={{ fontSize: "14px", fontWeight: 500 }}>{t("settings.noProjects")}</div>
+              <div style={{ fontSize: "13px" }}>{t("settings.noProjectsHint")}</div>
+            </div>
+          ) : (
+            <div style={{ padding: "0 12px" }}>
+              {currentProjects.map((project, index) => {
+                const isLast = index === currentProjects.length - 1;
+                const isActive = activeProjectId === project.id;
+                const isDragOver = dragOverId === project.id;
+
+                return (
+                  <div
+                    key={project.id}
+                    draggable={!saving && !confirmDeleteId}
+                    onDragStart={(e) => handleDragStart(e, project.id)}
+                    onDragOver={(e) => handleDragOver(e, project.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onDragEnd={handleDragEnd}
+                    style={{
+                      padding: "14px 12px",
+                      borderBottom: isLast ? "none" : "1px solid var(--border)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      cursor: saving ? "default" : "grab",
+                      transition: "all 0.15s ease",
+                      backgroundColor: isDragOver
+                        ? "rgba(9, 105, 218, 0.06)"
+                        : isActive
+                        ? "rgba(9, 105, 218, 0.04)"
+                        : "transparent",
+                      borderRadius: isDragOver ? "10px" : "0",
+                      marginTop: isDragOver ? "4px" : "0",
+                      borderTop: isDragOver ? "2px solid var(--primary)" : "none",
+                    }}
+                  >
+                    {/* Drag Handle & Content */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0, flex: 1 }}>
+                      {/* Drag Handle */}
+                      <div
+                        style={{
+                          color: "var(--muted-foreground)",
+                          cursor: saving ? "not-allowed" : "grab",
+                          padding: "4px",
+                          marginLeft: "-4px",
+                          opacity: saving ? 0.4 : 0.6,
+                          transition: "opacity 0.15s ease",
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="9" cy="6" r="1.5" />
+                          <circle cx="15" cy="6" r="1.5" />
+                          <circle cx="9" cy="12" r="1.5" />
+                          <circle cx="15" cy="12" r="1.5" />
+                          <circle cx="9" cy="18" r="1.5" />
+                          <circle cx="15" cy="18" r="1.5" />
+                        </svg>
+                      </div>
+
+                      {/* Project Info */}
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "14px",
+                              fontWeight: 600,
+                              color: "var(--foreground)",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {project.name}
+                          </div>
+                          {isActive && (
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                fontWeight: 600,
+                                color: "var(--primary)",
+                                backgroundColor: "rgba(9, 105, 218, 0.1)",
+                                border: "1px solid rgba(9, 105, 218, 0.2)",
+                                borderRadius: "999px",
+                                padding: "2px 8px",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {t("settings.currentProject")}
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "12px",
+                            color: "var(--muted-foreground)",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {project.skills_dir}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    {!confirmDeleteId || confirmDeleteId !== project.id ? (
+                      <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+                        {!isActive && (
+                          <button
+                            type="button"
+                            onClick={() => onSetActiveProject(project.id)}
+                            disabled={saving}
+                            style={{
+                              padding: "7px 12px",
+                              fontSize: "12px",
+                              fontWeight: 500,
+                              color: "var(--foreground)",
+                              backgroundColor: "var(--secondary)",
+                              border: "1px solid var(--border)",
+                              borderRadius: "8px",
+                              cursor: saving ? "not-allowed" : "pointer",
+                              opacity: saving ? 0.6 : 1,
+                              transition: "all 0.15s ease",
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!saving) {
+                                e.currentTarget.style.backgroundColor = "var(--primary)";
+                                e.currentTarget.style.color = "var(--primary-foreground)";
+                                e.currentTarget.style.borderColor = "var(--primary)";
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "var(--secondary)";
+                              e.currentTarget.style.color = "var(--foreground)";
+                              e.currentTarget.style.borderColor = "var(--border)";
+                            }}
+                          >
+                            {t("settings.setActiveProject")}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteClick(project.id)}
+                          disabled={saving}
+                          style={{
+                            padding: "7px 10px",
+                            fontSize: "12px",
+                            fontWeight: 500,
+                            color: "#dc2626",
+                            backgroundColor: "transparent",
+                            border: "1px solid transparent",
+                            borderRadius: "8px",
+                            cursor: saving ? "not-allowed" : "pointer",
+                            opacity: saving ? 0.6 : 1,
+                            transition: "all 0.15s ease",
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!saving) {
+                              e.currentTarget.style.backgroundColor = "rgba(220, 38, 38, 0.1)";
+                              e.currentTarget.style.borderColor = "rgba(220, 38, 38, 0.2)";
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = "transparent";
+                            e.currentTarget.style.borderColor = "transparent";
+                          }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      /* Delete Confirmation */
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          padding: "6px 8px",
+                          backgroundColor: "rgba(220, 38, 38, 0.08)",
+                          borderRadius: "10px",
+                          border: "1px solid rgba(220, 38, 38, 0.2)",
+                        }}
+                      >
+                        <span style={{ fontSize: "12px", fontWeight: 500, color: "#dc2626" }}>
+                          {t("settings.confirmDelete")}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleConfirmDelete}
+                          disabled={saving}
+                          style={{
+                            padding: "5px 10px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            color: "#ffffff",
+                            backgroundColor: "#dc2626",
+                            border: "none",
+                            borderRadius: "6px",
+                            cursor: saving ? "wait" : "pointer",
+                          }}
+                        >
+                          {t("common.delete")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelDelete}
+                          disabled={saving}
+                          style={{
+                            padding: "5px 10px",
+                            fontSize: "12px",
+                            fontWeight: 500,
+                            color: "var(--muted-foreground)",
+                            backgroundColor: "transparent",
+                            border: "1px solid var(--border)",
+                            borderRadius: "6px",
+                            cursor: saving ? "wait" : "pointer",
+                          }}
+                        >
+                          {t("common.cancel")}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div
+          style={{
+            padding: "16px 24px",
+            borderTop: "1px solid var(--border)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+            {currentProjects.length > 0 && (
+              <span>
+                {currentProjects.length} {currentProjects.length === 1 ? t("settings.projectCountSingular") : t("settings.projectCountPlural")}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onAddProject}
+            disabled={saving || !!pendingProjectBinding}
+            style={{
+              padding: "9px 16px",
+              fontSize: "13px",
+              fontWeight: 600,
+              color: "var(--primary-foreground)",
+              backgroundColor: "var(--primary)",
+              border: "none",
+              borderRadius: "10px",
+              cursor: saving || pendingProjectBinding ? "not-allowed" : "pointer",
+              opacity: saving || pendingProjectBinding ? 0.6 : 1,
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            {t("settings.addProject")}
+          </button>
+        </div>
+      </div>
+
+      {/* Delete confirmation shortcut hints */}
+      {confirmDeleteId && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "24px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            fontSize: "12px",
+            color: "var(--muted-foreground)",
+            backgroundColor: "var(--secondary)",
+            padding: "8px 16px",
+            borderRadius: "8px",
+            border: "1px solid var(--border)",
+          }}
+        >
+          Press <kbd style={{ fontSize: "11px", padding: "2px 6px", backgroundColor: "var(--background)", borderRadius: "4px", border: "1px solid var(--border)" }}>Esc</kbd> to cancel
+        </div>
       )}
     </div>
   );
