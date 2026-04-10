@@ -8,15 +8,25 @@ import {
   filterSkills,
   getGroupMetadataKey,
   getGroupTags,
+  getSkillTagsForSkill,
   getTagFilterSelectionSummary,
   hasSelectableTagFilters,
+  hasSkillMetadataEntry,
+  migrateSkillMetadataEntryToInstanceId,
+  migrateSkillMetadataToInstanceIds,
   normalizeSkillTags,
+  removeSkillMetadataEntry,
   updateMetadataTags,
+  updateSkillTagsForSkill,
 } from "./skillTags.ts";
 
 const skills = [
   {
     id: "react-playground",
+    instance_id: "global:react-playground",
+    scope: "global" as const,
+    project_id: null,
+    project_name: null,
     name: "React Playground",
     description: null,
     version: "1.0.0",
@@ -26,6 +36,10 @@ const skills = [
   },
   {
     id: "cli-helper",
+    instance_id: "global:cli-helper",
+    scope: "global" as const,
+    project_id: null,
+    project_name: null,
     name: "CLI Helper",
     description: null,
     version: "1.0.0",
@@ -35,6 +49,10 @@ const skills = [
   },
   {
     id: "notes",
+    instance_id: "global:notes",
+    scope: "global" as const,
+    project_id: null,
+    project_name: null,
     name: "Daily Notes",
     description: null,
     version: "1.0.0",
@@ -188,4 +206,121 @@ test("buildAllTagSummaries includes group tags so top-level filters can see them
       { tag: "workspace", count: 1 },
     ],
   );
+});
+
+test("getSkillTagsForSkill keeps tags isolated for same skill id across global and project instances", () => {
+  const globalSkill = {
+    id: "shared-skill",
+    instance_id: "global:shared-skill",
+    scope: "global" as const,
+    project_id: null,
+    project_name: null,
+    name: "Shared Skill",
+    description: null,
+    version: "1.0.0",
+    source: "local" as const,
+    enabled: {},
+    path: "/tmp/shared-global",
+  };
+  const projectSkill = {
+    id: "shared-skill",
+    instance_id: "project:project-alpha:shared-skill",
+    scope: "project" as const,
+    project_id: "project-alpha",
+    project_name: "Project Alpha",
+    name: "Shared Skill",
+    description: null,
+    version: "1.0.0",
+    source: "local" as const,
+    enabled: {},
+    path: "/tmp/shared-project",
+  };
+  const scopedMetadata = {
+    "global:shared-skill": { tags: ["global-tag"] },
+    "project:project-alpha:shared-skill": { tags: ["project-tag"] },
+  };
+
+  assert.deepEqual(getSkillTagsForSkill(globalSkill, scopedMetadata), ["global-tag"]);
+  assert.deepEqual(getSkillTagsForSkill(projectSkill, scopedMetadata), ["project-tag"]);
+});
+
+test("getSkillTagsForSkill still reads legacy global metadata by id during migration", () => {
+  const globalSkill = {
+    id: "shared-skill",
+    instance_id: "global:shared-skill",
+    scope: "global" as const,
+    project_id: null,
+    project_name: null,
+    name: "Shared Skill",
+    description: null,
+    version: "1.0.0",
+    source: "local" as const,
+    enabled: {},
+    path: "/tmp/shared-global",
+  };
+
+  assert.deepEqual(
+    getSkillTagsForSkill(globalSkill, { "shared-skill": { tags: ["legacy-tag"] } }),
+    ["legacy-tag"],
+  );
+});
+
+test("migrateSkillMetadataEntryToInstanceId upgrades legacy global metadata key", () => {
+  const migrated = migrateSkillMetadataEntryToInstanceId(
+    {
+      id: "shared-skill",
+      instance_id: "global:shared-skill",
+      scope: "global",
+    },
+    {
+      "shared-skill": { tags: ["legacy-tag"] },
+    },
+  );
+
+  assert.deepEqual(migrated, {
+    "global:shared-skill": { tags: ["legacy-tag"] },
+  });
+});
+
+test("updateSkillTagsForSkill writes global metadata back to instance_id key", () => {
+  const updated = updateSkillTagsForSkill(
+    {
+      id: "shared-skill",
+      instance_id: "global:shared-skill",
+      scope: "global",
+    },
+    ["next-tag"],
+    {
+      "shared-skill": { tags: ["legacy-tag"] },
+    },
+  );
+
+  assert.deepEqual(updated, {
+    "global:shared-skill": { tags: ["next-tag"] },
+  });
+});
+
+test("hasSkillMetadataEntry recognizes both migrated and legacy global metadata keys", () => {
+  const globalSkill = {
+    id: "shared-skill",
+    instance_id: "global:shared-skill",
+    scope: "global" as const,
+  };
+
+  assert.equal(hasSkillMetadataEntry(globalSkill, { "global:shared-skill": { tags: ["global-tag"] } }), true);
+  assert.equal(hasSkillMetadataEntry(globalSkill, { "shared-skill": { tags: ["legacy-tag"] } }), true);
+});
+
+test("migrateSkillMetadataToInstanceIds preserves the original object when nothing changes", () => {
+  const original = {
+    "global:shared-skill": { tags: ["global-tag"] },
+  };
+
+  assert.equal(migrateSkillMetadataToInstanceIds([
+    {
+      id: "shared-skill",
+      instance_id: "global:shared-skill",
+      scope: "global" as const,
+    },
+  ], original), original);
 });

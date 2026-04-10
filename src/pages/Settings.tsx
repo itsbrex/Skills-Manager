@@ -27,6 +27,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { SunIcon, MoonIcon, MonitorIcon } from "@/components/icons/theme-icons";
+import { resolveActiveProjectId } from "./projectBindings";
 
 export function Settings() {
   const { t, language, setLanguage } = useTranslation();
@@ -53,11 +54,16 @@ export function Settings() {
         ...defaultPreferences,
         ...(configResult.preferences ?? {}),
       };
+      const nextActiveProjectId = resolveActiveProjectId(configResult.active_project_id, configResult.projects ?? []);
+      if (nextActiveProjectId !== configResult.active_project_id) {
+        configResult.active_project_id = nextActiveProjectId;
+        addToast(t("settings.currentProjectMissing"), "info");
+      }
       setConfig(configResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, []);
+  }, [addToast, t]);
 
   useEffect(() => {
     fetchConfig();
@@ -135,6 +141,7 @@ export function Settings() {
       marketplace_sources: updatedSources,
     });
   };
+
 
   const handleSave = async () => {
     if (!config) return;
@@ -540,6 +547,8 @@ export function Settings() {
               />
             </SettingsRow>
           </SettingsCard>
+
+
 
           {/* Marketplace Section */}
           <SectionTitle>{t("settings.marketplace")}</SectionTitle>

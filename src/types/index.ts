@@ -21,7 +21,6 @@ export interface Skill {
 export interface ProjectBinding {
   id: string;
   name: string;
-  root_path: string;
   skills_dir: string;
 }
 

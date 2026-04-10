@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::models::{AppConfig, SkillMetadata, SourceType, ToolConfig, SUPPORTED_TOOLS};
+use crate::models::{AppConfig, ProjectBinding, SkillMetadata, SourceType, ToolConfig, SUPPORTED_TOOLS};
 #[cfg(windows)]
 use crate::services::linker::LinkerService;
 use crate::services::linker::{is_symlink_or_junction, normalize_path, remove_symlink_or_junction};
@@ -81,22 +81,154 @@ impl ConfigManager {
         metadata: &std::collections::HashMap<String, SkillMetadata>,
     ) -> std::collections::HashMap<String, SkillMetadata> {
         let mut normalized = std::collections::HashMap::new();
+        let mut changed = false;
 
         for (skill_id, item) in metadata {
             let trimmed_id = skill_id.trim();
             if trimmed_id.is_empty() {
+                changed = true;
                 continue;
             }
 
             let tags = Self::normalize_skill_tags(&item.tags);
             if tags.is_empty() {
+                changed = true;
                 continue;
             }
 
-            normalized.insert(trimmed_id.to_string(), SkillMetadata { tags });
+            let normalized_id = if trimmed_id.starts_with("global:")
+                || trimmed_id.starts_with("project:")
+                || trimmed_id.starts_with("group:")
+            {
+                trimmed_id.to_string()
+            } else {
+                changed = true;
+                format!("global:{}", trimmed_id)
+            };
+
+            if normalized.insert(normalized_id, SkillMetadata { tags }).is_some() {
+                changed = true;
+            }
         }
 
-        normalized
+        if changed { normalized } else { metadata.clone() }
+    }
+
+    fn normalize_project_name_from_skills_dir(skills_dir: &PathBuf) -> String {
+        let segments = normalize_path(skills_dir)
+            .iter()
+            .map(|segment| segment.to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+
+        let last_segment = segments
+            .last()
+            .cloned()
+            .unwrap_or_else(|| skills_dir.to_string_lossy().to_string());
+
+        if !last_segment.eq_ignore_ascii_case("skills") {
+            return last_segment;
+        }
+
+        if segments.len() >= 3 && segments[segments.len() - 2] == ".claude" {
+            return segments[segments.len() - 3].clone();
+        }
+
+        if segments.len() >= 2 {
+            return segments[segments.len() - 2].clone();
+        }
+
+        last_segment
+    }
+
+    fn migrate_project_bindings(config: &mut AppConfig) -> bool {
+        let projects_value = match serde_json::to_value(&config.projects) {
+            Ok(value) => value,
+            Err(_) => return false,
+        };
+        let Some(projects) = projects_value.as_array() else {
+            return false;
+        };
+
+        let mut changed = false;
+        let mut normalized_projects = Vec::with_capacity(projects.len());
+
+        for project in projects {
+            let id = project
+                .get("id")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            if id.is_empty() {
+                changed = true;
+                continue;
+            }
+
+            let legacy_root_path = project
+                .get("root_path")
+                .and_then(|value| value.as_str())
+                .map(PathBuf::from);
+            let mut skills_dir = project
+                .get("skills_dir")
+                .and_then(|value| value.as_str())
+                .map(PathBuf::from)
+                .or_else(|| legacy_root_path.clone().map(|root| root.join(".claude").join("skills")));
+
+            let Some(skills_dir_path) = skills_dir.take() else {
+                changed = true;
+                continue;
+            };
+            let normalized_skills_dir = normalize_path(&skills_dir_path);
+
+            let stored_name = project
+                .get("name")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            let normalized_name = if stored_name.is_empty() {
+                changed = true;
+                Self::normalize_project_name_from_skills_dir(&normalized_skills_dir)
+            } else {
+                stored_name
+            };
+
+            if project.get("root_path").is_some() {
+                changed = true;
+            }
+            if project
+                .get("skills_dir")
+                .and_then(|value| value.as_str())
+                .map(PathBuf::from)
+                .as_ref()
+                != Some(&normalized_skills_dir)
+            {
+                changed = true;
+            }
+
+            normalized_projects.push(ProjectBinding {
+                id,
+                name: normalized_name,
+                skills_dir: normalized_skills_dir,
+            });
+        }
+
+        if config.projects != normalized_projects {
+            config.projects = normalized_projects;
+            changed = true;
+        }
+
+        let normalized_active_project_id = config
+            .active_project_id
+            .as_ref()
+            .filter(|active_id| config.projects.iter().any(|project| &project.id == *active_id))
+            .cloned();
+        if config.active_project_id != normalized_active_project_id {
+            config.active_project_id = normalized_active_project_id;
+            changed = true;
+        }
+
+        changed
     }
 
     pub fn new() -> Self {
@@ -278,6 +410,10 @@ impl ConfigManager {
             updated = true;
         }
 
+        if Self::migrate_project_bindings(&mut config) {
+            updated = true;
+        }
+
         // Keep marketplace sources constrained to supported providers.
         // Unknown legacy providers are removed during load to prevent stale config from surfacing.
         let default_sources = AppConfig::default().marketplace_sources.unwrap_or_default();
@@ -409,6 +545,7 @@ impl ConfigManager {
         let mut normalized = config.clone();
         normalized.skills_dir = normalize_path(&AppConfig::default_skills_dir());
         normalized.skill_metadata = Self::normalize_skill_metadata(&normalized.skill_metadata);
+        let _ = Self::migrate_project_bindings(&mut normalized);
         fs::create_dir_all(&normalized.skills_dir)
             .map_err(|e| format!("Failed to create skills directory: {}", e))?;
 
@@ -580,26 +717,24 @@ mod tests {
     }
 
     #[test]
-    fn save_and_load_skill_tags_round_trip() {
+    fn save_and_load_migrates_legacy_global_skill_metadata_to_instance_ids() {
         with_temp_home(|_home_dir| {
             let manager = ConfigManager::new();
             let mut config = manager.init_default().expect("init default config");
             config.skill_metadata.insert(
-                "react-playground".to_string(),
+                "shared-skill".to_string(),
                 SkillMetadata {
-                    tags: vec!["react".to_string(), "frontend".to_string()],
+                    tags: vec!["legacy-tag".to_string()],
                 },
             );
 
             manager.save(&config).expect("save config");
 
             let loaded = manager.load().expect("load config");
-            assert_eq!(
-                loaded.skill_metadata.get("react-playground"),
-                Some(&SkillMetadata {
-                    tags: vec!["react".to_string(), "frontend".to_string()],
-                })
-            );
+            assert_eq!(loaded.skill_metadata.get("global:shared-skill"), Some(&SkillMetadata {
+                tags: vec!["legacy-tag".to_string()],
+            }));
+            assert_eq!(loaded.skill_metadata.get("shared-skill"), None);
         });
     }
 
@@ -641,9 +776,15 @@ mod tests {
                         "name": "Project Alpha",
                         "root_path": home_dir.join("code").join("alpha").to_string_lossy(),
                         "skills_dir": home_dir.join("code").join("alpha").join(".claude").join("skills").to_string_lossy()
+                    },
+                    {
+                        "id": "project-beta",
+                        "name": "",
+                        "root_path": home_dir.join("code").join("beta").to_string_lossy(),
+                        "skills_dir": home_dir.join("code").join("beta").join("custom-skills").to_string_lossy()
                     }
                 ],
-                "active_project_id": "project-alpha",
+                "active_project_id": "missing-project",
                 "initialized": true
             });
             fs::write(
@@ -653,6 +794,14 @@ mod tests {
             .expect("write updated config");
 
             let reloaded = manager.load().expect("reload config with projects");
+            assert_eq!(reloaded.active_project_id, None);
+            assert_eq!(reloaded.projects.len(), 2);
+            assert_eq!(
+                reloaded.projects[0].skills_dir,
+                home_dir.join("code").join("alpha").join(".claude").join("skills")
+            );
+            assert_eq!(reloaded.projects[1].name, "custom-skills");
+
             manager.save(&reloaded).expect("save config with projects");
 
             let saved_value: serde_json::Value = serde_json::from_str(
@@ -660,14 +809,172 @@ mod tests {
             )
             .expect("parse saved config");
 
-            assert_eq!(saved_value.get("active_project_id"), Some(&json!("project-alpha")));
+            assert_eq!(saved_value.get("active_project_id"), Some(&serde_json::Value::Null));
             assert_eq!(
                 saved_value
                     .get("projects")
                     .and_then(|projects| projects.as_array())
                     .map(|projects| projects.len()),
-                Some(1)
+                Some(2)
             );
+            assert_eq!(
+                saved_value["projects"][0].get("root_path"),
+                None,
+                "saved project bindings should no longer persist legacy root_path"
+            );
+            assert_eq!(
+                saved_value["projects"][1].get("root_path"),
+                None,
+                "saved project bindings should no longer persist legacy root_path"
+            );
+        });
+    }
+
+    #[test]
+    fn load_migrates_legacy_project_binding_with_only_root_path() {
+        with_temp_home(|home_dir| {
+            let config_dir = home_dir.join(".skills-manager");
+            fs::create_dir_all(&config_dir).expect("create config dir");
+            let config_path = config_dir.join("config.json");
+
+            let legacy_config_json = json!({
+                "version": "2.0.1",
+                "skills_dir": config_dir.join("skills").to_string_lossy(),
+                "tools": {},
+                "custom_tools": {},
+                "projects": [
+                    {
+                        "id": "project-alpha",
+                        "name": "Project Alpha",
+                        "root_path": home_dir.join("code").join("alpha").to_string_lossy()
+                    }
+                ],
+                "active_project_id": "project-alpha",
+                "initialized": true
+            });
+            fs::write(
+                &config_path,
+                serde_json::to_string_pretty(&legacy_config_json).expect("serialize config"),
+            )
+            .expect("write legacy config");
+
+            let manager = ConfigManager::new();
+            let loaded = manager.load().expect("load legacy project binding");
+
+            assert_eq!(loaded.projects.len(), 1);
+            assert_eq!(
+                loaded.projects[0].skills_dir,
+                home_dir.join("code").join("alpha").join(".claude").join("skills")
+            );
+            assert_eq!(loaded.active_project_id.as_deref(), Some("project-alpha"));
+        });
+    }
+
+    #[test]
+    fn load_prefers_legacy_skills_dir_over_root_path_when_both_exist() {
+        with_temp_home(|home_dir| {
+            let config_dir = home_dir.join(".skills-manager");
+            fs::create_dir_all(&config_dir).expect("create config dir");
+            let config_path = config_dir.join("config.json");
+
+            let legacy_config_json = json!({
+                "version": "2.0.1",
+                "skills_dir": config_dir.join("skills").to_string_lossy(),
+                "tools": {},
+                "custom_tools": {},
+                "projects": [
+                    {
+                        "id": "project-alpha",
+                        "name": "Project Alpha",
+                        "root_path": home_dir.join("code").join("alpha").to_string_lossy(),
+                        "skills_dir": home_dir.join("alt").join("selected-skills").to_string_lossy()
+                    }
+                ],
+                "active_project_id": "project-alpha",
+                "initialized": true
+            });
+            fs::write(
+                &config_path,
+                serde_json::to_string_pretty(&legacy_config_json).expect("serialize config"),
+            )
+            .expect("write legacy config");
+
+            let manager = ConfigManager::new();
+            let loaded = manager.load().expect("load legacy project binding");
+
+            assert_eq!(loaded.projects.len(), 1);
+            assert_eq!(
+                loaded.projects[0].skills_dir,
+                home_dir.join("alt").join("selected-skills")
+            );
+        });
+    }
+
+    #[test]
+    fn load_uses_skills_dir_name_when_project_name_is_empty() {
+        with_temp_home(|home_dir| {
+            let config_dir = home_dir.join(".skills-manager");
+            fs::create_dir_all(&config_dir).expect("create config dir");
+            let config_path = config_dir.join("config.json");
+
+            let legacy_config_json = json!({
+                "version": "2.0.1",
+                "skills_dir": config_dir.join("skills").to_string_lossy(),
+                "tools": {},
+                "custom_tools": {},
+                "projects": [
+                    {
+                        "id": "project-alpha",
+                        "name": "",
+                        "skills_dir": home_dir.join("workspaces").join("project-alpha").join("team-skills").to_string_lossy()
+                    }
+                ],
+                "initialized": true
+            });
+            fs::write(
+                &config_path,
+                serde_json::to_string_pretty(&legacy_config_json).expect("serialize config"),
+            )
+            .expect("write legacy config");
+
+            let manager = ConfigManager::new();
+            let loaded = manager.load().expect("load legacy project binding");
+
+            assert_eq!(loaded.projects[0].name, "team-skills");
+        });
+    }
+
+    #[test]
+    fn load_uses_parent_directory_name_when_skills_dir_is_named_skills() {
+        with_temp_home(|home_dir| {
+            let config_dir = home_dir.join(".skills-manager");
+            fs::create_dir_all(&config_dir).expect("create config dir");
+            let config_path = config_dir.join("config.json");
+
+            let legacy_config_json = json!({
+                "version": "2.0.1",
+                "skills_dir": config_dir.join("skills").to_string_lossy(),
+                "tools": {},
+                "custom_tools": {},
+                "projects": [
+                    {
+                        "id": "project-alpha",
+                        "name": "",
+                        "skills_dir": home_dir.join("workspaces").join("project-alpha").join("skills").to_string_lossy()
+                    }
+                ],
+                "initialized": true
+            });
+            fs::write(
+                &config_path,
+                serde_json::to_string_pretty(&legacy_config_json).expect("serialize config"),
+            )
+            .expect("write legacy config");
+
+            let manager = ConfigManager::new();
+            let loaded = manager.load().expect("load legacy project binding");
+
+            assert_eq!(loaded.projects[0].name, "project-alpha");
         });
     }
 

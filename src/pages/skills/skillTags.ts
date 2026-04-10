@@ -51,26 +51,105 @@ export function getSkillTags(skillId: string, skillMetadata?: SkillMetadataMap):
   return normalizeSkillTags(skillMetadata?.[skillId]?.tags ?? []);
 }
 
-export function getSkillMetadataKey(skill: Pick<Skill, "id" | "scope" | "instance_id">): string {
-  return skill.scope === "project" ? skill.instance_id : skill.id;
+export function getSkillMetadataKey(skill: Pick<Skill, "instance_id">): string {
+  return skill.instance_id;
+}
+
+function getLegacyGlobalSkillMetadataKey(skill: Pick<Skill, "id" | "scope">): string | null {
+  return skill.scope === "global" ? skill.id : null;
 }
 
 export function getSkillTagsForSkill(skill: Skill, skillMetadata?: SkillMetadataMap): string[] {
-  return getSkillTags(getSkillMetadataKey(skill), skillMetadata);
+  const metadataKey = getSkillMetadataKey(skill);
+  const nextTags = getSkillTags(metadataKey, skillMetadata);
+  if (nextTags.length > 0) {
+    return nextTags;
+  }
+
+  const legacyMetadataKey = getLegacyGlobalSkillMetadataKey(skill);
+  if (!legacyMetadataKey) {
+    return nextTags;
+  }
+
+  return getSkillTags(legacyMetadataKey, skillMetadata);
+}
+
+function hasLegacyGlobalMetadataEntry(
+  skill: Pick<Skill, "id" | "scope">,
+  skillMetadata?: SkillMetadataMap,
+): boolean {
+  const legacyMetadataKey = getLegacyGlobalSkillMetadataKey(skill);
+  return legacyMetadataKey ? Boolean(skillMetadata?.[legacyMetadataKey]) : false;
 }
 
 export function hasSkillMetadataEntry(
   skill: Pick<Skill, "id" | "scope" | "instance_id">,
   skillMetadata?: SkillMetadataMap,
 ): boolean {
-  return Boolean(skillMetadata?.[getSkillMetadataKey(skill)]);
+  return Boolean(skillMetadata?.[getSkillMetadataKey(skill)]) || hasLegacyGlobalMetadataEntry(skill, skillMetadata);
 }
 
 export function removeSkillMetadataEntry(
   skill: Pick<Skill, "id" | "scope" | "instance_id">,
   skillMetadata?: SkillMetadataMap,
 ): SkillMetadataMap {
-  return removeMetadataEntry(getSkillMetadataKey(skill), skillMetadata);
+  const nextMetadata = removeMetadataEntry(getSkillMetadataKey(skill), skillMetadata);
+  const legacyMetadataKey = getLegacyGlobalSkillMetadataKey(skill);
+  return legacyMetadataKey ? removeMetadataEntry(legacyMetadataKey, nextMetadata) : nextMetadata;
+}
+
+export function migrateSkillMetadataToInstanceIds(
+  skills: Pick<Skill, "id" | "scope" | "instance_id">[],
+  skillMetadata?: SkillMetadataMap,
+): SkillMetadataMap {
+  const originalMetadata = skillMetadata ?? {};
+  const nextMetadata = { ...originalMetadata };
+  let changed = false;
+
+  for (const skill of skills) {
+    if (skill.scope !== "global") {
+      continue;
+    }
+
+    const legacyMetadataKey = getLegacyGlobalSkillMetadataKey(skill);
+    const metadataKey = getSkillMetadataKey(skill);
+    if (!legacyMetadataKey || legacyMetadataKey === metadataKey) {
+      continue;
+    }
+
+    if (nextMetadata[metadataKey] || !nextMetadata[legacyMetadataKey]) {
+      continue;
+    }
+
+    nextMetadata[metadataKey] = nextMetadata[legacyMetadataKey];
+    delete nextMetadata[legacyMetadataKey];
+    changed = true;
+  }
+
+  return changed ? nextMetadata : originalMetadata;
+}
+
+export function migrateSkillMetadataEntryToInstanceId(
+  skill: Pick<Skill, "id" | "scope" | "instance_id">,
+  skillMetadata?: SkillMetadataMap,
+): SkillMetadataMap {
+  return migrateSkillMetadataToInstanceIds([skill], skillMetadata);
+}
+
+export function updateSkillTagsForSkill(
+  skill: Pick<Skill, "id" | "scope" | "instance_id">,
+  nextTags: string[],
+  skillMetadata?: SkillMetadataMap,
+): SkillMetadataMap {
+  const migratedMetadata = migrateSkillMetadataEntryToInstanceId(skill, skillMetadata);
+  return updateMetadataTags(getSkillMetadataKey(skill), nextTags, migratedMetadata);
+}
+
+export function getSkillTagsForSkillKey(
+  skill: Pick<Skill, "id" | "scope" | "instance_id">,
+  skillMetadata?: SkillMetadataMap,
+): string[] {
+  return getSkillTagsForSkill(skill as Skill, skillMetadata);
 }
 
 export function getUntaggedSkillsCount(skills: Skill[], skillMetadata?: SkillMetadataMap): number {

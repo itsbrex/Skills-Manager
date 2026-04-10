@@ -9,6 +9,7 @@ import {
   shouldShowGroupToolInEnabledOnly,
   removeGroupSkillMetadataEntries,
 } from "./buildUnifiedSkillItems.ts";
+import { migrateSkillMetadataEntryToInstanceId, updateSkillTagsForSkill } from "./skillTags.ts";
 
 const tools: Tool[] = [
   {
@@ -66,6 +67,19 @@ const skills: Skill[] = [
     enabled: { claude: false, codex: false },
     path: "/tmp/beta",
   },
+  {
+    id: "skill-delta",
+    instance_id: "project:proj-1:skill-delta",
+    scope: "project",
+    project_id: "proj-1",
+    project_name: "Project One",
+    name: "Delta Skill",
+    description: "Project workflow",
+    version: "1.0.0",
+    source: "local",
+    enabled: { claude: true, codex: false },
+    path: "/tmp/delta",
+  },
 ];
 
 const skillPackages: InstalledSkillPackage[] = [
@@ -84,6 +98,7 @@ const skillPackages: InstalledSkillPackage[] = [
 const skillMetadata: SkillMetadataMap = {
   "skill-alpha": { tags: ["editor", "local"] },
   "skill-beta": { tags: [] },
+  "project:proj-1:skill-delta": { tags: ["project-tag"] },
 };
 
 function createItems() {
@@ -99,12 +114,98 @@ function createItems() {
 test("buildUnifiedSkillItems merges skills and groups into one list", () => {
   const items = createItems();
 
-  assert.equal(items.length, 3);
+  assert.equal(items.length, 4);
   assert.deepEqual(
     items.map((item) => item.kind),
-    ["skill", "skill", "group"],
+    ["skill", "skill", "skill", "group"],
   );
 });
+
+test("buildUnifiedSkillItems keeps tags isolated for same skill id across global and project instances", () => {
+  const sharedSkills: Skill[] = [
+    {
+      id: "shared-skill",
+      instance_id: "global:shared-skill",
+      scope: "global",
+      project_id: null,
+      project_name: null,
+      name: "Shared Skill",
+      description: "Global shared skill",
+      version: "1.0.0",
+      source: "local",
+      enabled: { claude: true },
+      path: "/tmp/shared-global",
+    },
+    {
+      id: "shared-skill",
+      instance_id: "project:project-alpha:shared-skill",
+      scope: "project",
+      project_id: "project-alpha",
+      project_name: "Project Alpha",
+      name: "Shared Skill",
+      description: "Project shared skill",
+      version: "1.0.0",
+      source: "local",
+      enabled: { claude: false },
+      path: "/tmp/shared-project",
+    },
+  ];
+
+  const scopedMetadata: SkillMetadataMap = {
+    "global:shared-skill": { tags: ["global-tag"] },
+    "project:project-alpha:shared-skill": { tags: ["project-tag"] },
+  };
+
+  const items = buildUnifiedSkillItems({
+    skills: sharedSkills,
+    skillPackages: [],
+    tools,
+    skillMetadata: scopedMetadata,
+    groupBadgeLabel: "Group",
+  });
+
+  const globalItem = items.find((item) => item.kind === "skill" && item.id === "global:shared-skill");
+  const projectItem = items.find((item) => item.kind === "skill" && item.id === "project:project-alpha:shared-skill");
+
+  assert.deepEqual(globalItem?.tags, ["global-tag"]);
+  assert.deepEqual(projectItem?.tags, ["project-tag"]);
+});
+
+test("migrateSkillMetadataEntryToInstanceId upgrades legacy global metadata key", () => {
+  const migrated = migrateSkillMetadataEntryToInstanceId(
+    {
+      id: "shared-skill",
+      instance_id: "global:shared-skill",
+      scope: "global",
+    },
+    {
+      "shared-skill": { tags: ["legacy-tag"] },
+    },
+  );
+
+  assert.deepEqual(migrated, {
+    "global:shared-skill": { tags: ["legacy-tag"] },
+  });
+});
+
+test("updateSkillTagsForSkill writes global metadata back to instance_id key", () => {
+  const updated = updateSkillTagsForSkill(
+    {
+      id: "shared-skill",
+      instance_id: "global:shared-skill",
+      scope: "global",
+    },
+    ["next-tag"],
+    {
+      "shared-skill": { tags: ["legacy-tag"] },
+    },
+  );
+
+  assert.deepEqual(updated, {
+    "global:shared-skill": { tags: ["next-tag"] },
+  });
+});
+
 
 test("filterUnifiedSkillItems matches skill names and tags", () => {
   const items = createItems();
@@ -166,6 +267,92 @@ test("filterUnifiedSkillItems excludes groups when untaggedOnly is active", () =
   assert.deepEqual(filtered.map((item) => item.id), ["skill-beta"]);
 });
 
+test("filterUnifiedSkillItems scopeFilter=all returns all items", () => {
+  const items = createItems();
+
+  const filtered = filterUnifiedSkillItems(items, {
+    searchQuery: "",
+    selectedTags: [],
+    untaggedOnly: false,
+    scopeFilter: "all",
+  });
+
+  assert.equal(filtered.length, 4);
+});
+
+test("filterUnifiedSkillItems scopeFilter=global returns only global skills", () => {
+  const items = createItems();
+
+  const filtered = filterUnifiedSkillItems(items, {
+    searchQuery: "",
+    selectedTags: [],
+    untaggedOnly: false,
+    scopeFilter: "global",
+  });
+
+  assert.deepEqual(
+    filtered.map((item) => item.id),
+    ["skill-alpha", "skill-beta"],
+  );
+  assert.equal(filtered.every((item) => item.scopeLabel === "global"), true);
+});
+
+test("filterUnifiedSkillItems scopeFilter=project returns only project skills", () => {
+  const items = createItems();
+
+  const filtered = filterUnifiedSkillItems(items, {
+    searchQuery: "",
+    selectedTags: [],
+    untaggedOnly: false,
+    scopeFilter: "project",
+  });
+
+  assert.deepEqual(
+    filtered.map((item) => item.id),
+    ["project:proj-1:skill-delta"],
+  );
+  assert.equal(filtered.every((item) => item.scopeLabel === "project"), true);
+});
+
+test("filterUnifiedSkillItems scopeFilter excludes groups even when scope is all", () => {
+  const items = createItems();
+
+  const globalFiltered = filterUnifiedSkillItems(items, {
+    searchQuery: "",
+    selectedTags: [],
+    untaggedOnly: false,
+    scopeFilter: "global",
+  });
+
+  assert.equal(globalFiltered.some((item) => item.kind === "group"), false);
+});
+
+test("filterUnifiedSkillItems combines scope filter with tag filter", () => {
+  const items = createItems();
+
+  const filtered = filterUnifiedSkillItems(items, {
+    searchQuery: "",
+    selectedTags: ["editor"],
+    untaggedOnly: false,
+    scopeFilter: "global",
+  });
+
+  assert.deepEqual(filtered.map((item) => item.id), ["skill-alpha"]);
+});
+
+test("filterUnifiedSkillItems combines scope filter with search query", () => {
+  const items = createItems();
+
+  const filtered = filterUnifiedSkillItems(items, {
+    searchQuery: "delta",
+    selectedTags: [],
+    untaggedOnly: false,
+    scopeFilter: "project",
+  });
+
+  assert.deepEqual(filtered.map((item) => item.id), ["project:proj-1:skill-delta"]);
+});
+
 test("sortUnifiedSkillItems prioritizes search matches and skills before groups", () => {
   const items = createItems();
 
@@ -179,7 +366,7 @@ test("sortUnifiedSkillItems prioritizes search matches and skills before groups"
   assert.deepEqual(sorted.map((item) => item.id), ["pkg.team"]);
 
   const noSearchSorted = sortUnifiedSkillItems(createItems(), "");
-  assert.deepEqual(noSearchSorted.map((item) => item.id), ["skill-alpha", "skill-beta", "pkg.team"]);
+  assert.deepEqual(noSearchSorted.map((item) => item.id), ["project:proj-1:skill-delta", "skill-alpha", "skill-beta", "pkg.team"]);
 });
 
 test("group items expose a badge label while skill items do not", () => {
@@ -925,7 +1112,7 @@ test("group review regression: partial state must not be hidden by enabled-only"
 
 test("group review regression: delete cleanup must target installed_members rather than loaded skills only", () => {
   assert.deepEqual(skillPackages[0].installed_members, ["skill-alpha", "skill-gamma"]);
-  assert.deepEqual(skills.map((skill) => skill.id), ["skill-alpha", "skill-beta"]);
+  assert.deepEqual(skills.map((skill) => skill.id), ["skill-alpha", "skill-beta", "skill-delta"]);
 });
 
 

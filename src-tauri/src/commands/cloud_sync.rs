@@ -363,7 +363,6 @@ mod tests {
             config.projects = vec![ProjectBinding {
                 id: "project-alpha".to_string(),
                 name: "Project Alpha".to_string(),
-                root_path: project_root,
                 skills_dir: project_skills_dir,
             }];
             config.active_project_id = Some("project-alpha".to_string());
@@ -603,7 +602,6 @@ mod tests {
             config.projects = vec![ProjectBinding {
                 id: "project-alpha".to_string(),
                 name: "Project Alpha".to_string(),
-                root_path: project_root,
                 skills_dir: project_skills_dir,
             }];
             config.active_project_id = Some("project-alpha".to_string());

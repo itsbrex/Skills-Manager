@@ -23,6 +23,7 @@ export interface UnifiedSkillListItem {
   tags: string[];
   supportsTagFilter: boolean;
   badgeLabel: string | null;
+  scopeLabel: "global" | "project" | null;
   previewChips: string[];
   previewOverflowCount: number;
   sortName: string;
@@ -46,6 +47,7 @@ interface UnifiedSkillListFilters {
   searchQuery: string;
   selectedTags: string[];
   untaggedOnly: boolean;
+  scopeFilter?: "all" | "global" | "project";
 }
 
 function buildSearchText(parts: Array<string | null | undefined>): string {
@@ -147,11 +149,7 @@ export function getGroupToolLabel(toolLabel: string, state: GroupToolState): str
   return `${toolLabel} · ${getGroupToolCoverageLabel(state)}`;
 }
 
-function getSkillBadgeLabel(skill: Skill): string | null {
-  if (skill.scope === "project") {
-    return skill.project_name ?? skill.project_id ?? "Project";
-  }
-
+function getSkillBadgeLabel(_skill: Skill): string | null {
   return null;
 }
 
@@ -168,9 +166,8 @@ function getSkillSearchText(skill: Skill, tags: string[]): string {
   ]);
 }
 
-function getSkillPreviewChips(skill: Skill, tags: string[]): string[] {
-  const scopeChip = skill.scope === "project" ? (skill.project_name ?? skill.project_id ?? "project") : null;
-  return scopeChip ? [scopeChip, ...tags].slice(0, 3) : tags.slice(0, 3);
+function getSkillPreviewChips(_skill: Skill, tags: string[]): string[] {
+  return tags.slice(0, 3);
 }
 
 export function buildUnifiedSkillItems({
@@ -186,7 +183,7 @@ export function buildUnifiedSkillItems({
     const tags = getSkillTagsForSkill(skill, skillMetadata);
     const orderedToolIds = orderToolIdsForSkill(enabledToolIds, skill.enabled);
     const previewChips = getSkillPreviewChips(skill, tags);
-    const previewTotal = tags.length + (skill.scope === "project" ? 1 : 0);
+    const previewTotal = tags.length;
 
     return {
       kind: "skill",
@@ -199,6 +196,7 @@ export function buildUnifiedSkillItems({
       tags,
       supportsTagFilter: true,
       badgeLabel: getSkillBadgeLabel(skill),
+      scopeLabel: skill.scope,
       previewChips,
       previewOverflowCount: Math.max(0, previewTotal - previewChips.length),
       sortName: skill.name.toLowerCase(),
@@ -228,6 +226,7 @@ export function buildUnifiedSkillItems({
       tags,
       supportsTagFilter: tags.length > 0,
       badgeLabel: groupBadgeLabel,
+      scopeLabel: null,
       previewChips,
       previewOverflowCount: Math.max(
         0,
@@ -250,8 +249,15 @@ export function filterUnifiedSkillItems(
 ): UnifiedSkillListItem[] {
   const query = filters.searchQuery.trim().toLowerCase();
   const selectedTags = normalizeSkillTags(filters.selectedTags);
+  const scopeFilter = filters.scopeFilter ?? "all";
 
   return items.filter((item) => {
+    if (scopeFilter !== "all") {
+      if (item.scopeLabel !== scopeFilter) {
+        return false;
+      }
+    }
+
     if (query && !item.searchText.includes(query)) {
       return false;
     }

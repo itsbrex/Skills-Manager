@@ -188,12 +188,63 @@ impl Default for TelemetryConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize)]
+struct LegacyProjectBinding {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub root_path: Option<PathBuf>,
+    #[serde(default)]
+    pub skills_dir: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectBinding {
     pub id: String,
     pub name: String,
-    pub root_path: PathBuf,
     pub skills_dir: PathBuf,
+}
+
+impl TryFrom<LegacyProjectBinding> for ProjectBinding {
+    type Error = String;
+
+    fn try_from(value: LegacyProjectBinding) -> Result<Self, Self::Error> {
+        let skills_dir = value
+            .skills_dir
+            .or_else(|| value.root_path.map(|root| root.join(".claude").join("skills")))
+            .ok_or_else(|| "missing field `skills_dir`".to_string())?;
+
+        Ok(Self {
+            id: value.id,
+            name: value.name,
+            skills_dir,
+        })
+    }
+}
+
+impl Serialize for ProjectBinding {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("ProjectBinding", 3)?;
+        state.serialize_field("id", &self.id)?;
+        state.serialize_field("name", &self.name)?;
+        state.serialize_field("skills_dir", &self.skills_dir)?;
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for ProjectBinding {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let legacy = LegacyProjectBinding::deserialize(deserializer)?;
+        Self::try_from(legacy).map_err(serde::de::Error::custom)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
