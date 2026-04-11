@@ -235,6 +235,20 @@ pub const SUPPORTED_TOOLS: &[ToolDefinition] = &[
         alt_config_dirs: &[],
         cli_command: "pi",
     },
+    ToolDefinition {
+        id: "trae-cn",
+        name: "Trae CN",
+        config_dir: ".trae-cn",
+        alt_config_dirs: &[],
+        cli_command: "trae",
+    },
+    ToolDefinition {
+        id: "hermes",
+        name: "Hermes",
+        config_dir: ".hermes",
+        alt_config_dirs: &[],
+        cli_command: "hermes",
+    },
 ];
 
 #[cfg(test)]
@@ -263,6 +277,8 @@ mod tests {
         assert!(ids.contains(&"roo-code"));
         assert!(ids.contains(&"zencoder"));
         assert!(ids.contains(&"pi"));
+        assert!(ids.contains(&"trae-cn"));
+        assert!(ids.contains(&"hermes"));
     }
 
     #[test]
