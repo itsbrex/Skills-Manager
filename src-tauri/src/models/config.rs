@@ -304,7 +304,7 @@ pub struct ToolConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            version: "2.0.1".to_string(),
+            version: "2.0.2".to_string(),
             skills_dir: Self::default_skills_dir(),
             tools: HashMap::new(),
             custom_tools: HashMap::new(),
