@@ -464,10 +464,9 @@ export const zh = {
   },
   sync: {
     issuesDetected: "检测到 {count} 个链接问题需要修复",
-    fixButton: "一键修复",
     fixing: "修复中...",
-    fixComplete: "同步完成：已处理 {processed} 项，修复 {success} 项",
-    fixCompleteFailed: "同步完成：已处理 {processed} 项，修复 {success} 项，失败 {failed} 项",
+    autoFixPartial: "已自动修复 {success} 项，剩余 {failed} 项需手动处理",
+    retryFix: "重试修复",
   },
   polls: {
     title: "投 票",

@@ -464,10 +464,9 @@ export const en = {
   },
   sync: {
     issuesDetected: "Detected {count} broken link(s) that need fixing",
-    fixButton: "Fix Now",
     fixing: "Fixing...",
-    fixComplete: "Sync complete: processed {processed}, fixed {success}",
-    fixCompleteFailed: "Sync complete: processed {processed}, fixed {success}, failed {failed}",
+    autoFixPartial: "Auto-fixed {success}; {failed} still need manual attention",
+    retryFix: "Retry Fix",
   },
   polls: {
     title: "Polls",
