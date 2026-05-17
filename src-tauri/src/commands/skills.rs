@@ -573,6 +573,7 @@ mod tests {
             cloud_sync: None,
             projects: Vec::new(),
             active_project_id: None,
+            llm_provider: None,
             initialized: true,
         }
     }
@@ -611,6 +612,7 @@ mod tests {
                 cloud_sync: None,
                 projects: Vec::new(),
                 active_project_id: None,
+                llm_provider: None,
                 initialized: true,
             };
 
@@ -667,6 +669,7 @@ mod tests {
                 cloud_sync: None,
                 projects: Vec::new(),
                 active_project_id: None,
+                llm_provider: None,
                 initialized: true,
             };
 

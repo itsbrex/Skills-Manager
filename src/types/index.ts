@@ -217,6 +217,16 @@ export interface AppConfig {
   cloud_sync?: CloudSyncState | null;
   projects?: ProjectBinding[];
   active_project_id?: string | null;
+  llm_provider?: LlmProvider | null;
+}
+
+export interface LlmProvider {
+  base_url: string;
+  api_key: string;
+  model: string;
+  temperature?: number | null;
+  max_tokens?: number | null;
+  timeout_secs?: number | null;
 }
 
 export interface PollClientStateConfig {

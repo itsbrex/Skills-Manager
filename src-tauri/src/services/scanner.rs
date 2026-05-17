@@ -164,12 +164,14 @@ impl ScannerService {
 
                 let next_depth = Self::skill_depth(&next.path, skills_dir);
                 if next_depth == chosen_depth && next.path != chosen.path {
-                    return Err(format!(
-                        "Duplicate skill id: {} ({} and {})",
+                    eprintln!(
+                        "[skills-manager] duplicate skill id ignored: {} (keeping {}, skipping {})",
                         skill_id,
                         chosen.path.display(),
                         next.path.display()
-                    ));
+                    );
+                    iter.next();
+                    continue;
                 }
 
                 if next_depth < chosen_depth {
@@ -967,6 +969,28 @@ description: "Description from SKILL.md"
             assert_eq!(skills.len(), 1);
             assert_eq!(skills[0].id, "academic-research-writer");
             assert_eq!(skills[0].path, top_level_dir);
+        });
+    }
+
+    #[test]
+    fn scan_skills_with_config_keeps_first_when_same_id_same_depth_different_containers() {
+        with_temp_home(|home| {
+            let config = AppConfig::default();
+            let skills_dir = home.join(".skills-manager").join("skills");
+            fs::create_dir_all(&skills_dir).expect("create skills root");
+
+            let a = skills_dir.join("containerA").join("dup-skill");
+            fs::create_dir_all(&a).expect("create A");
+            fs::write(a.join("SKILL.md"), "---\nname: dup-skill\n---\n").expect("write A");
+
+            let b = skills_dir.join("containerB").join("dup-skill");
+            fs::create_dir_all(&b).expect("create B");
+            fs::write(b.join("SKILL.md"), "---\nname: dup-skill\n---\n").expect("write B");
+
+            let skills = ScannerService::scan_skills_with_config(&skills_dir, &config)
+                .expect("scan should not fail on duplicates");
+            let dup_skills: Vec<_> = skills.iter().filter(|s| s.id == "dup-skill").collect();
+            assert_eq!(dup_skills.len(), 1, "expected single deduped entry, got {dup_skills:?}");
         });
     }
 

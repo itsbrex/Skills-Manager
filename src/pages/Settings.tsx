@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -7,12 +7,14 @@ import {
   DetectedEditor,
   UpdateInfo,
   MarketplaceSource,
+  LlmProvider,
 } from "@/types";
 import { defaultPreferences } from "@/constants/preferences";
 import { startGithubAuth, startGoogleAuth, clearPendingAuthProvider, setPendingAuthProvider } from "@/services/auth";
 import { buildAuthErrorMessage } from "@/services/authError";
 import { checkUpdate } from "@/services/updater";
-import { useTranslation, Language } from "@/i18n";
+import { useTranslation, Language, TranslationPath } from "@/i18n";
+import { useSkillTranslation } from "@/hooks/useSkillTranslation";
 import { useTheme } from "@/hooks/useTheme";
 import { useCloudSync } from "@/hooks/useCloudSyncAgent";
 import { resolveTelemetryConsent } from "@/telemetry/consent";
@@ -46,6 +48,13 @@ export function Settings() {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  const tRef = useRef(t);
+  const addToastRef = useRef(addToast);
+  useEffect(() => {
+    tRef.current = t;
+    addToastRef.current = addToast;
+  });
+
   const fetchConfig = useCallback(async () => {
     setError(null);
     try {
@@ -56,13 +65,13 @@ export function Settings() {
       };
       const nextActiveProjectId = resolveActiveProjectId(configResult.active_project_id, configResult.projects ?? []);
       if (nextActiveProjectId !== configResult.active_project_id) {
-        addToast(t("settings.currentProjectMissing"), "info");
+        addToastRef.current(tRef.current("settings.currentProjectMissing"), "info");
       }
       setConfig({ ...configResult, active_project_id: nextActiveProjectId });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [addToast, t]);
+  }, []);
 
   useEffect(() => {
     fetchConfig();
@@ -660,6 +669,17 @@ export function Settings() {
             </SettingsRow>
           </SettingsCard>
 
+          {/* AI Translation */}
+          <SectionTitle>{t("settings.llmTitle")}</SectionTitle>
+          <SettingsCard>
+            <LlmProviderSection
+              provider={config.llm_provider ?? null}
+              onChange={(p) => setConfig((prev) => prev ? { ...prev, llm_provider: p } : prev)}
+              addToast={addToast}
+              t={t}
+            />
+          </SettingsCard>
+
           {/* Account & Cloud Sync */}
           <SectionTitle>{t("settings.account")}</SectionTitle>
           <SettingsCard>
@@ -1227,6 +1247,404 @@ function SegmentedControl({ value, onChange, options }: SegmentedControlProps) {
           {option.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+type ToastFn = (msg: string, kind?: "success" | "error" | "info") => void;
+type TFn = (key: TranslationPath) => string;
+
+interface LlmErrorPayload {
+  kind?: string;
+  info?: unknown;
+}
+
+function formatLlmError(err: unknown, t: TFn): string {
+  if (typeof err === "object" && err !== null && "kind" in err) {
+    const e = err as LlmErrorPayload;
+    switch (e.kind) {
+      case "not_configured":
+        return t("settings.llmErrorNotConfigured");
+      case "bad_base_url":
+        return t("settings.llmErrorBadBaseUrl");
+      case "network_error":
+        return t("settings.llmErrorNetwork");
+      case "unauthorized":
+        return t("settings.llmErrorUnauthorized");
+      case "rate_limited":
+        return t("settings.llmErrorRateLimited");
+      case "server_error": {
+        const info = e.info as { status?: number } | undefined;
+        const code = String(info?.status ?? 0);
+        return t("settings.llmErrorServer").replace("{code}", code);
+      }
+      case "timeout":
+        return t("settings.llmErrorTimeout");
+      case "parse_error":
+        return t("settings.llmErrorParse");
+      case "content_too_large":
+        return t("settings.llmErrorTooLarge");
+    }
+  }
+  return typeof err === "string" ? err : String(err);
+}
+
+function isValidBaseUrl(url: string): boolean {
+  const trimmed = url.trim();
+  return /^https?:\/\/.+/.test(trimmed);
+}
+
+interface LlmProviderSectionProps {
+  provider: LlmProvider | null;
+  onChange: (p: LlmProvider | null) => void;
+  addToast: ToastFn;
+  t: TFn;
+}
+
+function LlmProviderSection({ provider, onChange, addToast, t }: LlmProviderSectionProps) {
+  const { refreshConfigured } = useSkillTranslation();
+  const [baseUrl, setBaseUrl] = useState(provider?.base_url ?? "");
+  const [apiKey, setApiKey] = useState(provider?.api_key ?? "");
+  const [model, setModel] = useState(provider?.model ?? "gpt-4o-mini");
+  const [temperature, setTemperature] = useState(
+    provider?.temperature != null ? String(provider.temperature) : ""
+  );
+  const [maxTokens, setMaxTokens] = useState(
+    provider?.max_tokens != null ? String(provider.max_tokens) : ""
+  );
+  const [timeoutSecs, setTimeoutSecs] = useState(
+    provider?.timeout_secs != null ? String(provider.timeout_secs) : ""
+  );
+  const [showKey, setShowKey] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const buildProvider = (): LlmProvider | null => {
+    const base = baseUrl.trim();
+    const key = apiKey.trim();
+    const m = model.trim();
+    if (!base || !key || !m) return null;
+    if (!isValidBaseUrl(base)) return null;
+    const toNum = (s: string): number | null => {
+      const n = Number(s);
+      return s.trim() && Number.isFinite(n) ? n : null;
+    };
+    return {
+      base_url: base.replace(/\/+$/, ""),
+      api_key: key,
+      model: m,
+      temperature: toNum(temperature),
+      max_tokens: toNum(maxTokens),
+      timeout_secs: toNum(timeoutSecs),
+    };
+  };
+
+  const validateForm = (): LlmProvider | null => {
+    if (baseUrl.trim() && !isValidBaseUrl(baseUrl)) {
+      addToast(t("settings.llmErrorBadBaseUrl"), "error");
+      return null;
+    }
+    return buildProvider();
+  };
+
+  const handleTest = async () => {
+    const p = validateForm();
+    if (!p) return;
+    setTesting(true);
+    try {
+      await invoke<string>("test_llm_provider", { provider: p });
+      addToast(t("settings.llmTestSuccess"), "success");
+    } catch (err) {
+      addToast(formatLlmError(err, t), "error");
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleSave = async () => {
+    const p = validateForm();
+    if (!p) return;
+    setSaving(true);
+    try {
+      await invoke("save_llm_provider", { provider: p });
+      addToast(t("settings.llmSaved"), "success");
+      onChange(p);
+      void refreshConfigured();
+    } catch (err) {
+      addToast(typeof err === "string" ? err : String(err), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClear = async () => {
+    try {
+      await invoke("clear_llm_provider");
+      setBaseUrl("");
+      setApiKey("");
+      setModel("");
+      setTemperature("");
+      setMaxTokens("");
+      setTimeoutSecs("");
+      addToast(t("settings.llmCleared"), "info");
+      onChange(null);
+      void refreshConfigured();
+    } catch (err) {
+      addToast(typeof err === "string" ? err : String(err), "error");
+    }
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "6px 10px",
+    fontSize: "13px",
+    border: "1px solid var(--border)",
+    borderRadius: "6px",
+    backgroundColor: "var(--background)",
+    color: "var(--foreground)",
+    outline: "none",
+  };
+
+  return (
+    <div style={{ padding: "12px 0" }}>
+      <p
+        style={{
+          fontSize: "12px",
+          color: "var(--muted-foreground)",
+          margin: "0 0 16px 0",
+        }}
+      >
+        {t("settings.llmDesc")}
+      </p>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <Field label={t("settings.llmBaseUrl")} hint={t("settings.llmBaseUrlHint")}>
+          <input
+            type="text"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://api.openai.com/v1"
+            style={inputStyle}
+          />
+        </Field>
+
+        <Field label={t("settings.llmApiKey")}>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <input
+              type={showKey ? "text" : "password"}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="sk-..."
+              style={inputStyle}
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey((v) => !v)}
+              style={{
+                padding: "0 12px",
+                fontSize: "12px",
+                border: "1px solid var(--border)",
+                borderRadius: "6px",
+                background: "transparent",
+                color: "var(--foreground)",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {showKey ? t("settings.llmHideKey") : t("settings.llmShowKey")}
+            </button>
+          </div>
+        </Field>
+
+        <Field label={t("settings.llmModel")} hint={t("settings.llmModelHint")}>
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="gpt-4o-mini"
+            style={inputStyle}
+            list="llm-model-presets"
+          />
+          <datalist id="llm-model-presets">
+            <option value="gpt-4o-mini" />
+            <option value="gpt-4o" />
+            <option value="deepseek-chat" />
+            <option value="qwen-plus" />
+            <option value="claude-3-5-haiku-latest" />
+          </datalist>
+        </Field>
+
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((v) => !v)}
+          style={{
+            alignSelf: "flex-start",
+            fontSize: "12px",
+            color: "var(--muted-foreground)",
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >
+          {showAdvanced ? "▾" : "▸"} {t("settings.llmAdvanced")}
+        </button>
+
+        {showAdvanced && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr",
+              gap: "10px",
+            }}
+          >
+            <Field label={t("settings.llmTemperature")}>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="2"
+                value={temperature}
+                onChange={(e) => setTemperature(e.target.value)}
+                placeholder="0.3"
+                style={inputStyle}
+              />
+            </Field>
+            <Field label={t("settings.llmMaxTokens")}>
+              <input
+                type="number"
+                min="1"
+                value={maxTokens}
+                onChange={(e) => setMaxTokens(e.target.value)}
+                placeholder="4096"
+                style={inputStyle}
+              />
+            </Field>
+            <Field label={t("settings.llmTimeout")}>
+              <input
+                type="number"
+                min="1"
+                value={timeoutSecs}
+                onChange={(e) => setTimeoutSecs(e.target.value)}
+                placeholder="60"
+                style={inputStyle}
+              />
+            </Field>
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+          <button
+            type="button"
+            onClick={handleTest}
+            disabled={testing || saving}
+            style={{
+              padding: "6px 14px",
+              fontSize: "13px",
+              border: "1px solid var(--border)",
+              borderRadius: "6px",
+              background: "transparent",
+              color: "var(--foreground)",
+              cursor: testing ? "not-allowed" : "pointer",
+              opacity: testing ? 0.6 : 1,
+            }}
+          >
+            {testing ? t("settings.llmTesting") : t("settings.llmTest")}
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={testing || saving}
+            style={{
+              padding: "6px 14px",
+              fontSize: "13px",
+              border: "none",
+              borderRadius: "6px",
+              background: "var(--primary)",
+              color: "var(--primary-foreground)",
+              cursor: saving ? "not-allowed" : "pointer",
+              opacity: saving ? 0.6 : 1,
+            }}
+          >
+            {t("settings.llmSave")}
+          </button>
+          {provider && (
+            <button
+              type="button"
+              onClick={handleClear}
+              disabled={testing || saving}
+              style={{
+                padding: "6px 14px",
+                fontSize: "13px",
+                border: "1px solid var(--border)",
+                borderRadius: "6px",
+                background: "transparent",
+                color: "var(--muted-foreground)",
+                cursor: "pointer",
+                marginLeft: "auto",
+              }}
+            >
+              {t("settings.llmClear")}
+            </button>
+          )}
+        </div>
+
+        <div>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await invoke("clear_translation_cache");
+                addToast(t("settings.llmCacheCleared"), "info");
+              } catch (err) {
+                addToast(typeof err === "string" ? err : String(err), "error");
+              }
+            }}
+            style={{
+              fontSize: "12px",
+              color: "var(--muted-foreground)",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+              textDecoration: "underline",
+            }}
+          >
+            {t("settings.llmClearCache")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+      <label
+        style={{
+          fontSize: "12px",
+          fontWeight: 500,
+          color: "var(--foreground)",
+        }}
+      >
+        {label}
+      </label>
+      {children}
+      {hint && (
+        <span style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+          {hint}
+        </span>
+      )}
     </div>
   );
 }

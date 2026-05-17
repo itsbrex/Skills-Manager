@@ -4,6 +4,7 @@ pub mod config;
 pub mod editors;
 pub mod feedback;
 pub mod files;
+pub mod llm;
 pub mod marketplace;
 pub mod polls;
 pub mod skill_packages;
@@ -27,6 +28,11 @@ pub use editors::{
 };
 pub use feedback::submit_feedback;
 pub use files::{read_directory_tree, read_file, write_file};
+pub use llm::{
+    clear_llm_provider, clear_translation_cache, get_cached_marketplace_translations,
+    get_cached_skill_translations, get_llm_provider, save_llm_provider, test_llm_provider,
+    translate_marketplace_skill, translate_skill, translate_skills_batch,
+};
 pub use marketplace::{
     check_marketplace_updates_if_stale, fetch_marketplace_skill_descriptions,
     fetch_marketplace_skills, fetch_skill_file_content, fetch_skill_files, get_marketplace_sources,

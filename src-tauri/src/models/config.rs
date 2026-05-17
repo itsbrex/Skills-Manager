@@ -53,6 +53,19 @@ pub struct UserPreferences {
     pub github_token: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LlmProvider {
+    pub base_url: String,
+    pub api_key: String,
+    pub model: String,
+    #[serde(default)]
+    pub temperature: Option<f32>,
+    #[serde(default)]
+    pub max_tokens: Option<u32>,
+    #[serde(default)]
+    pub timeout_secs: Option<u32>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct SkillMetadata {
     #[serde(default)]
@@ -271,6 +284,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub active_project_id: Option<String>,
     #[serde(default)]
+    pub llm_provider: Option<LlmProvider>,
+    #[serde(default)]
     pub initialized: bool,
 }
 
@@ -316,6 +331,7 @@ impl Default for AppConfig {
             cloud_sync: Some(CloudSyncState::new()),
             projects: Vec::new(),
             active_project_id: None,
+            llm_provider: None,
             initialized: false,
         }
     }
@@ -542,5 +558,48 @@ mod tests {
                 tags: vec!["react".to_string(), "frontend".to_string()],
             })
         );
+    }
+
+    #[test]
+    fn llm_provider_defaults_to_none() {
+        let config = AppConfig::default();
+        assert!(config.llm_provider.is_none());
+    }
+
+    #[test]
+    fn llm_provider_persists_through_serialization() {
+        let mut config = AppConfig::default();
+        config.llm_provider = Some(super::LlmProvider {
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key: "sk-test".to_string(),
+            model: "gpt-4o-mini".to_string(),
+            temperature: Some(0.3),
+            max_tokens: Some(4096),
+            timeout_secs: Some(60),
+        });
+
+        let json = serde_json::to_string(&config).expect("serialize config");
+        let restored: AppConfig = serde_json::from_str(&json).expect("deserialize config");
+
+        let provider = restored.llm_provider.expect("llm provider restored");
+        assert_eq!(provider.base_url, "https://api.openai.com/v1");
+        assert_eq!(provider.api_key, "sk-test");
+        assert_eq!(provider.model, "gpt-4o-mini");
+        assert_eq!(provider.temperature, Some(0.3));
+        assert_eq!(provider.max_tokens, Some(4096));
+        assert_eq!(provider.timeout_secs, Some(60));
+    }
+
+    #[test]
+    fn llm_provider_loads_from_legacy_config_without_field() {
+        let config_json = r#"{
+            "version": "2.0.1",
+            "skills_dir": "/tmp/skills",
+            "tools": {},
+            "custom_tools": {},
+            "initialized": true
+        }"#;
+        let config: AppConfig = serde_json::from_str(config_json).expect("deserialize");
+        assert!(config.llm_provider.is_none());
     }
 }

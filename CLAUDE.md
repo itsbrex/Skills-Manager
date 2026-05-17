@@ -247,3 +247,28 @@ npm run lint
 - `2026-02-02-phase2-backend-design.md` - 后端架构设计
 - `2026-02-03-phase4-main-pages.md` - 主页面实现
 - `2026-02-04-editor-settings-design.md` - 编辑器功能设计
+- `2026-05-17-llm-translation-design.md` - LLM 翻译功能设计
+
+---
+
+## 13. AI 翻译功能
+
+**配置入口**：设置 → AI 翻译 卡片
+- Base URL：OpenAI 兼容协议接口（OpenAI、DeepSeek、Qwen、Ollama 等）
+- API Key：明文存 `~/.skills-manager/config.json`（与 `github_token` 一致；**不进云同步**）
+- Model：如 `gpt-4o-mini` / `deepseek-chat` / `qwen-plus`
+
+**触发方式（完全手动）**：
+- Skills 卡片菜单 → 翻译 / 显示原文
+- Skills 工具栏 → 批量翻译（确认对话框 + 进度 toast）
+- Editor 打开 SKILL.md 时顶部 banner 切换原文/翻译（**翻译视图只读**）
+- Marketplace 卡片标题旁的小胶囊按钮
+
+**实现要点**：
+- 翻译结果**只在 UI 显示，不修改磁盘文件**
+- 缓存：`~/.skills-manager/cache/translations/<sha256>.json`，key = base_url + model + target_lang + 源文本
+- 内存态 + 文件缓存双层；进行中的 promise 复用避免连点
+
+**关键安全点**：
+- `services/cloud_sync.rs::build_payload_excludes_llm_provider` 单测保证 api_key 不进云端 payload
+- 修改 `CloudSyncPayload` 字段时务必检查该测试仍能拦截 llm_provider

@@ -255,6 +255,30 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
+    fn build_payload_excludes_llm_provider() {
+        let mut config = AppConfig::default();
+        config.llm_provider = Some(crate::models::LlmProvider {
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key: "sk-secret-must-not-leak".to_string(),
+            model: "gpt-4o-mini".to_string(),
+            temperature: None,
+            max_tokens: None,
+            timeout_secs: None,
+        });
+
+        let payload = super::build_payload(&config, &[]);
+        let json = serde_json::to_string(&payload).expect("serialize payload");
+        assert!(
+            !json.contains("llm_provider"),
+            "cloud sync payload must not contain llm_provider"
+        );
+        assert!(
+            !json.contains("sk-secret-must-not-leak"),
+            "cloud sync payload must not contain api_key"
+        );
+    }
+
+    #[test]
     fn sync_pull_accepts_missing_skills() {
         let mut server = mockito::Server::new();
         let _mock = server

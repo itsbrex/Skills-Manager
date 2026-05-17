@@ -1,18 +1,21 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import MonacoEditor from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { FileTree } from "@/components/editor/FileTree";
-import { FileNode } from "@/types";
+import { FileNode, Skill } from "@/types";
 import { useTranslation } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
+import { useSkillTranslation, makeTranslationKey } from "@/hooks/useSkillTranslation";
+import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
 
 // Helper for timeout removed as per user request
 
 export function EditorPage() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { theme } = useTheme();
+  const translation = useSkillTranslation();
   const isLinux = navigator.userAgent.includes("Linux");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -26,6 +29,19 @@ export function EditorPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [relatedSkill, setRelatedSkill] = useState<Skill | null>(null);
+  const [translatingFile, setTranslatingFile] = useState(false);
+
+  const isSkillMdFile = selectedPath.toLowerCase().endsWith("skill.md");
+  const translationKey = relatedSkill ? makeTranslationKey(relatedSkill.instance_id, language) : null;
+  const translatedResult = translationKey ? translation.getTranslation(translationKey) : null;
+  const viewMode = translationKey ? translation.getView(translationKey) : "original";
+  const showingTranslation =
+    isSkillMdFile && translatedResult != null && viewMode === "translated" && !!translatedResult.content_md;
+  const displayContent = useMemo(
+    () => (showingTranslation ? (translatedResult?.content_md ?? content) : content),
+    [showingTranslation, translatedResult, content],
+  );
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const hasUnsavedChanges = content !== originalContent;
@@ -62,6 +78,58 @@ export function EditorPage() {
     }
     loadTree();
   }, [rootPath]);
+
+  // Look up related skill by rootPath
+  useEffect(() => {
+    if (!rootPath) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const skills = await invoke<Skill[]>("list_skills");
+        if (cancelled) return;
+        const found = skills.find((s) => s.path === rootPath) ?? null;
+        setRelatedSkill(found);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [rootPath]);
+
+  const formatTranslationError = useCallback((err: unknown): string => {
+    if (typeof err === "object" && err !== null && "kind" in err) {
+      const e = err as { kind?: string };
+      if (e.kind === "not_configured") return t("editor.llmNotConfigured");
+    }
+    return t("editor.translationFailed");
+  }, [t]);
+
+  const handleTranslateFile = useCallback(async () => {
+    if (!relatedSkill) return;
+    let configured = translation.isConfigured;
+    if (!configured) {
+      configured = await translation.refreshConfigured();
+    }
+    if (!configured) {
+      setError(t("editor.llmNotConfigured"));
+      return;
+    }
+    setTranslatingFile(true);
+    try {
+      await translation.translateSkill(relatedSkill.instance_id, language);
+    } catch (err) {
+      setError(formatTranslationError(err));
+    } finally {
+      setTranslatingFile(false);
+    }
+  }, [relatedSkill, translation, language, t, formatTranslationError]);
+
+  const toggleView = useCallback(() => {
+    if (!translationKey) return;
+    translation.setView(translationKey, viewMode === "translated" ? "original" : "translated");
+  }, [translationKey, translation, viewMode]);
 
   // Load file content
   useEffect(() => {
@@ -216,31 +284,51 @@ export function EditorPage() {
             </span>
           )}
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving || !hasUnsavedChanges}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "6px 12px",
-            fontSize: 13,
-            fontWeight: 500,
-            color: hasUnsavedChanges ? "var(--primary-foreground)" : "var(--muted-foreground)",
-            backgroundColor: hasUnsavedChanges ? "var(--foreground)" : "transparent",
-            border: hasUnsavedChanges ? "none" : "1px solid var(--border)",
-            borderRadius: 6,
-            cursor: saving || !hasUnsavedChanges ? "default" : "pointer",
-            opacity: saving ? 0.7 : 1,
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-            <polyline points="17 21 17 13 7 13 7 21" />
-            <polyline points="7 3 7 8 15 8" />
-          </svg>
-          {saving ? t("editor.saving") : t("editor.save")}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {isSkillMdFile && relatedSkill && (
+            <TranslateIconButton
+              hasTranslation={translatedResult != null}
+              showingTranslation={showingTranslation}
+              translating={translatingFile}
+              translateLabel={t("editor.translate")}
+              showOriginalLabel={t("editor.showOriginal")}
+              showTranslationLabel={t("editor.showTranslation")}
+              translatingLabel={t("editor.translating")}
+              onClick={() => {
+                if (translatedResult) {
+                  toggleView();
+                } else {
+                  void handleTranslateFile();
+                }
+              }}
+            />
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saving || !hasUnsavedChanges}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "6px 12px",
+              fontSize: 13,
+              fontWeight: 500,
+              color: hasUnsavedChanges ? "var(--primary-foreground)" : "var(--muted-foreground)",
+              backgroundColor: hasUnsavedChanges ? "var(--foreground)" : "transparent",
+              border: hasUnsavedChanges ? "none" : "1px solid var(--border)",
+              borderRadius: 6,
+              cursor: saving || !hasUnsavedChanges ? "default" : "pointer",
+              opacity: saving ? 0.7 : 1,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <polyline points="7 3 7 8 15 8" />
+            </svg>
+            {saving ? t("editor.saving") : t("editor.save")}
+          </button>
+        </div>
       </header>
 
       {/* Main content */}
@@ -294,16 +382,23 @@ export function EditorPage() {
                   color: "var(--foreground)",
                   tabSize: 2,
                 }}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
+                value={displayContent}
+                onChange={(e) => {
+                  if (showingTranslation) return;
+                  setContent(e.target.value);
+                }}
+                readOnly={showingTranslation}
                 spellCheck={false}
               />
             ) : (
               <MonacoEditor
                 height="100%"
                 language={getLanguage(selectedPath)}
-                value={content}
-                onChange={(value) => setContent(value || "")}
+                value={displayContent}
+                onChange={(value) => {
+                  if (showingTranslation) return;
+                  setContent(value || "");
+                }}
                 onMount={(editor) => { editorRef.current = editor; }}
                 options={{
                   minimap: { enabled: false },
@@ -313,6 +408,7 @@ export function EditorPage() {
                   wrappingStrategy: "advanced",
                   scrollBeyondLastLine: false,
                   automaticLayout: true,
+                  readOnly: showingTranslation,
                   tabSize: 2,
                   quickSuggestions: false,
                   suggestOnTriggerCharacters: false,

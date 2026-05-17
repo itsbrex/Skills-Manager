@@ -9,7 +9,7 @@ pub mod tool;
 pub mod update;
 
 pub use config::{
-    AppConfig, CustomToolConfig, PollClientState, ProjectBinding, SkillMetadata,
+    AppConfig, CustomToolConfig, LlmProvider, PollClientState, ProjectBinding, SkillMetadata,
     TelemetryConfig, TelemetryConsent, ToolConfig, VaultBackupConsent,
 };
 pub use editor::{DetectedEditor, EDITOR_DEFINITIONS};

@@ -14,6 +14,7 @@ import { Welcome } from "@/pages/Welcome";
 import { useInitialization } from "@/hooks/useInitialization";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { CloudSyncProvider } from "@/hooks/useCloudSyncAgent";
+import { SkillTranslationProvider } from "@/hooks/useSkillTranslation";
 import { I18nProvider, Language } from "@/i18n";
 import { registerTelemetryCloseHandler } from "@/telemetry/registerTelemetryCloseHandler";
 import {
@@ -224,33 +225,35 @@ function App() {
     >
       <I18nProvider language={language} onLanguageChange={handleLanguageChange}>
         <CloudSyncProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Layout />}>
-                <Route index element={<Skills />} />
-                <Route path="tools" element={<Tools />} />
-                <Route path="marketplace" element={<Marketplace />} />
-                <Route path="settings" element={<Settings />} />
-                <Route path="feedback" element={<Feedback />} />
-                <Route path="polls" element={<Polls />} />
-              </Route>
-              <Route path="/editor" element={<EditorPage />} />
-            </Routes>
-            <ToastContainer toasts={toasts} onRemove={removeToast} />
-          </BrowserRouter>
-          <CloudSyncConflictDialog />
-          <VaultConsentDialog />
-          <TelemetryConsentDialog
-            open={isInitialized && configLoaded && shouldPromptForTelemetryConsent(telemetryConsent)}
-            saving={telemetryConsentSaving}
-            error={telemetryConsentError}
-            onAccept={() => {
-              void handleTelemetryConsentChange("granted");
-            }}
-            onDeny={() => {
-              void handleTelemetryConsentChange("denied");
-            }}
-          />
+          <SkillTranslationProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Layout />}>
+                  <Route index element={<Skills />} />
+                  <Route path="tools" element={<Tools />} />
+                  <Route path="marketplace" element={<Marketplace />} />
+                  <Route path="settings" element={<Settings />} />
+                  <Route path="feedback" element={<Feedback />} />
+                  <Route path="polls" element={<Polls />} />
+                </Route>
+                <Route path="/editor" element={<EditorPage />} />
+              </Routes>
+              <ToastContainer toasts={toasts} onRemove={removeToast} />
+            </BrowserRouter>
+            <CloudSyncConflictDialog />
+            <VaultConsentDialog />
+            <TelemetryConsentDialog
+              open={isInitialized && configLoaded && shouldPromptForTelemetryConsent(telemetryConsent)}
+              saving={telemetryConsentSaving}
+              error={telemetryConsentError}
+              onAccept={() => {
+                void handleTelemetryConsentChange("granted");
+              }}
+              onDeny={() => {
+                void handleTelemetryConsentChange("denied");
+              }}
+            />
+          </SkillTranslationProvider>
         </CloudSyncProvider>
       </I18nProvider>
     </ThemeProvider>

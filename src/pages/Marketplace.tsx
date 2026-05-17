@@ -23,6 +23,8 @@ import {
   MarketplaceSyncResult,
 } from "@/types";
 import { useTranslation } from "@/i18n";
+import { useSkillTranslation, makeTranslationKey } from "@/hooks/useSkillTranslation";
+import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
 import { SkillDetailModal } from "@/components/marketplace/SkillDetailModal";
 import { formatInstallCountLabel } from "@/pages/marketplace/formatInstallCount";
 import { buildMarketplaceMetaItems } from "@/pages/marketplace/buildMarketplaceMetaItems";
@@ -74,7 +76,9 @@ function withCachedDescription(skill: MarketplaceSkill): MarketplaceSkill {
 }
 
 export function Marketplace() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const translation = useSkillTranslation();
+  const [translatingMarketIds, setTranslatingMarketIds] = useState<Set<string>>(new Set());
   const { toasts, addToast, removeToast } = useToast();
   const [skills, setSkills] = useState<MarketplaceSkill[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -211,6 +215,17 @@ export function Marketplace() {
       }
     });
   }, [loadSkills, normalizedRemoteQuery, selectedSourceIds]);
+
+  useEffect(() => {
+    if (skills.length === 0) return;
+    const inputs = skills.map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+    }));
+    void translation.preloadCachedMarketplace(inputs, language);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skills, language, translation.preloadCachedMarketplace]);
 
   useEffect(() => {
     const candidates = skills
@@ -507,6 +522,71 @@ export function Marketplace() {
     t,
     updatingAll,
   ]);
+
+  const formatTranslationError = useCallback(
+    (err: unknown): string => {
+      if (typeof err === "object" && err !== null && "kind" in err) {
+        const e = err as { kind?: string; info?: unknown };
+        switch (e.kind) {
+          case "not_configured": return t("settings.llmErrorNotConfigured");
+          case "bad_base_url": return t("settings.llmErrorBadBaseUrl");
+          case "network_error": return t("settings.llmErrorNetwork");
+          case "unauthorized": return t("settings.llmErrorUnauthorized");
+          case "rate_limited": return t("settings.llmErrorRateLimited");
+          case "server_error": {
+            const info = e.info as { status?: number } | undefined;
+            return t("settings.llmErrorServer").replace("{code}", String(info?.status ?? 0));
+          }
+          case "timeout": return t("settings.llmErrorTimeout");
+          case "parse_error": return t("settings.llmErrorParse");
+          case "content_too_large": return t("settings.llmErrorTooLarge");
+        }
+      }
+      return typeof err === "string" ? err : String(err);
+    },
+    [t],
+  );
+
+  const handleTranslateMarketSkill = useCallback(
+    async (skill: MarketplaceSkill, event: MouseEvent) => {
+      event.stopPropagation();
+      const key = makeTranslationKey(skill.id, language);
+      const existing = translation.getTranslation(key);
+      if (existing) {
+        const isTranslated = translation.getView(key) === "translated";
+        translation.setView(key, isTranslated ? "original" : "translated");
+        return;
+      }
+      let configured = translation.isConfigured;
+      if (!configured) {
+        configured = await translation.refreshConfigured();
+      }
+      if (!configured) {
+        addToast(t("skills.llmNotConfigured"), "error");
+        return;
+      }
+      setTranslatingMarketIds((prev) => {
+        const next = new Set(prev);
+        next.add(skill.id);
+        return next;
+      });
+      try {
+        await translation.translateMarketplace(
+          { id: skill.id, name: skill.name, description: skill.description },
+          language,
+        );
+      } catch (err) {
+        addToast(formatTranslationError(err), "error");
+      } finally {
+        setTranslatingMarketIds((prev) => {
+          const next = new Set(prev);
+          next.delete(skill.id);
+          return next;
+        });
+      }
+    },
+    [translation, language, addToast, t, formatTranslationError],
+  );
 
   const handleOpenExternalLink = useCallback(async (event: MouseEvent, url: string) => {
     event.stopPropagation();
@@ -921,6 +1001,17 @@ export function Marketplace() {
                 const externalUrl = skill.external_url || skill.repo_url;
                 const installCountLabel = formatInstallCountLabel(skill.install_count);
                 const metaChipStyle = getMarketplaceMetaChipStyle("compact");
+                const translationKey = makeTranslationKey(skill.id, language);
+                const cachedTranslation = translation.getTranslation(translationKey);
+                const showingTranslation =
+                  cachedTranslation != null && translation.getView(translationKey) === "translated";
+                const displayedName = showingTranslation && cachedTranslation
+                  ? cachedTranslation.name
+                  : skill.name;
+                const displayedDescription = showingTranslation && cachedTranslation
+                  ? cachedTranslation.description
+                  : skill.description;
+                const isTranslating = translatingMarketIds.has(skill.id);
                 const metaItems = buildMarketplaceMetaItems(
                   t("marketplace.source").replace("{source}", skill.source_name),
                   skill.author ? t("marketplace.author").replace("{author}", skill.author) : null,
@@ -983,7 +1074,7 @@ export function Marketplace() {
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
                             }}>
-                              {skill.name}
+                              {displayedName}
                             </span>
                             {externalUrl && (
                               <span
@@ -1000,6 +1091,19 @@ export function Marketplace() {
                                 <ExternalLink size={13} />
                               </span>
                             )}
+                            <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                              <TranslateIconButton
+                                hasTranslation={cachedTranslation != null}
+                                showingTranslation={showingTranslation}
+                                translating={isTranslating}
+                                translateLabel={t("skills.translateAction")}
+                                showOriginalLabel={t("skills.showOriginal")}
+                                showTranslationLabel={t("skills.showTranslated")}
+                                translatingLabel={t("skills.translating")}
+                                onClick={(e) => void handleTranslateMarketSkill(skill, e)}
+                                size={22}
+                              />
+                            </div>
                           </div>
                           <p style={{
                             fontSize: '12px',
@@ -1011,7 +1115,7 @@ export function Marketplace() {
                             WebkitBoxOrient: 'vertical',
                             overflow: 'hidden',
                           }}>
-                            {skill.description || t("skills.noDescription")}
+                            {displayedDescription || t("skills.noDescription")}
                           </p>
                         </div>
                         <div style={{

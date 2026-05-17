@@ -22,6 +22,8 @@ import {
   Tool,
 } from "@/types";
 import { useTranslation, TranslationPath } from "@/i18n";
+import { useSkillTranslation, makeTranslationKey } from "@/hooks/useSkillTranslation";
+import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
 import {
   applyTagFilterAction,
   buildAllTagSummaries,
@@ -156,9 +158,9 @@ function renderPreviewChips(chips: string[], overflowCount: number) {
             gap: "4px",
             fontSize: "11px",
             fontWeight: 500,
-            color: "rgba(17, 24, 39, 0.68)",
-            backgroundColor: "rgba(9, 105, 218, 0.04)",
-            border: "1px solid rgba(9, 105, 218, 0.14)",
+            color: "var(--primary)",
+            backgroundColor: "color-mix(in srgb, var(--primary) 10%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--primary) 25%, transparent)",
             borderRadius: "999px",
             padding: "3px 8px",
             lineHeight: 1.2,
@@ -281,10 +283,10 @@ function SkillCardActionMenu({
               gap: "2px",
               minWidth: "132px",
               padding: "4px",
-              backgroundColor: "rgba(255, 255, 255, 0.96)",
-              border: "1px solid rgba(15, 23, 42, 0.06)",
+              backgroundColor: "var(--popover)",
+              border: "1px solid var(--border)",
               borderRadius: "8px",
-              boxShadow: "0 8px 24px rgba(15, 23, 42, 0.12)",
+              boxShadow: "0 8px 24px rgba(0, 0, 0, 0.25)",
               backdropFilter: "blur(10px)",
               zIndex: MODAL_LAYER_Z_INDEX,
             }}
@@ -303,7 +305,7 @@ function SkillCardActionMenu({
                 padding: "10px 12px",
                 fontSize: "13px",
                 fontWeight: 500,
-                color: "var(--foreground)",
+                color: "var(--popover-foreground)",
                 backgroundColor: "transparent",
                 border: "none",
                 borderRadius: "6px",
@@ -312,7 +314,7 @@ function SkillCardActionMenu({
                 transition: "background-color 0.15s ease, color 0.15s ease",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(15, 23, 42, 0.04)";
+                e.currentTarget.style.backgroundColor = "color-mix(in srgb, var(--foreground) 8%, transparent)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "transparent";
@@ -363,8 +365,11 @@ function SkillCardActionMenu({
 }
 
 export function Skills() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const navigate = useNavigate();
+  const translation = useSkillTranslation();
+  const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
+  const [batchTranslating, setBatchTranslating] = useState(false);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [skillPackages, setSkillPackages] = useState<InstalledSkillPackage[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
@@ -427,26 +432,49 @@ export function Skills() {
   }, [config, navigate, addToast]);
 
   const loadData = useCallback(async () => {
-    try {
-      const [skillsResult, skillPackagesResult, configResult, toolsResult] = await Promise.all([
-        invoke<Skill[]>("list_skills"),
-        invoke<InstalledSkillPackage[]>("list_skill_packages"),
-        invoke<AppConfig>("get_config"),
-        invoke<Tool[]>("detect_tools"),
-      ]);
-      const migratedSkillMetadata = migrateSkillMetadataToInstanceIds(skillsResult, configResult.skill_metadata);
-      const nextConfig = migratedSkillMetadata === configResult.skill_metadata
-        ? configResult
-        : { ...configResult, skill_metadata: migratedSkillMetadata };
-      if (nextConfig !== configResult) {
-        await invoke("save_config", { config: nextConfig });
+    const settled = await Promise.allSettled([
+      invoke<Skill[]>("list_skills"),
+      invoke<InstalledSkillPackage[]>("list_skill_packages"),
+      invoke<AppConfig>("get_config"),
+      invoke<Tool[]>("detect_tools"),
+    ]);
+
+    const [skillsR, packagesR, configR, toolsR] = settled;
+    const failures: string[] = [];
+    for (const r of settled) {
+      if (r.status === "rejected") {
+        failures.push(r.reason instanceof Error ? r.reason.message : String(r.reason));
       }
-      setSkills(skillsResult);
-      setSkillPackages(skillPackagesResult);
-      setConfig(nextConfig);
-      setTools(toolsResult);
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+
+    try {
+      if (skillsR.status === "fulfilled") setSkills(skillsR.value);
+      if (packagesR.status === "fulfilled") setSkillPackages(packagesR.value);
+      if (toolsR.status === "fulfilled") setTools(toolsR.value);
+
+      if (configR.status === "fulfilled") {
+        const configResult = configR.value;
+        const skillsForMigration = skillsR.status === "fulfilled" ? skillsR.value : [];
+        const migratedSkillMetadata = migrateSkillMetadataToInstanceIds(
+          skillsForMigration,
+          configResult.skill_metadata,
+        );
+        const nextConfig = migratedSkillMetadata === configResult.skill_metadata
+          ? configResult
+          : { ...configResult, skill_metadata: migratedSkillMetadata };
+        if (nextConfig !== configResult) {
+          try {
+            await invoke("save_config", { config: nextConfig });
+          } catch (err) {
+            failures.push(err instanceof Error ? err.message : String(err));
+          }
+        }
+        setConfig(nextConfig);
+      }
+
+      for (const msg of failures) {
+        addToast(msg, "error");
+      }
     } finally {
       setInitialLoading(false);
     }
@@ -493,6 +521,13 @@ export function Skills() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (skills.length === 0) return;
+    const ids = skills.map((s) => s.instance_id);
+    void translation.preloadCachedSkills(ids, language);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skills, language, translation.preloadCachedSkills]);
 
   const persistMetadataTags = useCallback(async (metadataKey: string, nextTags: string[]) => {
     if (!config) {
@@ -713,6 +748,126 @@ export function Skills() {
       setBulkTogglingSkillId(null);
     }
   }, [addToast, reloadData, t, tools]);
+
+  const formatTranslationError = useCallback(
+    (err: unknown): string => {
+      if (typeof err === "object" && err !== null && "kind" in err) {
+        const e = err as { kind?: string; info?: unknown };
+        switch (e.kind) {
+          case "not_configured": return t("settings.llmErrorNotConfigured");
+          case "bad_base_url": return t("settings.llmErrorBadBaseUrl");
+          case "network_error": return t("settings.llmErrorNetwork");
+          case "unauthorized": return t("settings.llmErrorUnauthorized");
+          case "rate_limited": return t("settings.llmErrorRateLimited");
+          case "server_error": {
+            const info = e.info as { status?: number } | undefined;
+            return t("settings.llmErrorServer").replace("{code}", String(info?.status ?? 0));
+          }
+          case "timeout": return t("settings.llmErrorTimeout");
+          case "parse_error": return t("settings.llmErrorParse");
+          case "content_too_large": return t("settings.llmErrorTooLarge");
+        }
+      }
+      return typeof err === "string" ? err : String(err);
+    },
+    [t],
+  );
+
+  const handleTranslateSkill = useCallback(
+    async (skill: Skill) => {
+      let configured = translation.isConfigured;
+      if (!configured) {
+        configured = await translation.refreshConfigured();
+      }
+      if (!configured) {
+        addToast(t("skills.llmNotConfigured"), "error");
+        return;
+      }
+      setTranslatingIds((prev) => {
+        const next = new Set(prev);
+        next.add(skill.instance_id);
+        return next;
+      });
+      try {
+        await translation.translateSkill(skill.instance_id, language);
+      } catch (err) {
+        addToast(formatTranslationError(err), "error");
+      } finally {
+        setTranslatingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(skill.instance_id);
+          return next;
+        });
+      }
+    },
+    [translation, language, addToast, t, formatTranslationError],
+  );
+
+  const handleBatchTranslate = useCallback(
+    async (skillsToTranslate: Skill[]) => {
+      let configured = translation.isConfigured;
+      if (!configured) {
+        configured = await translation.refreshConfigured();
+      }
+      if (!configured) {
+        addToast(t("skills.llmNotConfigured"), "error");
+        return;
+      }
+
+      const pending: Skill[] = [];
+      let skipped = 0;
+      for (const skill of skillsToTranslate) {
+        const key = makeTranslationKey(skill.instance_id, language);
+        if (translation.getTranslation(key)) {
+          skipped += 1;
+        } else {
+          pending.push(skill);
+        }
+      }
+
+      if (pending.length === 0) {
+        addToast(t("skills.batchTranslateNoNew"), "info");
+        return;
+      }
+
+      const confirmMessage = skipped > 0
+        ? t("skills.batchTranslateConfirmSkip")
+            .replace("{new}", String(pending.length))
+            .replace("{skipped}", String(skipped))
+        : t("skills.batchTranslateConfirm").replace("{count}", String(pending.length));
+
+      const confirmed = await confirm(confirmMessage, { title: t("skills.batchTranslate") });
+      if (!confirmed) return;
+
+      setBatchTranslating(true);
+      try {
+        const ids = pending.map((s) => s.instance_id);
+        const result = await translation.translateBatch(ids, language, (p) => {
+          addToast(
+            t("skills.batchTranslateProgress")
+              .replace("{current}", String(p.current))
+              .replace("{total}", String(p.total))
+              .replace("{name}", p.skill_name),
+            "info",
+          );
+        });
+        const fail = result.failed.length;
+        const ok = result.succeeded.length;
+        addToast(
+          t("skills.batchTranslateDone")
+            .replace("{ok}", String(ok))
+            .replace("{total}", String(pending.length))
+            .replace("{fail}", String(fail)),
+          fail > 0 ? "error" : "success",
+        );
+      } catch (err) {
+        addToast(formatTranslationError(err), "error");
+      } finally {
+        setBatchTranslating(false);
+      }
+    },
+    [translation, language, addToast, t, formatTranslationError],
+  );
 
   const handleDelete = async (skill: Skill) => {
     const confirmed = await confirm(t("skills.deleteConfirm").replace("{name}", skill.name), {
@@ -1663,8 +1818,47 @@ export function Skills() {
 
   if (!config) {
     return (
-      <div style={{ padding: "24px 32px", color: "var(--muted-foreground)" }}>
-        <PageLoader message={t("loading.skills")} />
+      <div style={{
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        overflow: "hidden",
+        backgroundColor: "var(--background)",
+      }}>
+        <PageHeader title={t("skills.title")} />
+        <main style={{
+          flex: 1,
+          overflow: "auto",
+          padding: "24px 32px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "12px",
+          color: "var(--muted-foreground)",
+        }}>
+          <div>{t("skills.loadFailed")}</div>
+          <button
+            onClick={() => {
+              setInitialLoading(true);
+              loadData();
+            }}
+            style={{
+              padding: "8px 16px",
+              fontSize: "14px",
+              fontWeight: 500,
+              color: "#fff",
+              backgroundColor: "var(--primary, #2563eb)",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+            }}
+          >
+            {t("common.retry")}
+          </button>
+        </main>
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
       </div>
     );
   }
@@ -1904,6 +2098,36 @@ export function Skills() {
               />
             </div>
 
+            {!isBatchManageMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  const targets = sortedUnifiedItems
+                    .filter((it) => it.kind === "skill" && it.skill)
+                    .map((it) => it.skill!) as Skill[];
+                  void handleBatchTranslate(targets);
+                }}
+                disabled={batchTranslating || sortedUnifiedItems.length === 0}
+                title={t("skills.batchTranslate")}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "8px 12px",
+                  fontSize: "13px",
+                  border: "1px solid var(--border)",
+                  borderRadius: "8px",
+                  backgroundColor: "var(--background)",
+                  color: "var(--foreground)",
+                  cursor: batchTranslating ? "wait" : "pointer",
+                  opacity: batchTranslating ? 0.6 : 1,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {t("skills.batchTranslate")}
+              </button>
+            )}
+
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               {headerActionLayout.primaryActionIds.map((actionId) =>
                 renderHeaderActionButton(actionId),
@@ -2009,9 +2233,19 @@ export function Skills() {
               {sortedUnifiedItems.map((item) => {
                 const color = getSkillColor(item.title);
                 const canOpen = Boolean(item.openPath);
+                const translationKey = item.kind === "skill" && item.skill
+                  ? makeTranslationKey(item.skill.instance_id, language)
+                  : null;
+                const translated = translationKey ? translation.getTranslation(translationKey) : null;
+                const isTranslatedView = translationKey
+                  ? translation.getView(translationKey) === "translated" && translated != null
+                  : false;
+                const cardTitle = isTranslatedView && translated ? translated.name : item.title;
                 const description = item.kind === "group"
                   ? item.skillPackage?.package_id ?? getUnifiedItemMetaLabel(item, t)
-                  : item.description || t("skills.noDescription");
+                  : isTranslatedView && translated
+                    ? translated.description || t("skills.noDescription")
+                    : item.description || t("skills.noDescription");
                 const previewChips = item.previewChips.map((chip) => `#${chip}`);
 
                 const isBatchSelected = selectedBatchItemKeys.has(item.key);
@@ -2108,7 +2342,7 @@ export function Skills() {
                             lineHeight: 1.3,
                             minWidth: 0,
                           }}>
-                            {item.title}
+                            {cardTitle}
                           </div>
                           {item.scopeLabel && (
                             <span style={{
@@ -2167,14 +2401,32 @@ export function Skills() {
                       </div>
 
                       {!isBatchManageMode && item.kind === "skill" && item.skill && (
-                        <SkillCardActionMenu
-                          deleting={deletingSkill === item.skill.instance_id}
-                          editLabel={t("common.edit")}
-                          deleteLabel={t("skills.delete")}
-                          moreActionsLabel={t("skills.moreActions")}
-                          onEdit={() => openSkillEditor(item.skill!.instance_id, "tools")}
-                          onDelete={() => void handleDelete(item.skill!)}
-                        />
+                        <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+                          <TranslateIconButton
+                            hasTranslation={translated != null}
+                            showingTranslation={isTranslatedView}
+                            translating={translatingIds.has(item.skill.instance_id)}
+                            translateLabel={t("skills.translateAction")}
+                            showOriginalLabel={t("skills.showOriginal")}
+                            showTranslationLabel={t("skills.showTranslated")}
+                            translatingLabel={t("skills.translating")}
+                            onClick={() => {
+                              if (translated && translationKey) {
+                                translation.setView(translationKey, isTranslatedView ? "original" : "translated");
+                              } else {
+                                void handleTranslateSkill(item.skill!);
+                              }
+                            }}
+                          />
+                          <SkillCardActionMenu
+                            deleting={deletingSkill === item.skill.instance_id}
+                            editLabel={t("common.edit")}
+                            deleteLabel={t("skills.delete")}
+                            moreActionsLabel={t("skills.moreActions")}
+                            onEdit={() => openSkillEditor(item.skill!.instance_id, "tools")}
+                            onDelete={() => void handleDelete(item.skill!)}
+                          />
+                        </div>
                       )}
                       {!isBatchManageMode && item.kind === "group" && item.skillPackage && (
                         <SkillCardActionMenu

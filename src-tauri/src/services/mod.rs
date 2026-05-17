@@ -6,10 +6,13 @@ pub mod detector;
 pub mod editor_detector;
 pub mod file_ops;
 pub mod linker;
+pub mod llm;
 pub mod marketplace;
 pub mod scanner;
 pub mod skill_packages;
 pub mod telemetry;
+pub mod translation;
+pub mod translation_cache;
 pub mod updater;
 pub mod vault;
 
