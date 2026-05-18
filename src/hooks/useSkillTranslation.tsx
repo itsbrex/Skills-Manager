@@ -13,6 +13,7 @@ export interface MarketplaceTranslationInput {
   id: string;
   name: string;
   description: string | null;
+  content_md?: string | null;
 }
 
 export interface BatchTranslationProgress {
@@ -43,10 +44,11 @@ interface TranslationStore {
 interface SkillTranslationContextValue {
   isConfigured: boolean;
   refreshConfigured: () => Promise<boolean>;
-  translateSkill: (instanceId: string, targetLang: string) => Promise<SkillTranslationOutput>;
+  translateSkill: (instanceId: string, targetLang: string, force?: boolean) => Promise<SkillTranslationOutput>;
   translateMarketplace: (
     input: MarketplaceTranslationInput,
-    targetLang: string
+    targetLang: string,
+    force?: boolean
   ) => Promise<SkillTranslationOutput>;
   translateBatch: (
     instanceIds: string[],
@@ -98,25 +100,27 @@ export function SkillTranslationProvider({ children }: { children: ReactNode }) 
     `${targetLang}::${instanceId}`;
 
   const translateSkill = useCallback(
-    async (instanceId: string, targetLang: string): Promise<SkillTranslationOutput> => {
+    async (instanceId: string, targetLang: string, force: boolean = false): Promise<SkillTranslationOutput> => {
       const key = cacheKey(instanceId, targetLang);
-      const existing = storeRef.current.inFlight.get(key);
+      const inflightKey = force ? `${key}::force` : key;
+      const existing = storeRef.current.inFlight.get(inflightKey);
       if (existing) return existing;
 
       const promise = (async () => {
         const result = await invoke<SkillTranslationOutput>("translate_skill", {
           instanceId,
           targetLang,
+          force,
         });
         storeRef.current.results.set(key, result);
         storeRef.current.view.set(key, "translated");
         bump();
         return result;
       })().finally(() => {
-        storeRef.current.inFlight.delete(key);
+        storeRef.current.inFlight.delete(inflightKey);
       });
 
-      storeRef.current.inFlight.set(key, promise);
+      storeRef.current.inFlight.set(inflightKey, promise);
       return promise;
     },
     [bump]
@@ -125,26 +129,29 @@ export function SkillTranslationProvider({ children }: { children: ReactNode }) 
   const translateMarketplace = useCallback(
     async (
       input: MarketplaceTranslationInput,
-      targetLang: string
+      targetLang: string,
+      force: boolean = false
     ): Promise<SkillTranslationOutput> => {
       const key = cacheKey(input.id, targetLang);
-      const existing = storeRef.current.inFlight.get(key);
+      const inflightKey = force ? `${key}::force` : key;
+      const existing = storeRef.current.inFlight.get(inflightKey);
       if (existing) return existing;
 
       const promise = (async () => {
         const result = await invoke<SkillTranslationOutput>("translate_marketplace_skill", {
           input,
           targetLang,
+          force,
         });
         storeRef.current.results.set(key, result);
         storeRef.current.view.set(key, "translated");
         bump();
         return result;
       })().finally(() => {
-        storeRef.current.inFlight.delete(key);
+        storeRef.current.inFlight.delete(inflightKey);
       });
 
-      storeRef.current.inFlight.set(key, promise);
+      storeRef.current.inFlight.set(inflightKey, promise);
       return promise;
     },
     [bump]

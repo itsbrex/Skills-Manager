@@ -12,8 +12,9 @@ use commands::{
     exchange_github_auth, exchange_google_auth, fetch_marketplace_skill_descriptions,
     fetch_marketplace_skills, fetch_poll_results, fetch_polls, fetch_skill_file_content,
     fetch_skill_files, fix_sync_issues, get_auth_profile, get_available_editors,
-    get_cached_marketplace_translations, get_cached_skill_translations, get_config,
-    get_llm_provider, get_marketplace_sources, get_poll_client_state, get_tool_status,
+    get_cached_marketplace_translations, get_cached_skill_translations,
+    get_cached_text_translation, get_config, get_llm_provider, get_marketplace_sources,
+    get_poll_client_state, get_tool_status,
     import_skills_to_hub, install_marketplace_skill, install_marketplace_skill_by_ref,
     install_skill_package_from_path, is_initialized, list_skill_packages, list_skills,
     logout_auth, mark_initialized, open_in_editor, read_directory_tree, read_file,
@@ -23,7 +24,8 @@ use commands::{
     sync_marketplace_installed_skills, telemetry_clear_local_data, telemetry_end_session,
     telemetry_flush_pending, telemetry_initialize, telemetry_record_heartbeat,
     telemetry_track_event, test_llm_provider, toggle_marketplace_source,
-    translate_marketplace_skill, translate_skill, translate_skills_batch, update_custom_tool,
+    translate_marketplace_skill, translate_skill, translate_skills_batch,
+    translate_text_content, update_custom_tool,
     update_tool_paths, vault_backup, vault_download, write_file,
 };
 use services::{AppCache, MarketplaceCache};
@@ -139,9 +141,11 @@ pub fn run() {
             translate_skill,
             translate_marketplace_skill,
             translate_skills_batch,
+            translate_text_content,
             clear_translation_cache,
             get_cached_skill_translations,
             get_cached_marketplace_translations,
+            get_cached_text_translation,
             vault_backup,
             vault_download,
         ])

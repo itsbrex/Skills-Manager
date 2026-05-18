@@ -191,6 +191,8 @@ export const en = {
     translateAction: "Translate skill",
     translatedBadge: "ZH",
     translatedTooltip: "Translated · click to toggle",
+    retranslate: "Re-translate",
+    retranslating: "Re-translating…",
     batchTranslateNoNew: "No untranslated skills",
     batchTranslateConfirmSkip: "Translate {new} skill(s), {skipped} already done. Continue?",
   },

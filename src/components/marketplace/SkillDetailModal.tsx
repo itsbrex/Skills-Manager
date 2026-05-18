@@ -9,6 +9,8 @@ import { InstallCountBadge } from "@/components/marketplace/InstallCountBadge";
 import { MarketplaceSkill, SkillFileNode, FileNode } from "@/types";
 import { useTranslation } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
+import { useSkillTranslation, makeTranslationKey } from "@/hooks/useSkillTranslation";
+import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
 import {
   MODAL_LAYER_Z_INDEX,
   MODAL_MAX_VIEWPORT_WIDTH,
@@ -37,8 +39,10 @@ const skillTreeCache = new Map<string, SkillFileNode>();
 const fileContentCache = new Map<string, string>();
 
 export function SkillDetailModal({ skill, onClose, onInstall, installing }: SkillDetailModalProps) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { theme } = useTheme();
+  const translation = useSkillTranslation();
+  const [translatingDetail, setTranslatingDetail] = useState(false);
   const isLinux = navigator.userAgent.includes("Linux");
   const [fileTree, setFileTree] = useState<SkillFileNode | null>(null);
   const [selectedPath, setSelectedPath] = useState("");
@@ -53,6 +57,87 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
   const externalUrl = skill.external_url || skill.repo_url;
   const isUpdateAvailable = skill.install_status === "update_available";
   const installCountLabel = formatInstallCountLabel(skill.install_count);
+
+  const translationKey = makeTranslationKey(skill.id, language);
+  const cachedTranslation = translation.getTranslation(translationKey);
+  const showingTranslation =
+    cachedTranslation != null && translation.getView(translationKey) === "translated";
+  const displayedName = showingTranslation && cachedTranslation ? cachedTranslation.name : skill.name;
+  const displayedDescription =
+    showingTranslation && cachedTranslation ? cachedTranslation.description : skill.description;
+  const displayedPreviewContent =
+    showingTranslation && cachedTranslation?.content_md ? cachedTranslation.content_md : previewContent;
+
+  const formatTranslationError = useCallback(
+    (err: unknown): string => {
+      if (typeof err === "object" && err !== null && "kind" in err) {
+        const e = err as { kind?: string; info?: unknown };
+        switch (e.kind) {
+          case "not_configured": return t("settings.llmErrorNotConfigured");
+          case "bad_base_url": return t("settings.llmErrorBadBaseUrl");
+          case "network_error": return t("settings.llmErrorNetwork");
+          case "unauthorized": return t("settings.llmErrorUnauthorized");
+          case "rate_limited": return t("settings.llmErrorRateLimited");
+          case "server_error": {
+            const info = e.info as { status?: number } | undefined;
+            return t("settings.llmErrorServer").replace("{code}", String(info?.status ?? 0));
+          }
+          case "timeout": return t("settings.llmErrorTimeout");
+          case "parse_error": return t("settings.llmErrorParse");
+          case "content_too_large": return t("settings.llmErrorTooLarge");
+        }
+      }
+      return typeof err === "string" ? err : String(err);
+    },
+    [t],
+  );
+
+  const handleTranslate = useCallback(async (force: boolean = false) => {
+    if (!force && cachedTranslation) {
+      translation.setView(
+        translationKey,
+        showingTranslation ? "original" : "translated",
+      );
+      return;
+    }
+    let configured = translation.isConfigured;
+    if (!configured) {
+      configured = await translation.refreshConfigured();
+    }
+    if (!configured) {
+      setError(t("skills.llmNotConfigured"));
+      return;
+    }
+    setTranslatingDetail(true);
+    try {
+      await translation.translateMarketplace(
+        {
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+          content_md: previewContent || null,
+        },
+        language,
+        force,
+      );
+    } catch (err) {
+      setError(formatTranslationError(err));
+    } finally {
+      setTranslatingDetail(false);
+    }
+  }, [
+    cachedTranslation,
+    translation,
+    translationKey,
+    showingTranslation,
+    skill.id,
+    skill.name,
+    skill.description,
+    previewContent,
+    language,
+    t,
+    formatTranslationError,
+  ]);
 
   const markdownComponents = useMemo(() => ({
     h1: (props: any) => (
@@ -312,11 +397,11 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
 
   const isMarkdown = previewPath.toLowerCase().endsWith(".md");
   const parsedMarkdown = useMemo(() => {
-    if (!isMarkdown || !previewContent) {
-      return { body: previewContent, frontmatter: null as ParsedFrontmatter | null };
+    if (!isMarkdown || !displayedPreviewContent) {
+      return { body: displayedPreviewContent, frontmatter: null as ParsedFrontmatter | null };
     }
-    return parseMarkdownWithFrontmatter(previewContent);
-  }, [isMarkdown, previewContent]);
+    return parseMarkdownWithFrontmatter(displayedPreviewContent);
+  }, [isMarkdown, displayedPreviewContent]);
 
   const handleOpenExternalLink = useCallback(async (event: MouseEvent, url: string) => {
     event.stopPropagation();
@@ -367,7 +452,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
           <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <div style={{ fontSize: "16px", fontWeight: 600, color: "var(--foreground)" }}>
-                {skill.name}
+                {displayedName}
               </div>
               {externalUrl && (
                 <span
@@ -384,6 +469,19 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
                   <ExternalLink size={15} />
                 </span>
               )}
+              <TranslateIconButton
+                hasTranslation={cachedTranslation != null}
+                showingTranslation={showingTranslation}
+                translating={translatingDetail}
+                translateLabel={t("skills.translateAction")}
+                showOriginalLabel={t("skills.showOriginal")}
+                showTranslationLabel={t("skills.showTranslated")}
+                translatingLabel={t("skills.translating")}
+                retranslateLabel={t("skills.retranslate")}
+                onClick={() => void handleTranslate(false)}
+                onRetranslate={() => void handleTranslate(true)}
+                size={24}
+              />
             </div>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
               {skill.author && (
@@ -487,7 +585,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
                   <div style={{ color: "var(--color-error)" }}>
                     {previewError}
                   </div>
-                ) : previewContent ? (
+                ) : displayedPreviewContent ? (
                   isMarkdown ? (
                     <div style={{
                       fontSize: "13px",
@@ -571,13 +669,13 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
                       overflow: "auto",
                       margin: 0,
                     }}>
-                      {previewContent}
+                      {displayedPreviewContent}
                     </pre>
                   ) : (
                     <MonacoEditor
                       height="100%"
                       language={getLanguage(previewPath)}
-                      value={previewContent}
+                      value={displayedPreviewContent}
                       options={{
                         readOnly: true,
                         minimap: { enabled: false },
@@ -608,7 +706,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
                 <div style={{ color: "var(--color-error)", marginBottom: "12px" }}>{error}</div>
               )}
               <div style={{ fontSize: "14px", lineHeight: 1.6 }}>
-                {skill.description || t("skills.noDescription")}
+                {displayedDescription || t("skills.noDescription")}
               </div>
             </div>
           )}

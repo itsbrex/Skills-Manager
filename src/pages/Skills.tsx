@@ -774,7 +774,7 @@ export function Skills() {
   );
 
   const handleTranslateSkill = useCallback(
-    async (skill: Skill) => {
+    async (skill: Skill, force: boolean = false) => {
       let configured = translation.isConfigured;
       if (!configured) {
         configured = await translation.refreshConfigured();
@@ -789,7 +789,7 @@ export function Skills() {
         return next;
       });
       try {
-        await translation.translateSkill(skill.instance_id, language);
+        await translation.translateSkill(skill.instance_id, language, force);
       } catch (err) {
         addToast(formatTranslationError(err), "error");
       } finally {
@@ -2410,6 +2410,7 @@ export function Skills() {
                             showOriginalLabel={t("skills.showOriginal")}
                             showTranslationLabel={t("skills.showTranslated")}
                             translatingLabel={t("skills.translating")}
+                            retranslateLabel={t("skills.retranslate")}
                             onClick={() => {
                               if (translated && translationKey) {
                                 translation.setView(translationKey, isTranslatedView ? "original" : "translated");
@@ -2417,6 +2418,7 @@ export function Skills() {
                                 void handleTranslateSkill(item.skill!);
                               }
                             }}
+                            onRetranslate={() => void handleTranslateSkill(item.skill!, true)}
                           />
                           <SkillCardActionMenu
                             deleting={deletingSkill === item.skill.instance_id}

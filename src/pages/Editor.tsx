@@ -7,7 +7,7 @@ import { FileTree } from "@/components/editor/FileTree";
 import { FileNode, Skill } from "@/types";
 import { useTranslation } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
-import { useSkillTranslation, makeTranslationKey } from "@/hooks/useSkillTranslation";
+import { useSkillTranslation, makeTranslationKey, type SkillTranslationOutput } from "@/hooks/useSkillTranslation";
 import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
 
 // Helper for timeout removed as per user request
@@ -31,19 +31,37 @@ export function EditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [relatedSkill, setRelatedSkill] = useState<Skill | null>(null);
   const [translatingFile, setTranslatingFile] = useState(false);
+  const [fileTranslation, setFileTranslation] = useState<SkillTranslationOutput | null>(null);
+  const [fileViewMode, setFileViewMode] = useState<"original" | "translated">("original");
 
   const isSkillMdFile = selectedPath.toLowerCase().endsWith("skill.md");
+  const isTranslatableFile = /\.(md|mdx|markdown|txt|text)$/i.test(selectedPath);
   const translationKey = relatedSkill ? makeTranslationKey(relatedSkill.instance_id, language) : null;
   const translatedResult = translationKey ? translation.getTranslation(translationKey) : null;
   const viewMode = translationKey ? translation.getView(translationKey) : "original";
-  const showingTranslation =
+  const showingSkillTranslation =
     isSkillMdFile && translatedResult != null && viewMode === "translated" && !!translatedResult.content_md;
+  const showingFileTranslation =
+    !showingSkillTranslation && fileTranslation != null && fileViewMode === "translated" && !!fileTranslation.content_md;
+  const showingTranslation = showingSkillTranslation || showingFileTranslation;
+  const hasTranslationForCurrentFile =
+    (isSkillMdFile && translatedResult != null) || (!isSkillMdFile && fileTranslation != null);
+  const canTranslateCurrentFile = isTranslatableFile && content.length > 0;
   const displayContent = useMemo(
-    () => (showingTranslation ? (translatedResult?.content_md ?? content) : content),
-    [showingTranslation, translatedResult, content],
+    () =>
+      showingSkillTranslation
+        ? translatedResult?.content_md ?? content
+        : showingFileTranslation
+          ? fileTranslation?.content_md ?? content
+          : content,
+    [showingSkillTranslation, showingFileTranslation, translatedResult, fileTranslation, content],
   );
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const lastEmittedRef = useRef("");
+  // Track the most recent value we render into Monaco; updated in render so
+  // subsequent prop-driven onChange callbacks can compare reliably.
+  lastEmittedRef.current = displayContent;
   const hasUnsavedChanges = content !== originalContent;
 
   // Load file tree
@@ -65,7 +83,7 @@ export function EditorPage() {
 
         // If no file selected, find first .md file
         if (!selectedPath && tree.children) {
-          const firstMd = findFirstFile(tree, ".md") || findFirstFile(tree);
+          const firstMd = findSkillMdFile(tree) || findFirstFile(tree, ".md") || findFirstFile(tree);
           console.log("[Editor] Auto-selecting file:", firstMd);
           if (firstMd) {
             setSelectedPath(firstMd);
@@ -79,7 +97,9 @@ export function EditorPage() {
     loadTree();
   }, [rootPath]);
 
-  // Look up related skill by rootPath
+  // Look up related skill: try exact path match first, then derive from the
+  // currently-open SKILL.md absolute path (handles skill packages where
+  // rootPath is the package root and selectedPath is a member subpath).
   useEffect(() => {
     if (!rootPath) return;
     let cancelled = false;
@@ -87,7 +107,19 @@ export function EditorPage() {
       try {
         const skills = await invoke<Skill[]>("list_skills");
         if (cancelled) return;
-        const found = skills.find((s) => s.path === rootPath) ?? null;
+        const normalize = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+        const rootNorm = normalize(rootPath);
+
+        let found: Skill | null = skills.find((s) => normalize(s.path) === rootNorm) ?? null;
+
+        if (!found && selectedPath) {
+          const fileAbs = normalize(`${rootPath}/${selectedPath}`);
+          if (fileAbs.toLowerCase().endsWith("/skill.md")) {
+            const parentDir = fileAbs.slice(0, -"/SKILL.md".length);
+            found = skills.find((s) => normalize(s.path) === parentDir) ?? null;
+          }
+        }
+
         setRelatedSkill(found);
       } catch {
         // ignore
@@ -96,7 +128,7 @@ export function EditorPage() {
     return () => {
       cancelled = true;
     };
-  }, [rootPath]);
+  }, [rootPath, selectedPath]);
 
   const formatTranslationError = useCallback((err: unknown): string => {
     if (typeof err === "object" && err !== null && "kind" in err) {
@@ -106,8 +138,30 @@ export function EditorPage() {
     return t("editor.translationFailed");
   }, [t]);
 
-  const handleTranslateFile = useCallback(async () => {
-    if (!relatedSkill) return;
+  const handleTranslateFile = useCallback(async (force: boolean = false) => {
+    // Branch: SKILL.md with a related skill → use skill-level translation cache
+    if (isSkillMdFile && relatedSkill) {
+      let configured = translation.isConfigured;
+      if (!configured) {
+        configured = await translation.refreshConfigured();
+      }
+      if (!configured) {
+        setError(t("editor.llmNotConfigured"));
+        return;
+      }
+      setTranslatingFile(true);
+      try {
+        await translation.translateSkill(relatedSkill.instance_id, language, force);
+      } catch (err) {
+        setError(formatTranslationError(err));
+      } finally {
+        setTranslatingFile(false);
+      }
+      return;
+    }
+
+    // Generic file branch
+    if (!canTranslateCurrentFile) return;
     let configured = translation.isConfigured;
     if (!configured) {
       configured = await translation.refreshConfigured();
@@ -118,18 +172,68 @@ export function EditorPage() {
     }
     setTranslatingFile(true);
     try {
-      await translation.translateSkill(relatedSkill.instance_id, language);
+      const result = await invoke<SkillTranslationOutput>("translate_text_content", {
+        label: selectedPath,
+        content,
+        targetLang: language,
+        force,
+      });
+      setFileTranslation(result);
+      setFileViewMode("translated");
     } catch (err) {
       setError(formatTranslationError(err));
     } finally {
       setTranslatingFile(false);
     }
-  }, [relatedSkill, translation, language, t, formatTranslationError]);
+  }, [
+    isSkillMdFile,
+    relatedSkill,
+    translation,
+    language,
+    t,
+    formatTranslationError,
+    canTranslateCurrentFile,
+    selectedPath,
+    content,
+  ]);
 
   const toggleView = useCallback(() => {
-    if (!translationKey) return;
-    translation.setView(translationKey, viewMode === "translated" ? "original" : "translated");
-  }, [translationKey, translation, viewMode]);
+    if (isSkillMdFile && translationKey) {
+      translation.setView(translationKey, viewMode === "translated" ? "original" : "translated");
+      return;
+    }
+    setFileViewMode((m) => (m === "translated" ? "original" : "translated"));
+  }, [isSkillMdFile, translationKey, translation, viewMode]);
+
+  // Reset file-level translation when switching files / language (not on content edits)
+  useEffect(() => {
+    setFileTranslation(null);
+    setFileViewMode("original");
+  }, [selectedPath, language]);
+
+  // Preload cached file translation when content available
+  useEffect(() => {
+    if (!selectedPath || !content || !isTranslatableFile || isSkillMdFile) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const hit = await invoke<SkillTranslationOutput | null>("get_cached_text_translation", {
+          label: selectedPath,
+          content,
+          targetLang: language,
+        });
+        if (cancelled) return;
+        if (hit) {
+          setFileTranslation(hit);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPath, content, language, isTranslatableFile, isSkillMdFile]);
 
   // Load file content
   useEffect(() => {
@@ -285,22 +389,24 @@ export function EditorPage() {
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {isSkillMdFile && relatedSkill && (
+          {canTranslateCurrentFile && (
             <TranslateIconButton
-              hasTranslation={translatedResult != null}
+              hasTranslation={hasTranslationForCurrentFile}
               showingTranslation={showingTranslation}
               translating={translatingFile}
               translateLabel={t("editor.translate")}
               showOriginalLabel={t("editor.showOriginal")}
               showTranslationLabel={t("editor.showTranslation")}
               translatingLabel={t("editor.translating")}
+              retranslateLabel={t("skills.retranslate")}
               onClick={() => {
-                if (translatedResult) {
+                if (hasTranslationForCurrentFile) {
                   toggleView();
                 } else {
                   void handleTranslateFile();
                 }
               }}
+              onRetranslate={() => void handleTranslateFile(true)}
             />
           )}
           <button
@@ -397,7 +503,11 @@ export function EditorPage() {
                 value={displayContent}
                 onChange={(value) => {
                   if (showingTranslation) return;
-                  setContent(value || "");
+                  const next = value || "";
+                  const normNext = next.replace(/\r\n/g, "\n");
+                  const normLast = lastEmittedRef.current.replace(/\r\n/g, "\n");
+                  if (normNext === normLast) return;
+                  setContent(next);
                 }}
                 onMount={(editor) => { editorRef.current = editor; }}
                 options={{
@@ -446,6 +556,19 @@ function findFirstFile(node: FileNode, extension?: string): string | null {
   if (node.children) {
     for (const child of node.children) {
       const found = findFirstFile(child, extension);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function findSkillMdFile(node: FileNode): string | null {
+  if (!node.is_dir) {
+    return node.name.toLowerCase() === "skill.md" ? node.path : null;
+  }
+  if (node.children) {
+    for (const child of node.children) {
+      const found = findSkillMdFile(child);
       if (found) return found;
     }
   }

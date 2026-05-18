@@ -548,14 +548,16 @@ export function Marketplace() {
   );
 
   const handleTranslateMarketSkill = useCallback(
-    async (skill: MarketplaceSkill, event: MouseEvent) => {
-      event.stopPropagation();
+    async (skill: MarketplaceSkill, event: MouseEvent | null, force: boolean = false) => {
+      event?.stopPropagation();
       const key = makeTranslationKey(skill.id, language);
-      const existing = translation.getTranslation(key);
-      if (existing) {
-        const isTranslated = translation.getView(key) === "translated";
-        translation.setView(key, isTranslated ? "original" : "translated");
-        return;
+      if (!force) {
+        const existing = translation.getTranslation(key);
+        if (existing) {
+          const isTranslated = translation.getView(key) === "translated";
+          translation.setView(key, isTranslated ? "original" : "translated");
+          return;
+        }
       }
       let configured = translation.isConfigured;
       if (!configured) {
@@ -574,6 +576,7 @@ export function Marketplace() {
         await translation.translateMarketplace(
           { id: skill.id, name: skill.name, description: skill.description },
           language,
+          force,
         );
       } catch (err) {
         addToast(formatTranslationError(err), "error");
@@ -1100,7 +1103,9 @@ export function Marketplace() {
                                 showOriginalLabel={t("skills.showOriginal")}
                                 showTranslationLabel={t("skills.showTranslated")}
                                 translatingLabel={t("skills.translating")}
+                                retranslateLabel={t("skills.retranslate")}
                                 onClick={(e) => void handleTranslateMarketSkill(skill, e)}
+                                onRetranslate={() => void handleTranslateMarketSkill(skill, null, true)}
                                 size={22}
                               />
                             </div>

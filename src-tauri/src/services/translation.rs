@@ -82,6 +82,7 @@ pub async fn translate_skill(
     provider: &LlmProvider,
     target_lang: &str,
     input: SkillTranslationInput,
+    force_refresh: bool,
 ) -> Result<SkillTranslationOutput, LlmError> {
     let total_chars = input.name.chars().count()
         + input.description.chars().count()
@@ -103,13 +104,15 @@ pub async fn translate_skill(
         source_description: &input.description,
         source_content_md: input.content_md.as_deref(),
     };
-    if let Some(hit) = cache.get(&key) {
-        return Ok(SkillTranslationOutput {
-            name: hit.name,
-            description: hit.description,
-            content_md: hit.content_md,
-            cached: true,
-        });
+    if !force_refresh {
+        if let Some(hit) = cache.get(&key) {
+            return Ok(SkillTranslationOutput {
+                name: hit.name,
+                description: hit.description,
+                content_md: hit.content_md,
+                cached: true,
+            });
+        }
     }
 
     let messages = build_prompt(target_lang, &input);

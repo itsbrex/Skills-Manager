@@ -191,6 +191,8 @@ export const zh = {
     translateAction: "翻译此 Skill",
     translatedBadge: "译",
     translatedTooltip: "已翻译 · 点击切换原文/翻译",
+    retranslate: "重新翻译",
+    retranslating: "重新翻译中…",
     batchTranslateNoNew: "暂无未翻译的 Skill",
     batchTranslateConfirmSkip: "将翻译 {new} 项，已跳过 {skipped} 项已翻译。继续？",
   },
