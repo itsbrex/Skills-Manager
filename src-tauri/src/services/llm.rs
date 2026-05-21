@@ -4,7 +4,6 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-const DEFAULT_TIMEOUT_SECS: u64 = 60;
 const DEFAULT_TEMPERATURE: f32 = 0.3;
 
 #[derive(Debug, Clone, Serialize)]
@@ -74,6 +73,7 @@ struct ChatRequestBody<'a> {
     max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<ResponseFormat>,
+    stream: bool,
 }
 
 #[derive(Serialize)]
@@ -89,17 +89,19 @@ struct ResponseFormat {
 }
 
 #[derive(Deserialize)]
-struct ChatResponseBody {
-    choices: Vec<ChatChoice>,
+struct StreamChunk {
+    choices: Vec<StreamChoice>,
 }
 
 #[derive(Deserialize)]
-struct ChatChoice {
-    message: ChatChoiceMessage,
+struct StreamChoice {
+    #[serde(default)]
+    delta: StreamDelta,
 }
 
-#[derive(Deserialize)]
-struct ChatChoiceMessage {
+#[derive(Deserialize, Default)]
+struct StreamDelta {
+    #[serde(default)]
     content: Option<String>,
 }
 
@@ -107,12 +109,11 @@ pub async fn chat(provider: &LlmProvider, req: ChatRequest) -> Result<String, Ll
     let base = normalize_base_url(&provider.base_url)?;
     let url = format!("{base}/chat/completions");
 
-    let timeout = provider
-        .timeout_secs
-        .map(|s| s as u64)
-        .unwrap_or(DEFAULT_TIMEOUT_SECS);
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(timeout))
+    let mut builder = reqwest::Client::builder();
+    if let Some(secs) = provider.timeout_secs {
+        builder = builder.timeout(Duration::from_secs(secs as u64));
+    }
+    let client = builder
         .build()
         .map_err(|e| LlmError::NetworkError(e.to_string()))?;
 
@@ -131,6 +132,7 @@ pub async fn chat(provider: &LlmProvider, req: ChatRequest) -> Result<String, Ll
         response_format: req.json_mode.then(|| ResponseFormat {
             fmt_type: "json_object",
         }),
+        stream: true,
     };
 
     let response = client
@@ -165,17 +167,59 @@ pub async fn chat(provider: &LlmProvider, req: ChatRequest) -> Result<String, Ll
         });
     }
 
-    let parsed: ChatResponseBody = response
-        .json()
-        .await
-        .map_err(|e| LlmError::ParseError(e.to_string()))?;
+    use futures_util::StreamExt;
+    let mut stream = response.bytes_stream();
+    let mut byte_buf: Vec<u8> = Vec::new();
+    let mut buffer = String::new();
+    let mut full = String::new();
 
-    parsed
-        .choices
-        .into_iter()
-        .next()
-        .and_then(|choice| choice.message.content)
-        .ok_or_else(|| LlmError::ParseError("empty choices".to_string()))
+    while let Some(chunk) = stream.next().await {
+        let bytes = chunk.map_err(|e| LlmError::NetworkError(e.to_string()))?;
+        byte_buf.extend_from_slice(&bytes);
+
+        let valid_up_to = match std::str::from_utf8(&byte_buf) {
+            Ok(_) => byte_buf.len(),
+            Err(e) => e.valid_up_to(),
+        };
+        if valid_up_to > 0 {
+            let valid = std::str::from_utf8(&byte_buf[..valid_up_to])
+                .expect("valid_up_to bytes are valid utf-8");
+            for ch in valid.chars() {
+                if ch != '\r' {
+                    buffer.push(ch);
+                }
+            }
+            byte_buf.drain(..valid_up_to);
+        }
+
+        while let Some(idx) = buffer.find("\n\n") {
+            let event: String = buffer.drain(..idx + 2).collect();
+            for line in event.lines() {
+                let data = match line.strip_prefix("data:") {
+                    Some(d) => d.trim(),
+                    None => continue,
+                };
+                if data.is_empty() {
+                    continue;
+                }
+                if data == "[DONE]" {
+                    return Ok(full);
+                }
+                if let Ok(parsed) = serde_json::from_str::<StreamChunk>(data) {
+                    if let Some(choice) = parsed.choices.into_iter().next() {
+                        if let Some(content) = choice.delta.content {
+                            full.push_str(&content);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if full.is_empty() {
+        return Err(LlmError::ParseError("empty stream response".to_string()));
+    }
+    Ok(full)
 }
 
 pub async fn test_connection(provider: &LlmProvider) -> Result<String, LlmError> {

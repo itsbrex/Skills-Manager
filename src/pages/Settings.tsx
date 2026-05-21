@@ -1306,17 +1306,7 @@ function LlmProviderSection({ provider, onChange, addToast, t }: LlmProviderSect
   const [baseUrl, setBaseUrl] = useState(provider?.base_url ?? "");
   const [apiKey, setApiKey] = useState(provider?.api_key ?? "");
   const [model, setModel] = useState(provider?.model ?? "gpt-4o-mini");
-  const [temperature, setTemperature] = useState(
-    provider?.temperature != null ? String(provider.temperature) : ""
-  );
-  const [maxTokens, setMaxTokens] = useState(
-    provider?.max_tokens != null ? String(provider.max_tokens) : ""
-  );
-  const [timeoutSecs, setTimeoutSecs] = useState(
-    provider?.timeout_secs != null ? String(provider.timeout_secs) : ""
-  );
   const [showKey, setShowKey] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -1326,17 +1316,13 @@ function LlmProviderSection({ provider, onChange, addToast, t }: LlmProviderSect
     const m = model.trim();
     if (!base || !key || !m) return null;
     if (!isValidBaseUrl(base)) return null;
-    const toNum = (s: string): number | null => {
-      const n = Number(s);
-      return s.trim() && Number.isFinite(n) ? n : null;
-    };
     return {
       base_url: base.replace(/\/+$/, ""),
       api_key: key,
       model: m,
-      temperature: toNum(temperature),
-      max_tokens: toNum(maxTokens),
-      timeout_secs: toNum(timeoutSecs),
+      temperature: null,
+      max_tokens: null,
+      timeout_secs: null,
     };
   };
 
@@ -1384,9 +1370,6 @@ function LlmProviderSection({ provider, onChange, addToast, t }: LlmProviderSect
       setBaseUrl("");
       setApiKey("");
       setModel("");
-      setTemperature("");
-      setMaxTokens("");
-      setTimeoutSecs("");
       addToast(t("settings.llmCleared"), "info");
       onChange(null);
       void refreshConfigured();
@@ -1475,65 +1458,6 @@ function LlmProviderSection({ provider, onChange, addToast, t }: LlmProviderSect
           </datalist>
         </Field>
 
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((v) => !v)}
-          style={{
-            alignSelf: "flex-start",
-            fontSize: "12px",
-            color: "var(--muted-foreground)",
-            background: "transparent",
-            border: "none",
-            cursor: "pointer",
-            padding: 0,
-          }}
-        >
-          {showAdvanced ? "▾" : "▸"} {t("settings.llmAdvanced")}
-        </button>
-
-        {showAdvanced && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: "10px",
-            }}
-          >
-            <Field label={t("settings.llmTemperature")}>
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                max="2"
-                value={temperature}
-                onChange={(e) => setTemperature(e.target.value)}
-                placeholder="0.3"
-                style={inputStyle}
-              />
-            </Field>
-            <Field label={t("settings.llmMaxTokens")}>
-              <input
-                type="number"
-                min="1"
-                value={maxTokens}
-                onChange={(e) => setMaxTokens(e.target.value)}
-                placeholder="4096"
-                style={inputStyle}
-              />
-            </Field>
-            <Field label={t("settings.llmTimeout")}>
-              <input
-                type="number"
-                min="1"
-                value={timeoutSecs}
-                onChange={(e) => setTimeoutSecs(e.target.value)}
-                placeholder="60"
-                style={inputStyle}
-              />
-            </Field>
-          </div>
-        )}
-
         <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
           <button
             type="button"
@@ -1590,7 +1514,14 @@ function LlmProviderSection({ provider, onChange, addToast, t }: LlmProviderSect
           )}
         </div>
 
-        <div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
           <button
             type="button"
             onClick={async () => {
@@ -1613,6 +1544,26 @@ function LlmProviderSection({ provider, onChange, addToast, t }: LlmProviderSect
           >
             {t("settings.llmClearCache")}
           </button>
+          <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+            <span>{t("settings.llmNoApiHint")} </span>
+            <button
+              type="button"
+              onClick={() => {
+                void openUrl("https://yutou.virtualgoods.top");
+              }}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--primary)",
+                cursor: "pointer",
+                padding: 0,
+                fontSize: "12px",
+                textDecoration: "underline",
+              }}
+            >
+              {t("settings.llmNoApiCta")} →
+            </button>
+          </div>
         </div>
       </div>
     </div>
