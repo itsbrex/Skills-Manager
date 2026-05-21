@@ -310,6 +310,6 @@ export function filterSkills(
       return true;
     }
 
-    return selectedTags.every((tag) => tags.includes(tag));
+    return selectedTags.some((tag) => tags.includes(tag));
   });
 }

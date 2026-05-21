@@ -100,7 +100,7 @@ test("filterSkills matches search query against skill name, id, and tags", () =>
   );
 });
 
-test("filterSkills applies multi-tag intersection and supports untagged-only mode", () => {
+test("filterSkills applies multi-tag union and supports untagged-only mode", () => {
   assert.deepEqual(
     filterSkills(skills, metadata, {
       searchQuery: "",
@@ -116,7 +116,16 @@ test("filterSkills applies multi-tag intersection and supports untagged-only mod
       selectedTags: ["frontend", "react"],
       untaggedOnly: false,
     }).map((skill) => skill.id),
-    ["react-playground"],
+    ["react-playground", "cli-helper"],
+  );
+
+  assert.deepEqual(
+    filterSkills(skills, metadata, {
+      searchQuery: "",
+      selectedTags: ["react", "cli"],
+      untaggedOnly: false,
+    }).map((skill) => skill.id),
+    ["react-playground", "cli-helper"],
   );
 
   assert.deepEqual(

@@ -2,7 +2,7 @@ import type { InstalledSkillPackage, Skill, SkillMetadataMap, Tool } from "../..
 import { getEnabledToolIds } from "./getEnabledToolIds.ts";
 import { orderToolIdsForSkill } from "./orderToolIds.ts";
 import { summarizeEnabledTools, type EnabledToolsSummary } from "./summarizeEnabledTools.ts";
-import { getGroupMetadataKey, getGroupTags, getSkillTagsForSkill, normalizeSkillTags } from "./skillTags.ts";
+import { getGroupMetadataKey, getGroupTags, getSkillTagsForSkill, normalizeSkillTags, type SkillTagSummary } from "./skillTags.ts";
 
 export interface GroupToolState {
   toolId: string;
@@ -243,6 +243,22 @@ export function buildUnifiedSkillItems({
   return [...skillItems, ...groupItems];
 }
 
+export function buildUnifiedItemTagSummaries(
+  items: UnifiedSkillListItem[],
+): SkillTagSummary[] {
+  const counts = new Map<string, number>();
+
+  for (const item of items) {
+    for (const tag of item.tags) {
+      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+  }
+
+  return Array.from(counts.entries())
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((left, right) => right.count - left.count || left.tag.localeCompare(right.tag));
+}
+
 export function filterUnifiedSkillItems(
   items: UnifiedSkillListItem[],
   filters: UnifiedSkillListFilters,
@@ -274,7 +290,7 @@ export function filterUnifiedSkillItems(
       return true;
     }
 
-    return selectedTags.every((tag) => item.tags.includes(tag));
+    return selectedTags.some((tag) => item.tags.includes(tag));
   });
 }
 

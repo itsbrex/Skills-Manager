@@ -26,7 +26,6 @@ import { useSkillTranslation, makeTranslationKey } from "@/hooks/useSkillTransla
 import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
 import {
   applyTagFilterAction,
-  buildAllTagSummaries,
   getGroupMetadataKey,
   getGroupTags,
   getTagFilterSelectionSummary,
@@ -50,6 +49,7 @@ import {
 } from "./skills/bulkToggleSkillTools";
 import {
   buildUnifiedSkillItems,
+  buildUnifiedItemTagSummaries,
   filterUnifiedSkillItems,
   getGroupBulkModeState,
   getGroupToolLabel,
@@ -927,9 +927,17 @@ export function Skills() {
     }
   };
 
+  const unifiedItems = useMemo(() => buildUnifiedSkillItems({
+    skills,
+    skillPackages,
+    tools,
+    skillMetadata,
+    groupBadgeLabel: t("skills.groupBadge"),
+  }), [skillMetadata, skillPackages, skills, t, tools]);
+
   const allTagSummaries = useMemo(
-    () => buildAllTagSummaries(skillMetadata),
-    [skillMetadata],
+    () => buildUnifiedItemTagSummaries(unifiedItems),
+    [unifiedItems],
   );
 
   const untaggedSkillsCount = useMemo(
@@ -964,14 +972,6 @@ export function Skills() {
   }, [scopeFilter, tagFilterSelection, t]);
 
   const hasActiveSkillFilters = Boolean(searchQuery.trim()) || selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all";
-
-  const unifiedItems = useMemo(() => buildUnifiedSkillItems({
-    skills,
-    skillPackages,
-    tools,
-    skillMetadata,
-    groupBadgeLabel: t("skills.groupBadge"),
-  }), [skillMetadata, skillPackages, skills, t, tools]);
 
   const scopeFilterCounts = useMemo(() => {
     const globalCount = unifiedItems.filter((item) => item.scopeLabel === "global").length;
