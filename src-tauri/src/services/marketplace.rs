@@ -1127,6 +1127,7 @@ impl MarketplaceService {
         let tree = Self::fetch_skill_files(repo_url, &skill_path, github_token).await?;
         let mut files = Vec::new();
         collect_file_nodes(&tree, &mut files);
+        let resolved_skill_path = tree.path.trim_matches('/').to_string();
         let remote_revision = skill
             .remote_revision
             .as_deref()
@@ -1142,7 +1143,7 @@ impl MarketplaceService {
                 None => continue,
             };
 
-            let relative_path = normalize_local_path(&file.path, &skill_path);
+            let relative_path = normalize_local_path(&file.path, &resolved_skill_path);
             if relative_path.trim().is_empty() || relative_path == "." {
                 continue;
             }
@@ -3097,6 +3098,20 @@ mod tests {
     fn build_skill_path_candidates_keeps_nested_path_without_extra_prefixes() {
         let candidates = super::build_skill_path_candidates("skills/docfactory-prd");
         assert_eq!(candidates, vec!["skills/docfactory-prd".to_string()]);
+    }
+
+    #[test]
+    fn normalize_local_path_strips_resolved_skill_path_prefix() {
+        let stripped = super::normalize_local_path("skills/infsh-cli/SKILL.md", "skills/infsh-cli");
+        assert_eq!(stripped, "SKILL.md");
+
+        let stripped_with_nested =
+            super::normalize_local_path("skills/infsh-cli/assets/icon.png", "skills/infsh-cli");
+        assert_eq!(stripped_with_nested, "assets/icon.png");
+
+        let kept_when_no_prefix =
+            super::normalize_local_path("skills/infsh-cli/SKILL.md", "infsh-cli");
+        assert_eq!(kept_when_no_prefix, "skills/infsh-cli/SKILL.md");
     }
 
     #[test]
