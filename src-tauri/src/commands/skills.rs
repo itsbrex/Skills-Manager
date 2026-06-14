@@ -568,12 +568,10 @@ mod tests {
             skill_metadata: HashMap::new(),
             preferences: None,
             marketplace_sources: None,
-            poll_client_state: None,
-            auth_session: None,
-            cloud_sync: None,
             projects: Vec::new(),
             active_project_id: None,
             llm_provider: None,
+            auth_session: None,
             initialized: true,
         }
     }
@@ -607,12 +605,10 @@ mod tests {
                 skill_metadata: HashMap::new(),
                 preferences: None,
                 marketplace_sources: None,
-                poll_client_state: None,
-                auth_session: None,
-                cloud_sync: None,
                 projects: Vec::new(),
                 active_project_id: None,
                 llm_provider: None,
+                auth_session: None,
                 initialized: true,
             };
 
@@ -664,12 +660,10 @@ mod tests {
                 skill_metadata: HashMap::new(),
                 preferences: None,
                 marketplace_sources: None,
-                poll_client_state: None,
-                auth_session: None,
-                cloud_sync: None,
                 projects: Vec::new(),
                 active_project_id: None,
                 llm_provider: None,
+                auth_session: None,
                 initialized: true,
             };
 

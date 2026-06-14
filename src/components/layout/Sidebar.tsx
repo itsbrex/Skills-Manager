@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "@/i18n";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -14,11 +15,10 @@ import {
   clearPendingAuthProvider,
   setPendingAuthProvider,
   takePendingAuthProvider,
+  logoutAuth,
 } from "@/services/auth";
 import { buildAuthErrorMessage } from "@/services/authError";
-import { setAuthProfileSnapshot } from "@/services/authProfileStore";
-import { useCloudSync } from "@/hooks/useCloudSyncAgent";
-import { UpdateInfo } from "@/types";
+import { AppConfig, UpdateInfo } from "@/types";
 import { MODAL_LAYER_Z_INDEX, MODAL_OVERLAY_COLOR } from "@/constants/modal";
 import { getSidebarChromeMetrics } from "./sidebarChrome";
 
@@ -28,7 +28,6 @@ const navItems = [
   { path: "/marketplace", labelKey: "nav.marketplace" as const, icon: "store" },
   { path: "/settings", labelKey: "nav.settings" as const, icon: "cog" },
   { path: "/feedback", labelKey: "nav.feedback" as const, icon: "message" },
-  { path: "/polls", labelKey: "nav.polls" as const, icon: "poll" },
 ];
 
 const icons: Record<string, React.ReactNode> = {
@@ -72,7 +71,7 @@ const icons: Record<string, React.ReactNode> = {
 
 export function Sidebar() {
   const { t, language } = useTranslation();
-  const cloudSync = useCloudSync();
+  const [config, setConfig] = useState<AppConfig | null>(null);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
@@ -80,6 +79,19 @@ export function Sidebar() {
   const [pendingProvider, setPendingProvider] = useState<"github" | "google" | null>(null);
   const [devCallbackUrl, setDevCallbackUrl] = useState("");
   const handledAuthUrlsRef = useRef<Set<string>>(new Set());
+
+  const fetchConfig = useCallback(async () => {
+    try {
+      const cfg = await invoke<AppConfig>("get_config");
+      setConfig(cfg);
+    } catch (err) {
+      console.error("Failed to fetch config:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchConfig();
+  }, [fetchConfig]);
 
   const normalizeAuthUrl = useCallback((value: string) => value.trim(), []);
 
@@ -143,8 +155,8 @@ export function Sidebar() {
     const resolvedProvider = pendingProvider ?? takePendingAuthProvider();
     try {
       const exchangeAuth = resolvedProvider === "google" ? exchangeGoogleAuth : exchangeGithubAuth;
-      const profile = await exchangeAuth(loginCode, state);
-      setAuthProfileSnapshot(profile);
+      await exchangeAuth(loginCode, state);
+      await fetchConfig(); // Refresh config to get updated auth_session
       setAuthModalOpen(false);
     } catch (err) {
       console.warn("Failed to exchange auth code:", err);
@@ -159,7 +171,7 @@ export function Sidebar() {
       setPendingProvider(null);
       clearPendingAuthProvider();
     }
-  }, [pendingProvider, t]);
+  }, [pendingProvider, t, fetchConfig]);
 
   const handleAuthUrl = useCallback((url: string) => {
     const normalized = normalizeAuthUrl(url);
@@ -295,7 +307,8 @@ export function Sidebar() {
     setAuthLoading(true);
     setAuthError(null);
     try {
-      await cloudSync.logout();
+      await logoutAuth();
+      await fetchConfig(); // Refresh config to clear auth_session
       setAuthModalOpen(false);
     } catch (err) {
       console.warn("Failed to logout:", err);
@@ -303,15 +316,16 @@ export function Sidebar() {
     } finally {
       setAuthLoading(false);
     }
-  }, [cloudSync, t]);
+  }, [t, fetchConfig]);
 
-  const authProfile = cloudSync.authProfile;
-  const displayName = authProfile?.username || authProfile?.email || t("auth.login");
-  const providerLabel = authProfile?.provider === "github"
+  const authProfile = config?.auth_session?.profile || null;
+  const authProvider = config?.auth_session?.provider || null;
+  const displayName = authProfile?.username || t("auth.login");
+  const providerLabel = authProvider === "github"
     ? "GitHub"
-    : authProfile?.provider === "google"
+    : authProvider === "google"
       ? "Google"
-      : authProfile?.provider || "-";
+      : "-";
   const chromeMetrics = getSidebarChromeMetrics(
     typeof navigator === "undefined" ? "" : navigator.userAgent,
   );
@@ -572,11 +586,6 @@ export function Sidebar() {
                     <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)" }}>
                       {displayName}
                     </div>
-                    {authProfile.email && (
-                      <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
-                        {authProfile.email}
-                      </div>
-                    )}
                   </div>
                 </div>
 

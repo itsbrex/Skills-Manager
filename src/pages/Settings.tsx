@@ -10,21 +10,24 @@ import {
   LlmProvider,
 } from "@/types";
 import { defaultPreferences } from "@/constants/preferences";
-import { startGithubAuth, startGoogleAuth, clearPendingAuthProvider, setPendingAuthProvider } from "@/services/auth";
+import {
+  startGithubAuth,
+  startGoogleAuth,
+  clearPendingAuthProvider,
+  setPendingAuthProvider,
+  logoutAuth
+} from "@/services/auth";
 import { buildAuthErrorMessage } from "@/services/authError";
 import { checkUpdate } from "@/services/updater";
 import { useTranslation, Language, TranslationPath } from "@/i18n";
 import { useSkillTranslation } from "@/hooks/useSkillTranslation";
 import { useTheme } from "@/hooks/useTheme";
-import { useCloudSync } from "@/hooks/useCloudSyncAgent";
 import { resolveTelemetryConsent } from "@/telemetry/consent";
 import { getEditorIcon } from "@/assets/editors";
 import { FontFamilyPreset, normalizeFontFamilyPreset } from "@/lib/fontFamily";
 import wechatRewardCode from "@/assets/donation/wechat-reward-code.jpg";
 import alipayRewardCode from "@/assets/donation/alipay-reward-code.jpg";
 import { Toggle } from "@/components/ui/toggle";
-import { buildCloudSyncIntervalOptions } from "@/services/cloudSyncSettingsOptions";
-import { setCloudSyncSettingsSnapshot } from "@/services/cloudSyncSettingsStore";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
 import { ToastContainer, useToast } from "@/components/ui/toast";
@@ -44,7 +47,6 @@ export function Settings() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const { toasts, addToast, removeToast } = useToast();
-  const cloudSync = useCloudSync();
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -160,12 +162,9 @@ export function Settings() {
 
     try {
       await invoke("save_config", { config });
-      const prefs = config.preferences || defaultPreferences;
-      setCloudSyncSettingsSnapshot({
-        auto: prefs.cloud_sync_auto,
-        intervalMinutes: prefs.cloud_sync_interval_minutes,
-      });
-      await cloudSync.refreshVaultConsent();
+      const prefs = config.preferences || defaultPreferences;  // 
+
+      // await cloudSync.refreshVaultConsent(); // Removed: cloud sync
       const telemetryConsent = resolveTelemetryConsent(prefs.telemetry_consent);
       if (telemetryConsent === "granted") {
         void invoke("telemetry_initialize").catch((err) => {
@@ -257,19 +256,15 @@ export function Settings() {
     setAuthLoading(true);
     setAuthError(null);
     try {
-      await cloudSync.logout();
+      await logoutAuth();
+      await fetchConfig();
     } catch (err) {
       console.warn("Failed to logout:", err);
       setAuthError(t("auth.logoutFailed"));
     } finally {
       setAuthLoading(false);
     }
-  }, [cloudSync, t]);
-
-  const handleManualSync = useCallback(async () => {
-    setAuthError(null);
-    await cloudSync.manualSync();
-  }, [cloudSync]);
+  }, [t]);
 
   if (error) {
     return (
@@ -290,32 +285,17 @@ export function Settings() {
   }
 
   const prefs = config.preferences || defaultPreferences;
-  const cloudSyncIntervals = buildCloudSyncIntervalOptions([5, 10, 15, 30, 60]);
   const selectedEditor = availableEditors.find(e => e.id === prefs.default_editor) || availableEditors[0];
   const FallbackEditorIcon = selectedEditor ? getEditorIcon(selectedEditor.id) : null;
   const marketplaceSources = config.marketplace_sources || [];
   const marketplaceRows = marketplaceSources;
-  const authProfile = cloudSync.authProfile;
-  const vaultConsent = prefs.vault_backup_consent ?? "unknown";
-  const telemetryConsent = resolveTelemetryConsent(prefs.telemetry_consent);
-  const vaultConsentLabel = vaultConsent === "granted"
-    ? t("settings.vaultBackupConsentStatusGranted")
-    : vaultConsent === "denied"
-      ? t("settings.vaultBackupConsentStatusDenied")
-      : t("settings.vaultBackupConsentStatusUnknown");
-  const telemetryConsentLabel = telemetryConsent === "granted"
-    ? t("settings.telemetryConsentStatusGranted")
-    : telemetryConsent === "denied"
-      ? t("settings.telemetryConsentStatusDenied")
-      : t("settings.telemetryConsentStatusUnknown");
-  const lastSyncedLabel = cloudSync.lastSyncedAt
-    ? t("cloudSync.lastSynced").replace("{time}", new Date(cloudSync.lastSyncedAt * 1000).toLocaleString())
-    : t("cloudSync.neverSynced");
-  const providerLabel = authProfile?.provider === "github"
+  const authProfile = config.auth_session?.profile || null;
+  const authProvider = config.auth_session?.provider || null;
+  const providerLabel = authProvider === "github"
     ? "GitHub"
-    : authProfile?.provider === "google"
+    : authProvider === "google"
       ? "Google"
-      : authProfile?.provider || "-";
+      : "-";
 
   return (
     <div style={{
@@ -686,7 +666,7 @@ export function Settings() {
             <SettingsRow
               label={t("settings.accountStatus")}
               description={t("settings.accountDesc")}
-              isLast={false}
+              isLast={true}
             >
               {authProfile ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -713,7 +693,7 @@ export function Settings() {
                   )}
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>
-                      {authProfile.username || authProfile.email || t("auth.login")}
+                      {authProfile.username || t("auth.login")}
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
                       {t("auth.provider")}: {providerLabel}
@@ -785,130 +765,15 @@ export function Settings() {
               )}
             </SettingsRow>
 
-            <SettingsRow
-              label={t("settings.cloudSync")}
-              description={t("settings.cloudSyncDesc")}
-              isLast={false}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                    {authProfile ? t("cloudSync.statusConnected") : t("cloudSync.statusDisconnected")}
-                  </span>
-                  <button
-                    onClick={handleManualSync}
-                    disabled={!authProfile || cloudSync.syncing}
-                    style={{
-                      padding: '8px 12px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      color: authProfile ? 'var(--foreground)' : 'var(--muted-foreground)',
-                      backgroundColor: 'var(--secondary)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                      cursor: !authProfile || cloudSync.syncing ? 'not-allowed' : 'pointer',
-                      opacity: !authProfile || cloudSync.syncing ? 0.6 : 1,
-                    }}
-                  >
-                    {cloudSync.syncing ? t("cloudSync.syncing") : t("cloudSync.syncNow")}
-                  </button>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                  {authProfile ? lastSyncedLabel : t("cloudSync.notSignedIn")}
-                </div>
-                {cloudSync.syncStage === "pulling" && (
-                  <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                    {t("cloudSync.pulling")}
-                  </div>
-                )}
-                {cloudSync.syncStage === "pushing" && (
-                  <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                    {t("cloudSync.pushing")}
-                  </div>
-                )}
-                {cloudSync.conflict && (
-                  <div style={{ fontSize: '12px', color: 'var(--color-warning)' }}>
-                    {t("cloudSync.conflictNotice")}
-                  </div>
-                )}
-                {cloudSync.error && (
-                  <div style={{ fontSize: '12px', color: 'var(--color-error)' }}>
-                    {cloudSync.error}
-                  </div>
-                )}
-              </div>
-            </SettingsRow>
+            
 
-            <SettingsRow
-              label={t("settings.telemetryConsent")}
-              description={t("settings.telemetryConsentDesc")}
-              isLast={false}
-            >
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-                <Toggle
-                  checked={telemetryConsent === "granted"}
-                  onChange={(v) => updatePreference("telemetry_consent", v ? "granted" : "denied")}
-                />
-                <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
-                  {telemetryConsentLabel}
-                </div>
-              </div>
-            </SettingsRow>
+            
 
-            <SettingsRow
-              label={t("settings.vaultBackupConsent")}
-              description={t("settings.vaultBackupConsentDesc")}
-              isLast={false}
-            >
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-                <Toggle
-                  checked={vaultConsent === "granted"}
-                  onChange={(v) => updatePreference("vault_backup_consent", v ? "granted" : "denied")}
-                />
-                <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
-                  {vaultConsentLabel}
-                </div>
-              </div>
-            </SettingsRow>
+            
 
-            <SettingsRow
-              label={t("settings.cloudSyncAuto")}
-              description={t("settings.cloudSyncAutoDesc")}
-              isLast={false}
-            >
-              <Toggle
-                checked={prefs.cloud_sync_auto}
-                onChange={(v) => updatePreference("cloud_sync_auto", v)}
-              />
-            </SettingsRow>
+            
 
-            <SettingsRow
-              label={t("settings.cloudSyncInterval")}
-              description={t("settings.cloudSyncIntervalDesc")}
-              isLast={true}
-            >
-              <select
-                value={prefs.cloud_sync_interval_minutes}
-                disabled={!prefs.cloud_sync_auto}
-                onChange={(e) => updatePreference("cloud_sync_interval_minutes", Number(e.target.value))}
-                style={{
-                  padding: '8px 10px',
-                  fontSize: '12px',
-                  color: 'var(--foreground)',
-                  backgroundColor: 'var(--secondary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  opacity: prefs.cloud_sync_auto ? 1 : 0.6,
-                  cursor: prefs.cloud_sync_auto ? 'pointer' : 'not-allowed',
-                }}
-              >
-                {cloudSyncIntervals.map((minutes) => (
-                  <option key={minutes} value={minutes}>
-                    {t("settings.cloudSyncIntervalOption").replace("{minutes}", String(minutes))}
-                  </option>
-                ))}
-              </select>
-            </SettingsRow>
+            
           </SettingsCard>
 
           {/* About Section */}

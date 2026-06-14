@@ -3,16 +3,16 @@ import type { AuthMeResponse, AuthStartResult } from "@/types";
 
 const PENDING_PROVIDER_KEY = "skills-manager:auth:pending-provider";
 
-export type PendingAuthProvider = "github" | "google";
+export type AuthProvider = "github" | "google";
 
-export function setPendingAuthProvider(provider: PendingAuthProvider) {
+export function setPendingAuthProvider(provider: AuthProvider) {
   if (typeof localStorage === "undefined") {
     return;
   }
   localStorage.setItem(PENDING_PROVIDER_KEY, provider);
 }
 
-export function takePendingAuthProvider(): PendingAuthProvider | null {
+export function takePendingAuthProvider(): AuthProvider | null {
   if (typeof localStorage === "undefined") {
     return null;
   }
@@ -71,4 +71,16 @@ export async function getAuthProfile(): Promise<AuthMeResponse | null> {
 
 export async function logoutAuth(): Promise<void> {
   await invoke("logout_auth");
+}
+
+// URL normalization for deep link handling
+export function normalizeAuthUrl(url: string): string {
+  return url
+    .replace(/^skillsmanager:\/\//, "skills-manager://")
+    .replace(/^skills-manager:\/([^/])/, "skills-manager://$1");
+}
+
+export function isExpectedAuthUrl(url: string): boolean {
+  const normalized = normalizeAuthUrl(url);
+  return normalized.startsWith("skills-manager://auth/callback");
 }
