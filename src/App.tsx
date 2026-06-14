@@ -12,6 +12,7 @@ import { Welcome } from "@/pages/Welcome";
 import { useInitialization } from "@/hooks/useInitialization";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { SkillTranslationProvider } from "@/hooks/useSkillTranslation";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { I18nProvider, Language } from "@/i18n";
 import { FontFamilyPreset, normalizeFontFamilyPreset } from "@/lib/fontFamily";
 import { AppConfig, MarketplaceUpdateCheckResult } from "@/types";
@@ -110,6 +111,7 @@ function App() {
       onFontFamilyChange={handleFontFamilyChange}
     >
       <I18nProvider language={language} onLanguageChange={handleLanguageChange}>
+        <AuthProvider>
           <SkillTranslationProvider>
             <BrowserRouter>
               <Routes>
@@ -125,6 +127,7 @@ function App() {
               <ToastContainer toasts={toasts} onRemove={removeToast} />
             </BrowserRouter>
           </SkillTranslationProvider>
+        </AuthProvider>
       </I18nProvider>
     </ThemeProvider>
   );

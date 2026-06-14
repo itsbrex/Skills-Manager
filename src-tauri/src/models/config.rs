@@ -1,4 +1,5 @@
 use crate::models::marketplace::{MarketplaceSource, SourceType};
+use crate::models::auth::AuthSession;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -186,6 +187,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub llm_provider: Option<LlmProvider>,
     #[serde(default)]
+    pub auth_session: Option<AuthSession>,
+    #[serde(default)]
     pub initialized: bool,
 }
 
@@ -221,6 +224,7 @@ impl Default for AppConfig {
             projects: Vec::new(),
             active_project_id: None,
             llm_provider: None,
+            auth_session: None,
             initialized: false,
         }
     }

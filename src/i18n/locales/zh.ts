@@ -339,10 +339,10 @@ export const zh = {
     pressEscToCancel: "按 Esc 取消",
     projectCountSingular: "个项目绑定",
     projectCountPlural: "个项目绑定",
-    // Account & Cloud Sync
-    account: "账号与云同步",
+    // Account
+    account: "账号",
     accountStatus: "账号",
-    accountDesc: "登录后可跨设备同步设置",
+    accountDesc: "登录以使用 Marketplace 等功能",
     cloudSync: "云同步",
     cloudSyncDesc: "同步状态与手动控制",
     telemetryConsent: "使用统计",
@@ -434,9 +434,9 @@ export const zh = {
   auth: {
     login: "登录",
     loginTitle: "账号登录",
-    loginDesc: "选择登录方式以同步个人设置。",
+    loginDesc: "选择登录方式以访问 Marketplace 等功能。",
     accountTitle: "账号信息",
-    accountDesc: "已登录并可同步你的设置。",
+    accountDesc: "已登录，可以使用完整功能。",
     githubLogin: "使用 GitHub 登录",
     googleLogin: "使用 Google 登录",
     comingSoon: "即将支持",
@@ -452,6 +452,7 @@ export const zh = {
     logoutFailed: "退出失败，请重试",
     devCallbackTip: "如果浏览器没有自动唤起应用，请粘贴回调链接完成登录",
     devCallbackApply: "应用回调",
+    waitingForBrowser: "等待浏览器完成授权...",
   },
   cloudSync: {
     statusConnected: "已连接",

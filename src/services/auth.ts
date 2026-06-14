@@ -33,14 +33,14 @@ export function clearPendingAuthProvider() {
 
 export async function startGithubAuth(locale?: string): Promise<AuthStartResult> {
   return invoke<AuthStartResult>("start_github_auth", {
-    debug: import.meta.env.DEV,
+    debug: false,  // Always use normal redirect flow
     locale,
   });
 }
 
 export async function startGoogleAuth(locale?: string): Promise<AuthStartResult> {
   return invoke<AuthStartResult>("start_google_auth", {
-    debug: import.meta.env.DEV,
+    debug: false,  // Always use normal redirect flow
     locale,
   });
 }

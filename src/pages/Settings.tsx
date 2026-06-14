@@ -10,14 +10,6 @@ import {
   LlmProvider,
 } from "@/types";
 import { defaultPreferences } from "@/constants/preferences";
-import {
-  startGithubAuth,
-  startGoogleAuth,
-  clearPendingAuthProvider,
-  setPendingAuthProvider,
-  logoutAuth
-} from "@/services/auth";
-import { buildAuthErrorMessage } from "@/services/authError";
 import { checkUpdate } from "@/services/updater";
 import { useTranslation, Language, TranslationPath } from "@/i18n";
 import { useSkillTranslation } from "@/hooks/useSkillTranslation";
@@ -28,6 +20,7 @@ import { FontFamilyPreset, normalizeFontFamilyPreset } from "@/lib/fontFamily";
 import wechatRewardCode from "@/assets/donation/wechat-reward-code.jpg";
 import alipayRewardCode from "@/assets/donation/alipay-reward-code.jpg";
 import { Toggle } from "@/components/ui/toggle";
+import { AuthButton } from "@/components/auth/AuthButton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
 import { ToastContainer, useToast } from "@/components/ui/toast";
@@ -47,8 +40,6 @@ export function Settings() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const { toasts, addToast, removeToast } = useToast();
-  const [authLoading, setAuthLoading] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
 
   const tRef = useRef(t);
   const addToastRef = useRef(addToast);
@@ -210,62 +201,6 @@ export function Settings() {
     }
   };
 
-  const handleStartGithubLogin = useCallback(async () => {
-    setAuthLoading(true);
-    setAuthError(null);
-    setPendingAuthProvider("github");
-    try {
-      const result = await startGithubAuth(language);
-      await openUrl(result.auth_url);
-    } catch (err) {
-      console.warn("Failed to start github auth:", err);
-      setAuthError(
-        buildAuthErrorMessage(t, err, {
-          provider: "github",
-          stage: "start",
-        }),
-      );
-      clearPendingAuthProvider();
-    } finally {
-      setAuthLoading(false);
-    }
-  }, [language, t]);
-
-  const handleStartGoogleLogin = useCallback(async () => {
-    setAuthLoading(true);
-    setAuthError(null);
-    setPendingAuthProvider("google");
-    try {
-      const result = await startGoogleAuth(language);
-      await openUrl(result.auth_url);
-    } catch (err) {
-      console.warn("Failed to start google auth:", err);
-      setAuthError(
-        buildAuthErrorMessage(t, err, {
-          provider: "google",
-          stage: "start",
-        }),
-      );
-      clearPendingAuthProvider();
-    } finally {
-      setAuthLoading(false);
-    }
-  }, [language, t]);
-
-  const handleLogout = useCallback(async () => {
-    setAuthLoading(true);
-    setAuthError(null);
-    try {
-      await logoutAuth();
-      await fetchConfig();
-    } catch (err) {
-      console.warn("Failed to logout:", err);
-      setAuthError(t("auth.logoutFailed"));
-    } finally {
-      setAuthLoading(false);
-    }
-  }, [t]);
-
   if (error) {
     return (
       <div style={{ padding: '24px 32px' }}>
@@ -289,13 +224,6 @@ export function Settings() {
   const FallbackEditorIcon = selectedEditor ? getEditorIcon(selectedEditor.id) : null;
   const marketplaceSources = config.marketplace_sources || [];
   const marketplaceRows = marketplaceSources;
-  const authProfile = config.auth_session?.profile || null;
-  const authProvider = config.auth_session?.provider || null;
-  const providerLabel = authProvider === "github"
-    ? "GitHub"
-    : authProvider === "google"
-      ? "Google"
-      : "-";
 
   return (
     <div style={{
@@ -668,101 +596,7 @@ export function Settings() {
               description={t("settings.accountDesc")}
               isLast={true}
             >
-              {authProfile ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  {authProfile.avatar_url ? (
-                    <img
-                      src={authProfile.avatar_url}
-                      alt={authProfile.username || "avatar"}
-                      style={{ width: 36, height: 36, borderRadius: '10px', objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <div style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: '10px',
-                      backgroundColor: 'var(--secondary)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '12px',
-                      color: 'var(--muted-foreground)',
-                    }}>
-                      {providerLabel.slice(0, 1)}
-                    </div>
-                  )}
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>
-                      {authProfile.username || t("auth.login")}
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                      {t("auth.provider")}: {providerLabel}
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleLogout}
-                    disabled={authLoading}
-                    style={{
-                      marginLeft: 'auto',
-                      padding: '8px 12px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      color: 'var(--foreground)',
-                      backgroundColor: 'var(--secondary)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                      cursor: authLoading ? 'wait' : 'pointer',
-                      opacity: authLoading ? 0.7 : 1,
-                    }}
-                  >
-                    {authLoading ? t("auth.loggingOut") : t("auth.logout")}
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      onClick={handleStartGithubLogin}
-                      disabled={authLoading}
-                      style={{
-                        padding: '8px 12px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        color: 'var(--foreground)',
-                        backgroundColor: 'var(--secondary)',
-                        border: '1px solid var(--border)',
-                        borderRadius: '8px',
-                        cursor: authLoading ? 'wait' : 'pointer',
-                        opacity: authLoading ? 0.7 : 1,
-                      }}
-                    >
-                      {authLoading ? t("auth.loggingIn") : t("auth.githubLogin")}
-                    </button>
-                    <button
-                      onClick={handleStartGoogleLogin}
-                      disabled={authLoading}
-                      style={{
-                        padding: '8px 12px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        color: 'white',
-                        backgroundColor: 'var(--color-primary)',
-                        border: '1px solid var(--color-primary)',
-                        borderRadius: '8px',
-                        cursor: authLoading ? 'wait' : 'pointer',
-                        opacity: authLoading ? 0.7 : 1,
-                      }}
-                    >
-                      {authLoading ? t("auth.loggingIn") : t("auth.googleLogin")}
-                    </button>
-                  </div>
-                  {authError && (
-                    <div style={{ fontSize: '12px', color: 'var(--color-error)' }}>
-                      {authError}
-                    </div>
-                  )}
-                </div>
-              )}
+              <AuthButton variant="inline" />
             </SettingsRow>
 
             

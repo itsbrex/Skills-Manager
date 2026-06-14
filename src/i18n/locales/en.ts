@@ -340,10 +340,10 @@ export const en = {
     pressEscToCancel: "Press Esc to cancel",
     projectCountSingular: "project binding",
     projectCountPlural: "project bindings",
-    // Account & Cloud Sync
-    account: "Account & Cloud Sync",
+    // Account
+    account: "Account",
     accountStatus: "Account",
-    accountDesc: "Sign in to sync settings across devices",
+    accountDesc: "Sign in to access Marketplace and other features",
     cloudSync: "Cloud Sync",
     cloudSyncDesc: "Sync status and manual control",
     telemetryConsent: "Usage analytics",
@@ -434,9 +434,9 @@ export const en = {
   auth: {
     login: "Sign in",
     loginTitle: "Account Sign In",
-    loginDesc: "Choose a provider to sync your settings.",
+    loginDesc: "Choose a provider to access Marketplace and other features.",
     accountTitle: "Account",
-    accountDesc: "Signed in and ready to sync.",
+    accountDesc: "Signed in with full access.",
     githubLogin: "Continue with GitHub",
     googleLogin: "Continue with Google",
     comingSoon: "Coming soon",
@@ -452,6 +452,7 @@ export const en = {
     logoutFailed: "Sign out failed, please try again",
     devCallbackTip: "If the browser did not open the app, paste the callback URL to finish login.",
     devCallbackApply: "Apply callback",
+    waitingForBrowser: "Waiting for browser authorization...",
   },
   cloudSync: {
     statusConnected: "Connected",
