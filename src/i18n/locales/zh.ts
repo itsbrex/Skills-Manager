@@ -397,6 +397,8 @@ export const zh = {
     updateAvailable: "发现新版本",
     latestVersion: "当前已是最新版本",
     privacyPolicy: "隐私政策",
+    starOnGithub: "在 GitHub 上 Star",
+    starOnGithubDesc: "如果这个项目对你有帮助，欢迎在 GitHub 给个 Star ⭐",
     support: "赞赏",
     supportDesc: "如果这个项目对你有帮助，欢迎扫码赞赏支持。",
     wechatRewardCode: "微信赞赏码",

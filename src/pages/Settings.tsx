@@ -616,88 +616,138 @@ export function Settings() {
           {/* About Section */}
           <SectionTitle>{t("settings.about")}</SectionTitle>
           <SettingsCard>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '16px 0',
-            }}>
-              <div>
-                <div style={{
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  color: 'var(--foreground)',
-                  marginBottom: '2px',
-                }}>
-                  <a
-                    href="https://github.com/jiweiyeah/Skills-Manager"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: 'inherit', textDecoration: 'none', cursor: 'pointer' }}
-                    onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
-                    onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
-                  >
-                    {t("settings.appName")}
-                  </a>
+            <div style={{ padding: '16px 0' }}>
+              {/* First row: App info and version */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                marginBottom: '12px',
+              }}>
+                <div>
+                  <div style={{
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    color: 'var(--foreground)',
+                    marginBottom: '2px',
+                  }}>
+                    <a
+                      href="https://github.com/jiweiyeah/Skills-Manager"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: 'inherit', textDecoration: 'none', cursor: 'pointer' }}
+                      onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                      onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                    >
+                      {t("settings.appName")}
+                    </a>
+                  </div>
+                  <div style={{
+                    fontSize: '13px',
+                    color: 'var(--muted-foreground)',
+                  }}>
+                    {t("settings.appDescription")}
+                  </div>
                 </div>
                 <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
                   fontSize: '13px',
                   color: 'var(--muted-foreground)',
+                  flexShrink: 0,
+                  marginLeft: '16px',
                 }}>
-                  {t("settings.appDescription")}
-                </div>
-                <div style={{ marginTop: '8px' }}>
-                  <a
-                    href={language === 'zh'
-                      ? "https://github.com/jiweiyeah/Skills-Manager/blob/main/PRIVACY_CN.md"
-                      : "https://github.com/jiweiyeah/Skills-Manager/blob/main/PRIVACY.md"
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <span>v{config.version}</span>
+                  <button
+                    onClick={handleCheckUpdate}
+                    disabled={checkingUpdate}
                     style={{
-                      fontSize: '12px',
-                      color: 'var(--primary)',
-                      textDecoration: 'none',
-                      cursor: 'pointer',
+                      padding: '4px 8px',
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      color: updateInfo ? 'var(--primary-foreground)' : 'var(--primary)',
+                      backgroundColor: updateInfo ? 'var(--primary)' : 'rgba(9, 105, 218, 0.1)',
+                      border: updateInfo ? 'none' : '1px solid rgba(9, 105, 218, 0.2)',
+                      borderRadius: '4px',
+                      cursor: checkingUpdate ? 'wait' : 'pointer',
+                      opacity: checkingUpdate ? 0.7 : 1,
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
-                    onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
                   >
-                    {t("settings.privacyPolicy")}
-                  </a>
+                    {checkingUpdate
+                      ? t("common.checking")
+                      : updateInfo
+                        ? t("settings.updateNow")
+                        : t("settings.checkUpdate")
+                    }
+                  </button>
                 </div>
               </div>
-              <span style={{
-                fontSize: '13px',
-                color: 'var(--muted-foreground)',
+
+              {/* Second row: Privacy policy link */}
+              <div style={{ marginBottom: '12px' }}>
+                <a
+                  href={language === 'zh'
+                    ? "https://github.com/jiweiyeah/Skills-Manager/blob/main/PRIVACY_CN.md"
+                    : "https://github.com/jiweiyeah/Skills-Manager/blob/main/PRIVACY.md"
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    fontSize: '12px',
+                    color: 'var(--primary)',
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                  onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                >
+                  {t("settings.privacyPolicy")}
+                </a>
+              </div>
+
+              {/* Third row: Star on GitHub CTA */}
+              <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
+                gap: '12px',
+                paddingTop: '12px',
+                borderTop: '1px solid var(--border)',
               }}>
-                <span>v{config.version}</span>
-                <button
-                  onClick={handleCheckUpdate}
-                  disabled={checkingUpdate}
+                <div style={{
+                  fontSize: '12px',
+                  color: 'var(--muted-foreground)',
+                  flex: 1,
+                }}>
+                  {t("settings.starOnGithubDesc")}
+                </div>
+                <a
+                  href="https://github.com/jiweiyeah/Skills-Manager"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   style={{
-                    padding: '4px 8px',
-                    fontSize: '11px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    fontSize: '13px',
                     fontWeight: 500,
-                    color: updateInfo ? 'var(--primary-foreground)' : 'var(--primary)',
-                    backgroundColor: updateInfo ? 'var(--primary)' : 'rgba(9, 105, 218, 0.1)',
-                    border: updateInfo ? 'none' : '1px solid rgba(9, 105, 218, 0.2)',
-                    borderRadius: '4px',
-                    cursor: checkingUpdate ? 'wait' : 'pointer',
-                    opacity: checkingUpdate ? 0.7 : 1,
+                    color: 'var(--primary-foreground)',
+                    backgroundColor: 'var(--primary)',
+                    border: 'none',
+                    borderRadius: '6px',
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                    transition: 'opacity 0.2s',
+                    flexShrink: 0,
                   }}
+                  onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                  onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                 >
-                  {checkingUpdate
-                    ? t("common.checking")
-                    : updateInfo
-                      ? t("settings.updateNow")
-                      : t("settings.checkUpdate")
-                  }
-                </button>
-              </span>
+                  <span>⭐</span>
+                  <span>{t("settings.starOnGithub")}</span>
+                </a>
+              </div>
             </div>
           </SettingsCard>
 

@@ -397,6 +397,8 @@ export const en = {
     updateAvailable: "New version available",
     latestVersion: "You are on the latest version",
     privacyPolicy: "Privacy Policy",
+    starOnGithub: "Star on GitHub",
+    starOnGithubDesc: "If this project helps you, please give it a star ⭐ on GitHub",
     support: "Support",
     supportDesc: "If this project helps you, feel free to support via QR code.",
     wechatRewardCode: "WeChat Support QR",
