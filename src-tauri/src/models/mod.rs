@@ -1,5 +1,3 @@
-pub mod auth;
-pub mod cloud_sync;
 pub mod config;
 pub mod editor;
 pub mod marketplace;
@@ -8,10 +6,7 @@ pub mod skill_package;
 pub mod tool;
 pub mod update;
 
-pub use config::{
-    AppConfig, CustomToolConfig, LlmProvider, PollClientState, ProjectBinding, SkillMetadata,
-    TelemetryConfig, TelemetryConsent, ToolConfig, VaultBackupConsent,
-};
+pub use config::{AppConfig, CustomToolConfig, LlmProvider, ProjectBinding, SkillMetadata, ToolConfig};
 pub use editor::{DetectedEditor, EDITOR_DEFINITIONS};
 pub use marketplace::{
     GitHubContent, InstallResult, InstallStatus, MarketplaceSkill, MarketplaceSkillsResponse,

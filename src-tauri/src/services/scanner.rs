@@ -793,9 +793,6 @@ description: "Description from SKILL.md"
                 "skill_metadata": config.skill_metadata,
                 "preferences": config.preferences,
                 "marketplace_sources": config.marketplace_sources,
-                "poll_client_state": config.poll_client_state,
-                "auth_session": config.auth_session,
-                "cloud_sync": config.cloud_sync,
                 "initialized": config.initialized,
                 "projects": [
                     {

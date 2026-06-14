@@ -1,27 +1,15 @@
-pub mod auth;
-pub mod cloud_sync;
 pub mod config;
 pub mod editors;
 pub mod feedback;
 pub mod files;
 pub mod llm;
 pub mod marketplace;
-pub mod polls;
 pub mod skill_packages;
 pub mod skills;
 pub mod sync;
-pub mod telemetry;
 pub mod tools;
 pub mod updater;
-pub mod vault;
 
-pub use auth::{
-    exchange_github_auth, exchange_google_auth, get_auth_profile, logout_auth, start_github_auth,
-    start_google_auth,
-};
-pub use cloud_sync::{
-    cloud_sync_has_local_changes, cloud_sync_pull, cloud_sync_push, cloud_sync_resolve,
-};
 pub use config::{get_config, is_initialized, mark_initialized, save_config};
 pub use editors::{
     detect_available_editors, get_available_editors, open_in_editor, refresh_editors,
@@ -40,10 +28,6 @@ pub use marketplace::{
     install_marketplace_skill, install_marketplace_skill_by_ref, sync_marketplace_installed_skills,
     toggle_marketplace_source,
 };
-pub use polls::{
-    fetch_poll_results, fetch_polls, get_poll_client_state, save_poll_client_state,
-    submit_poll_vote,
-};
 pub use skill_packages::{
     install_skill_package_from_path, list_skill_packages, remove_skill_package,
 };
@@ -52,13 +36,8 @@ pub use skills::{
     import_skills_to_hub, list_skills, refresh_skills, scan_existing_skills,
 };
 pub use sync::{check_sync_status, fix_sync_issues};
-pub use telemetry::{
-    telemetry_clear_local_data, telemetry_end_session, telemetry_flush_pending,
-    telemetry_initialize, telemetry_record_heartbeat, telemetry_track_event,
-};
 pub use tools::{
     create_custom_tool, delete_custom_tool, detect_tools, get_tool_status, refresh_tools,
     set_tool_enabled, update_custom_tool, update_tool_paths,
 };
 pub use updater::check_update;
-pub use vault::{vault_backup, vault_download};

@@ -1,6 +1,4 @@
-pub mod auth;
 pub mod cache;
-pub mod cloud_sync;
 pub mod config_manager;
 pub mod detector;
 pub mod editor_detector;
@@ -10,11 +8,9 @@ pub mod llm;
 pub mod marketplace;
 pub mod scanner;
 pub mod skill_packages;
-pub mod telemetry;
 pub mod translation;
 pub mod translation_cache;
 pub mod updater;
-pub mod vault;
 
 pub use cache::AppCache;
 pub use config_manager::ConfigManager;
@@ -25,4 +21,3 @@ pub use linker::{is_symlink_or_junction, LinkReport, LinkStatus, LinkerService};
 pub use marketplace::{MarketplaceCache, MarketplaceService};
 pub use scanner::ScannerService;
 pub use skill_packages::SkillPackageService;
-pub use telemetry::TelemetryService;
