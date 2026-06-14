@@ -1,4 +1,4 @@
-// @ts-nocheck - Cloud features removed, type errors expected
+// @ts-nocheck - Cloud features removed, stub implementations used
 import { useState, useEffect, useCallback, useRef } from "react";
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "@/i18n";
@@ -7,8 +7,19 @@ import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { checkUpdate } from "@/services/updater";
+import {
+  startGithubAuth,
+  exchangeGithubAuth,
+  startGoogleAuth,
+  exchangeGoogleAuth,
+  clearPendingAuthProvider,
+  setPendingAuthProvider,
+  takePendingAuthProvider,
+} from "@/services/auth";
+import { buildAuthErrorMessage } from "@/services/authError";
+import { setAuthProfileSnapshot } from "@/services/authProfileStore";
+import { useCloudSync } from "@/hooks/useCloudSyncAgent";
 import { UpdateInfo } from "@/types";
-
 import { MODAL_LAYER_Z_INDEX, MODAL_OVERLAY_COLOR } from "@/constants/modal";
 import { getSidebarChromeMetrics } from "./sidebarChrome";
 
@@ -60,16 +71,8 @@ const icons: Record<string, React.ReactNode> = {
 };
 
 export function Sidebar() {
-
-  // Stub implementations for removed auth features
-  const [pendingProvider, setPendingProvider] = useState<string | null>(null);
-  const takePendingAuthProvider = () => null;
-  const normalizeAuthUrl = (url: string) => url;
-  const buildAuthErrorMessage = () => "Authentication unavailable";
-
-  const { t, language } = useTranslation();  // 
-  // const cloudSync = useCloudSync();  // Removed: cloud sync feature  // Removed: cloud sync
-  const cloudSync = { syncing: false, lastSyncTime: null, authProfile: null, logout: async () => {} };  // Placeholder
+  const { t, language } = useTranslation();
+  const cloudSync = useCloudSync();
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
@@ -139,30 +142,36 @@ export function Sidebar() {
     setAuthError(null);
     const resolvedProvider = pendingProvider ?? takePendingAuthProvider();
     try {
-      const profile = await exchangeAuth(loginCode, state);  // 
-  // setAuthProfileSnapshot(profile);  // Removed: auth feature  // Removed: auth
+      const exchangeAuth = resolvedProvider === "google" ? exchangeGoogleAuth : exchangeGithubAuth;
+      const profile = await exchangeAuth(loginCode, state);
+      setAuthProfileSnapshot(profile);
       setAuthModalOpen(false);
     } catch (err) {
       console.warn("Failed to exchange auth code:", err);
       setAuthError(
-        /* buildAuthErrorMessage(t, err, {
+        buildAuthErrorMessage(t, err, {
           provider: resolvedProvider ?? "github",
           stage: "exchange",
-        }) */ "Authentication error"  // Removed: auth feature,
+        }),
       );
     } finally {
       setAuthLoading(false);
       setPendingProvider(null);
+      clearPendingAuthProvider();
+    }
   }, [pendingProvider, t]);
 
   const handleAuthUrl = useCallback((url: string) => {
     const normalized = normalizeAuthUrl(url);
     if (!normalized) {
       return;
+    }
     if (!isExpectedAuthUrl(normalized)) {
       return;
+    }
     if (handledAuthUrlsRef.current.has(normalized)) {
       return;
+    }
     handledAuthUrlsRef.current.add(normalized);
     void handleAuthCallback(normalized);
   }, [handleAuthCallback, isExpectedAuthUrl, normalizeAuthUrl]);
@@ -170,6 +179,7 @@ export function Sidebar() {
   const handleDevCallbackSubmit = useCallback(async () => {
     if (!devCallbackUrl.trim()) {
       return;
+    }
     await handleAuthCallback(devCallbackUrl.trim());
   }, [devCallbackUrl, handleAuthCallback]);
 
@@ -181,6 +191,7 @@ export function Sidebar() {
           urls.forEach((url) => {
             handleAuthUrl(url);
           });
+        }
       })
       .catch(() => {
         // ignore deep link lookup failures
@@ -210,6 +221,7 @@ export function Sidebar() {
       const urls = extractDeepLinkUrlsFromArgv(argv);
       if (urls.length === 0) {
         return;
+      }
       urls.forEach((url) => {
         handleAuthUrl(url);
       });
@@ -228,6 +240,7 @@ export function Sidebar() {
   const handleUpdateClick = async () => {
     if (updateInfo?.download_url) {
       await openUrl(updateInfo.download_url);
+    }
   };
 
   const handleStartGithubAuth = useCallback(async () => {
@@ -236,19 +249,22 @@ export function Sidebar() {
     setPendingProvider("github");
     setPendingAuthProvider("github");
     try {
+      const result = await startGithubAuth(language);
       console.info("OAuth auth_url:", result.auth_url);
       await openUrl(result.auth_url);
     } catch (err) {
       console.warn("Failed to start github auth:", err);
       setAuthError(
-        /* buildAuthErrorMessage(t, err, {
+        buildAuthErrorMessage(t, err, {
           provider: "github",
           stage: "start",
-        }) */ "Authentication error"  // Removed: auth feature,
+        }),
       );
       setPendingProvider(null);
+      clearPendingAuthProvider();
     } finally {
       setAuthLoading(false);
+    }
   }, [language, t]);
 
   const handleStartGoogleAuth = useCallback(async () => {
@@ -257,19 +273,22 @@ export function Sidebar() {
     setPendingProvider("google");
     setPendingAuthProvider("google");
     try {
+      const result = await startGoogleAuth(language);
       console.info("OAuth auth_url:", result.auth_url);
       await openUrl(result.auth_url);
     } catch (err) {
       console.warn("Failed to start google auth:", err);
       setAuthError(
-        /* buildAuthErrorMessage(t, err, {
+        buildAuthErrorMessage(t, err, {
           provider: "google",
           stage: "start",
-        }) */ "Authentication error"  // Removed: auth feature,
+        }),
       );
       setPendingProvider(null);
+      clearPendingAuthProvider();
     } finally {
       setAuthLoading(false);
+    }
   }, [language, t]);
 
   const handleLogout = useCallback(async () => {
@@ -283,18 +302,15 @@ export function Sidebar() {
       setAuthError(t("auth.logoutFailed"));
     } finally {
       setAuthLoading(false);
+    }
   }, [cloudSync, t]);
 
   const authProfile = cloudSync.authProfile;
-      // @ts-expect-error - Auth removed
   const displayName = authProfile?.username || authProfile?.email || t("auth.login");
-      // @ts-expect-error - Auth removed
   const providerLabel = authProfile?.provider === "github"
     ? "GitHub"
-      // @ts-expect-error - Auth removed
     : authProfile?.provider === "google"
       ? "Google"
-      // @ts-expect-error - Auth removed
       : authProfile?.provider || "-";
   const chromeMetrics = getSidebarChromeMetrics(
     typeof navigator === "undefined" ? "" : navigator.userAgent,
@@ -385,10 +401,12 @@ export function Sidebar() {
                 onMouseEnter={(e) => {
                   if (!e.currentTarget.classList.contains('active')) {
                     e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.04)';
+                  }
                 }}
                 onMouseLeave={(e) => {
                   if (!e.currentTarget.classList.contains('active')) {
                     e.currentTarget.style.backgroundColor = 'transparent';
+                  }
                 }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', opacity: 0.8 }}>
@@ -445,7 +463,6 @@ export function Sidebar() {
               overflow: 'hidden',
             }}
           >
-      // @ts-expect-error - Auth removed
             {authProfile?.avatar_url ? (
               <img
                 src={authProfile.avatar_url}
@@ -708,3 +725,4 @@ export function Sidebar() {
       )}
     </aside>
   );
+}
