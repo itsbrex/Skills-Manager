@@ -1,148 +1,110 @@
-<div align="center">
-  <h1>Skills Manager</h1>
-  <p><strong>统一管理多个 AI 编程助手的 Skills</strong></p>
-  <p>Community Edition</p>
-  
-  <img src="https://img.shields.io/github/stars/jiweiyeah/Skills-Manager?style=social" />
-  <img src="https://img.shields.io/github/license/jiweiyeah/Skills-Manager" />
-  <img src="https://img.shields.io/github/v/release/jiweiyeah/Skills-Manager" />
-</div>
+# Skills Manager
 
-## ✨ 特性
+> **A unified desktop application for managing AI coding assistant skills.**
+> Seamlessly organize, sync, and share skills for **Claude Code, Codex, Opencode** and other AI tools.
 
-### 核心功能（永久免费）
+![Version](https://img.shields.io/badge/version-2.0.3-blue) ![Downloads](https://img.shields.io/github/downloads/jiweiyeah/skills-manager/total?color=brightgreen&label=downloads) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
 
-- 🔗 **统一管理** - 一处编写 Skills，多处使用
-- 🔄 **软链接同步** - 自动同步到 Claude Code、Codex 等
-- 📝 **内置编辑器** - Monaco Editor 支持
-- 🌐 **AI 翻译** - 支持 OpenAI 兼容 API（用户自带 Key）
-- 🛠️ **工具检测** - 自动检测已安装的 AI 助手
-- 🛍️ **Marketplace** - 浏览和安装社区 Skills
-- 🎨 **主题切换** - 亮色/暗色主题
-- 🌍 **多语言** - 中文/英文
+[中文说明](./README_CN.md)
 
-### Pro 功能（开发中）
+## 📖 Introduction
 
-以下功能计划在后端服务完善后推出：
+**Skills Manager** is a modern desktop application designed to solve the fragmentation of AI assistant skills configurations. Instead of managing skills and prompts separately for different tools, Skills Manager provides a central hub.
 
-- ⏳ **云同步** - 多设备无缝同步
-- ⏳ **团队协作** - Skills 共享与权限管理
-- ⏳ **无限翻译** - AI 翻译无速率限制
-- ⏳ **使用分析** - 深度洞察
+It uses a powerful **symlink synchronization mechanism**, allowing you to write a skill once and instantly use it across supported AI tools like Claude Code, Codex, Opencode.
 
-> Pro 版本将提供开箱即用的云服务，无需自己搭建后端。
+## ✨ Key Features
 
-## 🚀 安装
+- **🎯 Unified Management**: Centralize all your AI skills in one secure location.
+- **🔄 Smart Synchronization**: Automatic symlink management ensures your tools always have the latest version of your skills without file duplication.
+- **🎛️ Granular Control**: Enable or disable specific skills for individual tools without deleting the original files.
+- **⚡ High Performance**: Built with **Rust** and **Tauri 2.0** for a lightweight, blazing-fast experience.
+- **🛡️ Cross-Platform**: Native support for macOS, Windows, and Linux.
+- **🔌 Multi-Tool Support**: Out-of-the-box support for **Claude Code, Codex, Opencode** and extensible to others.
+- **🧩 Custom Tools**: Add your own tools with custom paths and optional icons.
+- **🎨 Modern UI**: Beautiful interface built with React 19, Tailwind CSS v4, and Radix UI.
 
-### macOS
-```bash
-# 下载 DMG
-# https://github.com/jiweiyeah/Skills-Manager/releases
-```
+## 📸 Screenshots
 
-### Windows
-```bash
-# 下载 MSI 安装包
-# https://github.com/jiweiyeah/Skills-Manager/releases
-```
+<p align="center">
+  <img src="https://image.freeourdays.com/141.png" alt="应用截图 1" ">
+  <img src="https://image.freeourdays.com/142.png" alt="应用截图 2" ">
+  <img src="https://image.freeourdays.com/143.png" alt="应用截图 3" ">
+  <img src="https://image.freeourdays.com/144.png" alt="应用截图 4" ">
+  <img src="https://image.freeourdays.com/145.png" alt="应用截图 5" ">
+</p>
 
-### Linux
-```bash
-# 下载 AppImage
-# https://github.com/jiweiyeah/Skills-Manager/releases
-chmod +x skills-manager.AppImage
-./skills-manager.AppImage
-```
+## 📥 Download
 
-## 📖 快速开始
+Download the latest installer for your operating system from the **[Releases Page](../../releases)**.
 
-1. **首次启动**
-   - 选择公共 Skills 目录（推荐 `~/.skills-manager/skills`）
-   - 检测已安装的 AI 工具
+| OS | Installer Type |
+|----|----------------|
+| **macOS** | `.dmg` (Universal) |
+| **Windows** | `.msi` / `.exe` |
+| **Linux** | `.deb` / `.AppImage` / `.rpm`|
 
-2. **管理 Skills**
-   - 在公共目录创建或导入 Skills
-   - 为每个工具启用/禁用 Skills
-   - Skills Manager 自动创建软链接
+## ⚠️ Windows Important Note
 
-3. **浏览 Marketplace**
-   - 发现社区分享的 Skills
-   - 一键安装到本地
+If you encounter permission issues when syncing skills (symbolic link creation errors) or detection issues, please try running the application as **Administrator**. This is often required on Windows to create symbolic links unless Developer Mode is enabled.
 
-## 🏗️ 架构
+## 🚀 Getting Started
 
-```
-┌─────────────────────────────────────┐
-│  ~/.skills-manager/skills/          │  公共 Skills 目录
-│  ├── skill-a/                       │
-│  ├── skill-b/                       │
-│  └── skill-c/                       │
-└─────────────────────────────────────┘
-              │
-              │ 软链接
-              ▼
-┌─────────────────────────────────────┐
-│  ~/.claude/skills/                  │  Claude Code
-│  ├── skill-a → (软链接)             │
-│  └── skill-b → (软链接)             │
-└─────────────────────────────────────┘
-┌─────────────────────────────────────┐
-│  ~/.codex/skills/                   │  Codex
-│  ├── skill-b → (软链接)             │
-│  └── skill-c → (软链接)             │
-└─────────────────────────────────────┘
-```
+1. **Install**: Run the installer for your platform.
+2. **Setup**: On first launch, the app will guide you to select your skills storage directory.
+3. **Sync**: The app automatically detects installed AI tools (like Claude Code) and links your skills.
 
-## 🛠️ 开发
+## ❗ Linux Troubleshooting
+
+If you encounter a **blank white screen** when launching the `.AppImage` on Linux (especially in virtual machines like VMware/VirtualBox), it is likely a WebKitGTK hardware acceleration issue.
+
+Please run the application from the terminal with the following command:
 
 ```bash
-# 克隆仓库
-git clone https://github.com/jiweiyeah/Skills-Manager.git
-cd Skills-Manager
-
-# 安装依赖
-npm install
-
-# 开发模式
-npm run tauri dev
-
-# 构建
-npm run tauri build
+WEBKIT_DISABLE_COMPOSITING_MODE=1 ./Skills-Manager_1.0.1_amd64.AppImage
 ```
 
-### 技术栈
+## 🛠️ Technology Stack
 
-- **前端**: React 19 + TypeScript + Tailwind CSS 4
-- **桌面**: Tauri 2.0
-- **后端**: Rust
-- **编辑器**: Monaco Editor
-- **路由**: React Router 7
+Designed for developers who care about performance and stability:
 
-## 🤝 贡献
+- **Core**: [Tauri 2.0](https://tauri.app/) (Rust)
+- **Frontend**: [React 19](https://react.dev/) + TypeScript
+- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
+- **UI Components**: [Radix UI](https://www.radix-ui.com/)
+- **Editor**: [Monaco Editor](https://microsoft.github.io/monaco-editor/)
 
-我们欢迎所有形式的贡献！
+## 📅 Roadmap
 
-- 🐛 [报告 Bug](https://github.com/jiweiyeah/Skills-Manager/issues)
-- 💡 [功能建议](https://github.com/jiweiyeah/Skills-Manager/issues)
-- 🔧 [提交代码](https://github.com/jiweiyeah/Skills-Manager/pulls)
+We are actively working on making Skills Manager better. Here is what we are planning:
 
-详细指南请查看 [CONTRIBUTING.md](CONTRIBUTING.md)
+- [x] Core features (e.g., soft link synchronization, multi-tool support).
+- [ ] Community Hub – Share and download community-contributed Skills, etc.
+- [ ] Cloud synchronization, allowing one-click migration of existing Skills and more when changing devices.
+- [ ] Plugin system to support more AI tool extensions.
+- [ ] Integrated AI chat interface for testing Skills directly within the application.
 
-## 📄 许可证
+## 🤝 Contributing & Feedback
 
-本项目采用 [MIT License](LICENSE)。
+We welcome all forms of contribution!
 
-核心功能永久免费开源，Pro 功能需要有效许可证。
+- **Found a bug?** Please submit an issue on our [Issues](../../issues) page.
+- **Have a feature request?** We'd love to hear your ideas! Feel free to open an issue to discuss new features.
 
-## 🙏 致谢
+## 💝 Support
 
-感谢以下开源项目：
-- [Tauri](https://tauri.app/)
-- [React](https://react.dev/)
-- [Monaco Editor](https://microsoft.github.io/monaco-editor/)
+If this project helps you, feel free to support via QR code.
+
+| WeChat Support QR | Alipay Support QR |
+|---|---|
+| <img src="https://image.freeourdays.com/2024/WechatIMG276.jpg" alt="WeChat Support QR" height="300" /> | <img src="https://image.freeourdays.com/zfb.jpg" alt="Alipay Support QR" height="300" /> |
+
+Or support via Ko-fi: [ko-fi.com/yeheboo](https://ko-fi.com/yeheboo)
+
+## 📈 Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=jiweiyeah/skills-manager&type=Date)](https://star-history.com/#jiweiyeah/skills-manager&Date)
 
 ---
 
-<div align="center">
-  Made with ❤️ by <a href="https://github.com/jiweiyeah">@jiweiyeah</a>
-</div>
+*Made with ❤️ for the AI developer community.*
