@@ -7,7 +7,10 @@ use crate::services::ConfigManager;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 
 #[tauri::command]
 pub fn get_llm_provider() -> Result<Option<LlmProvider>, String> {
@@ -187,6 +190,23 @@ pub struct BatchTranslationResult {
 
 const BATCH_PROGRESS_EVENT: &str = "llm:batch-progress";
 
+/// 根据 provider 类型确定并发数
+fn determine_concurrency(provider: &LlmProvider) -> usize {
+    let url = provider.base_url.to_lowercase();
+
+    if url.contains("openai.com") {
+        5  // OpenAI TPM 限制较严
+    } else if url.contains("deepseek") {
+        8  // DeepSeek 速率较宽松
+    } else if url.contains("localhost") || url.contains("127.0.0.1") {
+        12 // 本地 Ollama 无限制
+    } else if url.contains("api.anthropic.com") {
+        6  // Claude API 中等限制
+    } else {
+        6  // 默认保守值
+    }
+}
+
 #[tauri::command]
 pub async fn translate_skills_batch(
     instance_ids: Vec<String>,
@@ -194,48 +214,84 @@ pub async fn translate_skills_batch(
     force: Option<bool>,
     app: AppHandle,
 ) -> Result<BatchTranslationResult, String> {
-    let provider = load_provider_or_error().map_err(|e| e.to_string())?;
+    let provider = Arc::new(load_provider_or_error().map_err(|e| e.to_string())?);
     let manager = ConfigManager::new();
     let config = manager.load()?;
-    let skills = ScannerService::scan_scoped_skills(&config)?;
+    let skills = Arc::new(ScannerService::scan_scoped_skills(&config)?);
 
     let total = instance_ids.len();
+    let concurrency = determine_concurrency(&provider);
+    let semaphore: Arc<Semaphore> = Arc::new(Semaphore::new(concurrency));
+
+    let mut tasks: JoinSet<(usize, Result<String, String>, String)> = JoinSet::new();
+
+    for (idx, instance_id) in instance_ids.into_iter().enumerate() {
+        let permit = Arc::clone(&semaphore);
+        let provider_clone = Arc::clone(&provider);
+        let skills_clone = Arc::clone(&skills);
+        let app_clone = app.clone();
+        let target_lang_clone = target_lang.clone();
+        let force_value = force.unwrap_or(false);
+
+        tasks.spawn(async move {
+            // 获取信号量许可
+            let _permit = permit.acquire().await.unwrap();
+
+            let skill = match find_skill_by_instance(&skills_clone, &instance_id) {
+                Some(s) => s,
+                None => {
+                    return (idx, Err(instance_id.clone()), "skill not found".to_string());
+                }
+            };
+
+            // 发送进度事件
+            let _ = app_clone.emit(
+                BATCH_PROGRESS_EVENT,
+                BatchTranslationProgress {
+                    current: idx + 1,
+                    total,
+                    instance_id: instance_id.clone(),
+                    skill_name: skill.name.clone(),
+                },
+            );
+
+            let input = SkillTranslationInput {
+                name: skill.name.clone(),
+                description: skill.description.clone().unwrap_or_default(),
+                content_md: read_skill_md(&skill),
+            };
+
+            match translation::translate_skill(&provider_clone, &target_lang_clone, input, force_value).await {
+                Ok(_) => (idx, Ok(instance_id), String::new()),
+                Err(err) => (idx, Err(instance_id), err.to_string()),
+            }
+        });
+    }
+
+    // 收集结果
+    let mut results = Vec::new();
+    while let Some(result) = tasks.join_next().await {
+        match result {
+            Ok(task_result) => results.push(task_result),
+            Err(e) => {
+                // JoinError - task panic，记录但继续
+                eprintln!("Task panicked: {:?}", e);
+            }
+        }
+    }
+
+    // 按 index 排序保证顺序
+    results.sort_by_key(|(idx, _, _)| *idx);
+
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
 
-    for (idx, instance_id) in instance_ids.iter().enumerate() {
-        let skill = match find_skill_by_instance(&skills, instance_id) {
-            Some(s) => s,
-            None => {
-                failed.push(BatchTranslationFailure {
-                    instance_id: instance_id.clone(),
-                    reason: "skill not found".to_string(),
-                });
-                continue;
-            }
-        };
-
-        let _ = app.emit(
-            BATCH_PROGRESS_EVENT,
-            BatchTranslationProgress {
-                current: idx + 1,
-                total,
-                instance_id: instance_id.clone(),
-                skill_name: skill.name.clone(),
-            },
-        );
-
-        let input = SkillTranslationInput {
-            name: skill.name.clone(),
-            description: skill.description.clone().unwrap_or_default(),
-            content_md: read_skill_md(&skill),
-        };
-
-        match translation::translate_skill(&provider, &target_lang, input, force.unwrap_or(false)).await {
-            Ok(_) => succeeded.push(instance_id.clone()),
-            Err(err) => failed.push(BatchTranslationFailure {
-                instance_id: instance_id.clone(),
-                reason: err.to_string(),
+    for (_, result, reason) in results {
+        match result {
+            Ok(instance_id) => succeeded.push(instance_id),
+            Err(instance_id) => failed.push(BatchTranslationFailure {
+                instance_id,
+                reason,
             }),
         }
     }
@@ -410,4 +466,74 @@ pub fn get_cached_text_translation(
         content_md: hit.content_md,
         cached: true,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_determine_concurrency_openai() {
+        let provider = LlmProvider {
+            base_url: "https://api.openai.com/v1".to_string(),
+            api_key: "test".to_string(),
+            model: "gpt-4".to_string(),
+            temperature: None,
+            max_tokens: None,
+            timeout_secs: None,
+        };
+        assert_eq!(determine_concurrency(&provider), 5);
+    }
+
+    #[test]
+    fn test_determine_concurrency_deepseek() {
+        let provider = LlmProvider {
+            base_url: "https://api.deepseek.com".to_string(),
+            api_key: "test".to_string(),
+            model: "deepseek-chat".to_string(),
+            temperature: None,
+            max_tokens: None,
+            timeout_secs: None,
+        };
+        assert_eq!(determine_concurrency(&provider), 8);
+    }
+
+    #[test]
+    fn test_determine_concurrency_localhost() {
+        let provider = LlmProvider {
+            base_url: "http://localhost:11434".to_string(),
+            api_key: "".to_string(),
+            model: "llama2".to_string(),
+            temperature: None,
+            max_tokens: None,
+            timeout_secs: None,
+        };
+        assert_eq!(determine_concurrency(&provider), 12);
+    }
+
+    #[test]
+    fn test_determine_concurrency_anthropic() {
+        let provider = LlmProvider {
+            base_url: "https://api.anthropic.com".to_string(),
+            api_key: "test".to_string(),
+            model: "claude-3".to_string(),
+            temperature: None,
+            max_tokens: None,
+            timeout_secs: None,
+        };
+        assert_eq!(determine_concurrency(&provider), 6);
+    }
+
+    #[test]
+    fn test_determine_concurrency_default() {
+        let provider = LlmProvider {
+            base_url: "https://custom-api.example.com".to_string(),
+            api_key: "test".to_string(),
+            model: "custom-model".to_string(),
+            temperature: None,
+            max_tokens: None,
+            timeout_secs: None,
+        };
+        assert_eq!(determine_concurrency(&provider), 6);
+    }
 }
