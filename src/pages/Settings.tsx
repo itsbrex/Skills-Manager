@@ -683,7 +683,7 @@ export function Settings() {
             <SettingsRow
               label={t("settings.accountStatus")}
               description={t("settings.accountDesc")}
-              isLast={false}
+              isLast={true}
             >
               {authProfile ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -786,32 +786,9 @@ export function Settings() {
 
             
 
-            <SettingsRow
-              label={t("settings.vaultBackupConsent")}
-              description={t("settings.vaultBackupConsentDesc")}
-              isLast={false}
-            >
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-                <Toggle
-                  checked={vaultConsent === "granted"}
-                  onChange={(v) => updatePreference("vault_backup_consent", v ? "granted" : "denied")}
-                />
-                <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
-                  {vaultConsentLabel}
-                </div>
-              </div>
-            </SettingsRow>
+            
 
-            <SettingsRow
-              label={t("settings.cloudSyncAuto")}
-              description={t("settings.cloudSyncAutoDesc")}
-              isLast={false}
-            >
-              <Toggle
-                checked={prefs.cloud_sync_auto}
-                onChange={(v) => updatePreference("cloud_sync_auto", v)}
-              />
-            </SettingsRow>
+            
 
             
           </SettingsCard>
