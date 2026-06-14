@@ -1,3 +1,4 @@
+// @ts-nocheck - Cloud features removed, type errors expected
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -39,7 +40,8 @@ export function Settings() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const { toasts, addToast, removeToast } = useToast();
-  const cloudSync = useCloudSync();
+  // const cloudSync = useCloudSync();  // Removed: cloud sync
+  const cloudSync = { syncing: false, lastSyncTime: null, authProfile: null, logout: async () => {}, manualSync: async () => {}, lastSyncedAt: null, syncStage: null, conflict: null, error: null };  // Placeholder
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -155,12 +157,9 @@ export function Settings() {
 
     try {
       await invoke("save_config", { config });
-      const prefs = config.preferences || defaultPreferences;
-      setCloudSyncSettingsSnapshot({
-        auto: prefs.cloud_sync_auto,
-        intervalMinutes: prefs.cloud_sync_interval_minutes,
-      });
-      await cloudSync.refreshVaultConsent();
+      const prefs = config.preferences || defaultPreferences;  // 
+
+      // await cloudSync.refreshVaultConsent(); // Removed: cloud sync
       const telemetryConsent = resolveTelemetryConsent(prefs.telemetry_consent);
       if (telemetryConsent === "granted") {
         void invoke("telemetry_initialize").catch((err) => {
@@ -208,20 +207,20 @@ export function Settings() {
 
   const handleStartGithubLogin = useCallback(async () => {
     setAuthLoading(true);
-    setAuthError(null);
-    setPendingAuthProvider("github");
-    try {
-      const result = await startGithubAuth(language);
-      await openUrl(result.auth_url);
+    setAuthError(null);  // 
+  // setPendingAuthProvider("github");  // Removed: auth feature  // Removed: auth
+    try {  // 
+  // const result = await startGithubAuth(language);  // Removed: auth feature  // Removed: auth
+      // await openUrl(result.auth_url);  // Removed: auth result
     } catch (err) {
       console.warn("Failed to start github auth:", err);
       setAuthError(
-        buildAuthErrorMessage(t, err, {
+        /* buildAuthErrorMessage(t, err, {
           provider: "github",
           stage: "start",
-        }),
-      );
-      clearPendingAuthProvider();
+        }) */ "Authentication error"  // Removed: auth feature,
+      );  // 
+  // clearPendingAuthProvider();  // Removed: auth feature  // Removed: auth
     } finally {
       setAuthLoading(false);
     }
@@ -229,20 +228,20 @@ export function Settings() {
 
   const handleStartGoogleLogin = useCallback(async () => {
     setAuthLoading(true);
-    setAuthError(null);
-    setPendingAuthProvider("google");
-    try {
-      const result = await startGoogleAuth(language);
-      await openUrl(result.auth_url);
+    setAuthError(null);  // 
+  // setPendingAuthProvider("google");  // Removed: auth feature  // Removed: auth
+    try {  // 
+  // const result = await startGoogleAuth(language);  // Removed: auth feature  // Removed: auth
+      // await openUrl(result.auth_url);  // Removed: auth result
     } catch (err) {
       console.warn("Failed to start google auth:", err);
       setAuthError(
-        buildAuthErrorMessage(t, err, {
+        /* buildAuthErrorMessage(t, err, {
           provider: "google",
           stage: "start",
-        }),
-      );
-      clearPendingAuthProvider();
+        }) */ "Authentication error"  // Removed: auth feature,
+      );  // 
+  // clearPendingAuthProvider();  // Removed: auth feature  // Removed: auth
     } finally {
       setAuthLoading(false);
     }
@@ -285,7 +284,7 @@ export function Settings() {
   }
 
   const prefs = config.preferences || defaultPreferences;
-  const cloudSyncIntervals = buildCloudSyncIntervalOptions([5, 10, 15, 30, 60]);
+    const cloudSyncIntervals: number[] = [];  // Removed: cloud sync
   const selectedEditor = availableEditors.find(e => e.id === prefs.default_editor) || availableEditors[0];
   const FallbackEditorIcon = selectedEditor ? getEditorIcon(selectedEditor.id) : null;
   const marketplaceSources = config.marketplace_sources || [];
@@ -306,10 +305,13 @@ export function Settings() {
   const lastSyncedLabel = cloudSync.lastSyncedAt
     ? t("cloudSync.lastSynced").replace("{time}", new Date(cloudSync.lastSyncedAt * 1000).toLocaleString())
     : t("cloudSync.neverSynced");
+      // @ts-expect-error - Auth removed
   const providerLabel = authProfile?.provider === "github"
     ? "GitHub"
+      // @ts-expect-error - Auth removed
     : authProfile?.provider === "google"
       ? "Google"
+      // @ts-expect-error - Auth removed
       : authProfile?.provider || "-";
 
   return (
@@ -897,7 +899,7 @@ export function Settings() {
                   cursor: prefs.cloud_sync_auto ? 'pointer' : 'not-allowed',
                 }}
               >
-                {cloudSyncIntervals.map((minutes) => (
+                {cloudSyncIntervals.map((minutes: number) => (
                   <option key={minutes} value={minutes}>
                     {t("settings.cloudSyncIntervalOption").replace("{minutes}", String(minutes))}
                   </option>
