@@ -571,7 +571,6 @@ mod tests {
             projects: Vec::new(),
             active_project_id: None,
             llm_provider: None,
-            auth_session: None,
             initialized: true,
         }
     }
@@ -608,7 +607,6 @@ mod tests {
                 projects: Vec::new(),
                 active_project_id: None,
                 llm_provider: None,
-                auth_session: None,
                 initialized: true,
             };
 
@@ -663,7 +661,6 @@ mod tests {
                 projects: Vec::new(),
                 active_project_id: None,
                 llm_provider: None,
-                auth_session: None,
                 initialized: true,
             };
 
@@ -872,9 +869,6 @@ mod tests {
                 "skill_metadata": {},
                 "preferences": null,
                 "marketplace_sources": null,
-                "poll_client_state": null,
-                "auth_session": null,
-                "cloud_sync": null,
                 "projects": [{
                     "id": "project-alpha",
                     "name": "Project Alpha",

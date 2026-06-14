@@ -1,4 +1,3 @@
-pub mod auth;
 pub mod cache;
 pub mod config_manager;
 pub mod detector;
