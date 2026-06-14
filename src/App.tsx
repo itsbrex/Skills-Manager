@@ -1,50 +1,30 @@
 import { useState, useEffect, useCallback } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Layout } from "@/components/layout/Layout";
 import { Skills } from "@/pages/Skills";
 import { Tools } from "@/pages/Tools";
 import { Marketplace } from "@/pages/Marketplace";
 import { Settings } from "@/pages/Settings";
 import { Feedback } from "@/pages/Feedback";
-import { Polls } from "@/pages/Polls";
 import { EditorPage } from "@/pages/Editor";
 import { Welcome } from "@/pages/Welcome";
 import { useInitialization } from "@/hooks/useInitialization";
 import { ThemeProvider } from "@/hooks/useTheme";
-import { CloudSyncProvider } from "@/hooks/useCloudSyncAgent";
 import { SkillTranslationProvider } from "@/hooks/useSkillTranslation";
 import { I18nProvider, Language } from "@/i18n";
-import { registerTelemetryCloseHandler } from "@/telemetry/registerTelemetryCloseHandler";
-import {
-  resolveTelemetryConsent,
-  shouldPromptForTelemetryConsent,
-} from "@/telemetry/consent";
 import { FontFamilyPreset, normalizeFontFamilyPreset } from "@/lib/fontFamily";
-import { AppConfig, MarketplaceUpdateCheckResult, TelemetryConsent } from "@/types";
+import { AppConfig, MarketplaceUpdateCheckResult } from "@/types";
 import { ToastContainer, useToast } from "@/components/ui/toast";
-import { CloudSyncConflictDialog } from "@/components/cloud/CloudSyncConflictDialog";
-import { VaultConsentDialog } from "@/components/cloud/VaultConsentDialog";
-import { TelemetryConsentDialog } from "@/components/telemetry/TelemetryConsentDialog";
-import { defaultPreferences } from "@/constants/preferences";
 
 type Theme = "light" | "dark" | "system";
-const TELEMETRY_HEARTBEAT_INTERVAL_MS = 60_000;
-const TELEMETRY_FLUSH_INTERVAL_MS = 600_000;
-const TELEMETRY_STARTUP_FLUSH_DELAY_MS = 45_000;
 
 function App() {
   const { isInitialized, isLoading: initLoading, markInitialized } = useInitialization();
   const [language, setLanguage] = useState<Language>("en");
   const [theme, setTheme] = useState<Theme>("system");
   const [fontFamily, setFontFamily] = useState<FontFamilyPreset>("system");
-  const [telemetryConsent, setTelemetryConsent] = useState<TelemetryConsent>(
-    defaultPreferences.telemetry_consent,
-  );
   const [configLoaded, setConfigLoaded] = useState(false);
-  const [telemetryConsentSaving, setTelemetryConsentSaving] = useState(false);
-  const [telemetryConsentError, setTelemetryConsentError] = useState<string | null>(null);
   const { toasts, removeToast } = useToast();
 
   // Load preferences from config on mount
@@ -59,8 +39,7 @@ function App() {
           setTheme(config.preferences.theme as Theme);
         }
         setFontFamily(normalizeFontFamilyPreset(config.preferences?.font_family));
-        setTelemetryConsent(resolveTelemetryConsent(config.preferences?.telemetry_consent));
-      } catch {
+        } catch {
         // Use defaults on error
       }
       setConfigLoaded(true);
@@ -78,40 +57,6 @@ function App() {
 
   const handleFontFamilyChange = useCallback((newFontFamily: FontFamilyPreset) => {
     setFontFamily(newFontFamily);
-  }, []);
-
-  const handleTelemetryConsentChange = useCallback(async (nextConsent: TelemetryConsent) => {
-    setTelemetryConsentSaving(true);
-    setTelemetryConsentError(null);
-
-    try {
-      const config = await invoke<AppConfig>("get_config");
-      const nextConfig: AppConfig = {
-        ...config,
-        preferences: {
-          ...defaultPreferences,
-          ...(config.preferences ?? {}),
-          telemetry_consent: nextConsent,
-        },
-      };
-
-      await invoke("save_config", { config: nextConfig });
-      setTelemetryConsent(nextConsent);
-
-      if (nextConsent === "granted") {
-        void invoke("telemetry_initialize").catch(() => {
-          // keep telemetry initialization silent on failures after consent changes
-        });
-      } else if (nextConsent === "denied") {
-        void invoke("telemetry_clear_local_data").catch(() => {
-          // keep telemetry cleanup silent on failures after consent changes
-        });
-      }
-    } catch (error) {
-      setTelemetryConsentError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setTelemetryConsentSaving(false);
-    }
   }, []);
 
   useEffect(() => {
@@ -132,65 +77,6 @@ function App() {
     };
   }, [configLoaded, isInitialized]);
 
-  useEffect(() => {
-    if (!isInitialized || !configLoaded) {
-      return;
-    }
-
-    void invoke("telemetry_initialize").catch(() => {
-      // keep telemetry initialization silent on failures
-    });
-
-    const startupFlushTimer = window.setTimeout(() => {
-      void invoke("telemetry_flush_pending").catch(() => {
-        // keep telemetry flush silent on failures
-      });
-    }, TELEMETRY_STARTUP_FLUSH_DELAY_MS);
-
-    const heartbeatTimer = window.setInterval(() => {
-      void invoke("telemetry_record_heartbeat").catch(() => {
-        // keep telemetry heartbeat silent on failures
-      });
-    }, TELEMETRY_HEARTBEAT_INTERVAL_MS);
-
-    const flushTimer = window.setInterval(() => {
-      void invoke("telemetry_flush_pending").catch(() => {
-        // keep telemetry flush silent on failures
-      });
-    }, TELEMETRY_FLUSH_INTERVAL_MS);
-
-    let disposed = false;
-    let unlistenCloseRequested: (() => void) | undefined;
-
-    void registerTelemetryCloseHandler({
-      appWindow: getCurrentWindow(),
-      endSession: async (reason) => {
-        await invoke("telemetry_end_session", { reason });
-      },
-    })
-      .then((unlisten) => {
-        if (disposed) {
-          unlisten();
-          return;
-        }
-
-        unlistenCloseRequested = unlisten;
-      })
-      .catch(() => {
-        // keep telemetry shutdown registration silent on failures
-      });
-
-    return () => {
-      disposed = true;
-      window.clearTimeout(startupFlushTimer);
-      window.clearInterval(heartbeatTimer);
-      window.clearInterval(flushTimer);
-      unlistenCloseRequested?.();
-    };
-  }, [
-    configLoaded,
-    isInitialized,
-  ]);
 
   // Wait for both initialization check and config to load
   if (initLoading || !configLoaded) {
@@ -224,7 +110,6 @@ function App() {
       onFontFamilyChange={handleFontFamilyChange}
     >
       <I18nProvider language={language} onLanguageChange={handleLanguageChange}>
-        <CloudSyncProvider>
           <SkillTranslationProvider>
             <BrowserRouter>
               <Routes>
@@ -234,27 +119,12 @@ function App() {
                   <Route path="marketplace" element={<Marketplace />} />
                   <Route path="settings" element={<Settings />} />
                   <Route path="feedback" element={<Feedback />} />
-                  <Route path="polls" element={<Polls />} />
                 </Route>
                 <Route path="/editor" element={<EditorPage />} />
               </Routes>
               <ToastContainer toasts={toasts} onRemove={removeToast} />
             </BrowserRouter>
-            <CloudSyncConflictDialog />
-            <VaultConsentDialog />
-            <TelemetryConsentDialog
-              open={isInitialized && configLoaded && shouldPromptForTelemetryConsent(telemetryConsent)}
-              saving={telemetryConsentSaving}
-              error={telemetryConsentError}
-              onAccept={() => {
-                void handleTelemetryConsentChange("granted");
-              }}
-              onDeny={() => {
-                void handleTelemetryConsentChange("denied");
-              }}
-            />
           </SkillTranslationProvider>
-        </CloudSyncProvider>
       </I18nProvider>
     </ThemeProvider>
   );

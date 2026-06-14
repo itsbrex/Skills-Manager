@@ -10,21 +10,16 @@ import {
   LlmProvider,
 } from "@/types";
 import { defaultPreferences } from "@/constants/preferences";
-import { startGithubAuth, startGoogleAuth, clearPendingAuthProvider, setPendingAuthProvider } from "@/services/auth";
-import { buildAuthErrorMessage } from "@/services/authError";
 import { checkUpdate } from "@/services/updater";
 import { useTranslation, Language, TranslationPath } from "@/i18n";
 import { useSkillTranslation } from "@/hooks/useSkillTranslation";
 import { useTheme } from "@/hooks/useTheme";
-import { useCloudSync } from "@/hooks/useCloudSyncAgent";
 import { resolveTelemetryConsent } from "@/telemetry/consent";
 import { getEditorIcon } from "@/assets/editors";
 import { FontFamilyPreset, normalizeFontFamilyPreset } from "@/lib/fontFamily";
 import wechatRewardCode from "@/assets/donation/wechat-reward-code.jpg";
 import alipayRewardCode from "@/assets/donation/alipay-reward-code.jpg";
 import { Toggle } from "@/components/ui/toggle";
-import { buildCloudSyncIntervalOptions } from "@/services/cloudSyncSettingsOptions";
-import { setCloudSyncSettingsSnapshot } from "@/services/cloudSyncSettingsStore";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
 import { ToastContainer, useToast } from "@/components/ui/toast";

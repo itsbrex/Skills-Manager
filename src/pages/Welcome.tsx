@@ -10,7 +10,6 @@ import { useTranslation } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
 import { AppConfig } from "@/types";
 import { defaultPreferences } from "@/constants/preferences";
-import { setCloudSyncSettingsSnapshot } from "@/services/cloudSyncSettingsStore";
 
 type WizardStep = "welcome" | "tools" | "directory" | "import";
 

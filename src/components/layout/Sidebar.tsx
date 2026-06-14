@@ -15,9 +15,6 @@ import {
   setPendingAuthProvider,
   takePendingAuthProvider,
 } from "@/services/auth";
-import { buildAuthErrorMessage } from "@/services/authError";
-import { setAuthProfileSnapshot } from "@/services/authProfileStore";
-import { useCloudSync } from "@/hooks/useCloudSyncAgent";
 import { UpdateInfo } from "@/types";
 import { MODAL_LAYER_Z_INDEX, MODAL_OVERLAY_COLOR } from "@/constants/modal";
 import { getSidebarChromeMetrics } from "./sidebarChrome";
