@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { useLocation } from "react-router";
+import { useTranslation } from "../i18n";
 
 export interface SkillTranslationOutput {
   name: string;
@@ -263,6 +265,41 @@ export function SkillTranslationProvider({ children }: { children: ReactNode }) 
     },
     [bump],
   );
+
+  // 自动缓存预热：根据路由变化预热对应页面的翻译
+  const location = useLocation();
+  const { language } = useTranslation();
+
+  useEffect(() => {
+    const preloadForRoute = async () => {
+      if (!isConfigured) return;
+
+      try {
+        if (location.pathname === '/skills') {
+          // Skills 页面：预热所有已安装 skill
+          const skills = await invoke<Array<{ instance_id: string }>>('list_skills');
+          const instanceIds = skills.map(s => s.instance_id);
+          await preloadCachedSkills(instanceIds, language);
+        } else if (location.pathname === '/marketplace') {
+          // Marketplace 页面：预热前 50 个
+          const items = await invoke<Array<{ id: string; name: string; description: string }>>(
+            'get_marketplace_skills'
+          );
+          const top50 = items.slice(0, 50).map(s => ({
+            id: s.id,
+            name: s.name,
+            description: s.description,
+          }));
+          await preloadCachedMarketplace(top50, language);
+        }
+      } catch (err) {
+        // 预热失败静默处理，不影响用户
+        console.debug('Cache preload failed:', err);
+      }
+    };
+
+    preloadForRoute();
+  }, [location.pathname, language, isConfigured, preloadCachedSkills, preloadCachedMarketplace]);
 
   const value: SkillTranslationContextValue = {
     isConfigured,
