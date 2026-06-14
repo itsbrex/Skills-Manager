@@ -1,4 +1,3 @@
-// @ts-nocheck - Cloud features removed, type errors expected
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -11,6 +10,14 @@ import {
   LlmProvider,
 } from "@/types";
 import { defaultPreferences } from "@/constants/preferences";
+import {
+  startGithubAuth,
+  startGoogleAuth,
+  clearPendingAuthProvider,
+  setPendingAuthProvider,
+  logoutAuth
+} from "@/services/auth";
+import { buildAuthErrorMessage } from "@/services/authError";
 import { checkUpdate } from "@/services/updater";
 import { useTranslation, Language, TranslationPath } from "@/i18n";
 import { useSkillTranslation } from "@/hooks/useSkillTranslation";
@@ -40,8 +47,6 @@ export function Settings() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const { toasts, addToast, removeToast } = useToast();
-  // const cloudSync = useCloudSync();  // Removed: cloud sync
-  const cloudSync = { syncing: false, lastSyncTime: null, authProfile: null, logout: async () => {}, manualSync: async () => {}, lastSyncedAt: null, syncStage: null, conflict: null, error: null };  // Placeholder
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -207,20 +212,20 @@ export function Settings() {
 
   const handleStartGithubLogin = useCallback(async () => {
     setAuthLoading(true);
-    setAuthError(null);  // 
-  // setPendingAuthProvider("github");  // Removed: auth feature  // Removed: auth
-    try {  // 
-  // const result = await startGithubAuth(language);  // Removed: auth feature  // Removed: auth
-      // await openUrl(result.auth_url);  // Removed: auth result
+    setAuthError(null);
+    setPendingAuthProvider("github");
+    try {
+      const result = await startGithubAuth(language);
+      await openUrl(result.auth_url);
     } catch (err) {
       console.warn("Failed to start github auth:", err);
       setAuthError(
-        /* buildAuthErrorMessage(t, err, {
+        buildAuthErrorMessage(t, err, {
           provider: "github",
           stage: "start",
-        }) */ "Authentication error"  // Removed: auth feature,
-      );  // 
-  // clearPendingAuthProvider();  // Removed: auth feature  // Removed: auth
+        }),
+      );
+      clearPendingAuthProvider();
     } finally {
       setAuthLoading(false);
     }
@@ -228,20 +233,20 @@ export function Settings() {
 
   const handleStartGoogleLogin = useCallback(async () => {
     setAuthLoading(true);
-    setAuthError(null);  // 
-  // setPendingAuthProvider("google");  // Removed: auth feature  // Removed: auth
-    try {  // 
-  // const result = await startGoogleAuth(language);  // Removed: auth feature  // Removed: auth
-      // await openUrl(result.auth_url);  // Removed: auth result
+    setAuthError(null);
+    setPendingAuthProvider("google");
+    try {
+      const result = await startGoogleAuth(language);
+      await openUrl(result.auth_url);
     } catch (err) {
       console.warn("Failed to start google auth:", err);
       setAuthError(
-        /* buildAuthErrorMessage(t, err, {
+        buildAuthErrorMessage(t, err, {
           provider: "google",
           stage: "start",
-        }) */ "Authentication error"  // Removed: auth feature,
-      );  // 
-  // clearPendingAuthProvider();  // Removed: auth feature  // Removed: auth
+        }),
+      );
+      clearPendingAuthProvider();
     } finally {
       setAuthLoading(false);
     }
@@ -251,19 +256,15 @@ export function Settings() {
     setAuthLoading(true);
     setAuthError(null);
     try {
-      await cloudSync.logout();
+      await logoutAuth();
+      await fetchConfig();
     } catch (err) {
       console.warn("Failed to logout:", err);
       setAuthError(t("auth.logoutFailed"));
     } finally {
       setAuthLoading(false);
     }
-  }, [cloudSync, t]);
-
-  const handleManualSync = useCallback(async () => {
-    setAuthError(null);
-    await cloudSync.manualSync();
-  }, [cloudSync]);
+  }, [t]);
 
   if (error) {
     return (
@@ -284,35 +285,17 @@ export function Settings() {
   }
 
   const prefs = config.preferences || defaultPreferences;
-    const cloudSyncIntervals: number[] = [];  // Removed: cloud sync
   const selectedEditor = availableEditors.find(e => e.id === prefs.default_editor) || availableEditors[0];
   const FallbackEditorIcon = selectedEditor ? getEditorIcon(selectedEditor.id) : null;
   const marketplaceSources = config.marketplace_sources || [];
   const marketplaceRows = marketplaceSources;
-  const authProfile = cloudSync.authProfile;
-  const vaultConsent = prefs.vault_backup_consent ?? "unknown";
-  const telemetryConsent = resolveTelemetryConsent(prefs.telemetry_consent);
-  const vaultConsentLabel = vaultConsent === "granted"
-    ? t("settings.vaultBackupConsentStatusGranted")
-    : vaultConsent === "denied"
-      ? t("settings.vaultBackupConsentStatusDenied")
-      : t("settings.vaultBackupConsentStatusUnknown");
-  const telemetryConsentLabel = telemetryConsent === "granted"
-    ? t("settings.telemetryConsentStatusGranted")
-    : telemetryConsent === "denied"
-      ? t("settings.telemetryConsentStatusDenied")
-      : t("settings.telemetryConsentStatusUnknown");
-  const lastSyncedLabel = cloudSync.lastSyncedAt
-    ? t("cloudSync.lastSynced").replace("{time}", new Date(cloudSync.lastSyncedAt * 1000).toLocaleString())
-    : t("cloudSync.neverSynced");
-      // @ts-expect-error - Auth removed
-  const providerLabel = authProfile?.provider === "github"
+  const authProfile = config.auth_session?.profile || null;
+  const authProvider = config.auth_session?.provider || null;
+  const providerLabel = authProvider === "github"
     ? "GitHub"
-      // @ts-expect-error - Auth removed
-    : authProfile?.provider === "google"
+    : authProvider === "google"
       ? "Google"
-      // @ts-expect-error - Auth removed
-      : authProfile?.provider || "-";
+      : "-";
 
   return (
     <div style={{
@@ -710,7 +693,7 @@ export function Settings() {
                   )}
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)' }}>
-                      {authProfile.username || authProfile.email || t("auth.login")}
+                      {authProfile.username || t("auth.login")}
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
                       {t("auth.provider")}: {providerLabel}
