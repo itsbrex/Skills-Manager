@@ -309,6 +309,8 @@ export const en = {
   settings: {
     title: "Settings",
     saveSettings: "Save Settings",
+    autoSaveEnabled: "Auto-save enabled",
+    saveFailed: "Save failed",
     // General
     general: "General",
     skillsDirectory: "Skills Directory",

@@ -309,6 +309,8 @@ export const zh = {
   settings: {
     title: "设 置",
     saveSettings: "保存设置",
+    autoSaveEnabled: "自动保存",
+    saveFailed: "保存失败",
     // General
     general: "通用",
     skillsDirectory: "Skills 存储目录",

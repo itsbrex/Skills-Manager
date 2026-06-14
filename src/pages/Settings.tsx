@@ -32,9 +32,7 @@ export function Settings() {
   const { setTheme, setFontFamily } = useTheme();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [editorDropdownOpen, setEditorDropdownOpen] = useState(false);
   const [availableEditors, setAvailableEditors] = useState<DetectedEditor[]>([]);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -126,6 +124,9 @@ export function Settings() {
     if (key === "font_family") {
       setFontFamily(value as FontFamilyPreset);
     }
+
+    // Auto-save to disk (debounced)
+    void autoSaveConfig(newConfig);
   };
 
   const updateMarketplaceSource = (
@@ -137,45 +138,67 @@ export function Settings() {
     const updatedSources = sources.map((source) =>
       source.id === sourceId ? { ...source, ...updates } : source
     );
-    setConfig({
+    const newConfig = {
       ...config,
       marketplace_sources: updatedSources,
-    });
+    };
+    setConfig(newConfig);
+
+    // Auto-save to disk (debounced)
+    void autoSaveConfig(newConfig);
   };
 
-
-  const handleSave = async () => {
-    if (!config) return;
-
-    setSaving(true);
-    setSaveSuccess(false);
-    setSaveError(null);
-
-    try {
-      await invoke("save_config", { config });
-      const prefs = config.preferences || defaultPreferences;  // 
-
-      // await cloudSync.refreshVaultConsent(); // Removed: cloud sync
-      const telemetryConsent = resolveTelemetryConsent(prefs.telemetry_consent);
-      if (telemetryConsent === "granted") {
-        void invoke("telemetry_initialize").catch((err) => {
-          console.warn("Failed to initialize telemetry after settings save:", err);
-        });
-      } else if (telemetryConsent === "denied") {
-        void invoke("telemetry_clear_local_data").catch((err) => {
-          console.warn("Failed to clear telemetry after settings save:", err);
-        });
-      }
-      setSaveSuccess(true);
-      setTimeout(() => {
-        setSaveSuccess(false);
-      }, 3000);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
+  // Debounced auto-save function
+  const autoSaveTimeoutRef = useRef<number | null>(null);
+  const saveStatusTimeoutRef = useRef<number | null>(null);
+  const autoSaveConfig = useCallback(async (configToSave: AppConfig) => {
+    // Clear previous timeout
+    if (autoSaveTimeoutRef.current !== null) {
+      clearTimeout(autoSaveTimeoutRef.current);
     }
-  };
+    if (saveStatusTimeoutRef.current !== null) {
+      clearTimeout(saveStatusTimeoutRef.current);
+    }
+
+    // Show saving status immediately
+    setSaveStatus('saving');
+
+    // Set new timeout (800ms debounce)
+    autoSaveTimeoutRef.current = window.setTimeout(async () => {
+      try {
+        await invoke("save_config", { config: configToSave });
+
+        // Handle telemetry consent
+        const prefs = configToSave.preferences || defaultPreferences;
+        const telemetryConsent = resolveTelemetryConsent(prefs.telemetry_consent);
+        if (telemetryConsent === "granted") {
+          void invoke("telemetry_initialize").catch((err) => {
+            console.warn("Failed to initialize telemetry after auto-save:", err);
+          });
+        } else if (telemetryConsent === "denied") {
+          void invoke("telemetry_clear_local_data").catch((err) => {
+            console.warn("Failed to clear telemetry after auto-save:", err);
+          });
+        }
+
+        // Show saved status
+        setSaveStatus('saved');
+
+        // Reset to idle after 2 seconds
+        saveStatusTimeoutRef.current = window.setTimeout(() => {
+          setSaveStatus('idle');
+        }, 2000);
+      } catch (err) {
+        console.error("Auto-save failed:", err);
+        setSaveStatus('idle');
+        // Show error toast
+        addToast(
+          err instanceof Error ? err.message : t("settings.saveFailed"),
+          "error"
+        );
+      }
+    }, 800);
+  }, [addToast, t]);
 
   const handleCheckUpdate = async () => {
     if (updateInfo) {
@@ -237,55 +260,35 @@ export function Settings() {
       <PageHeader
         title={t("settings.title")}
         actions={
-          <>
-            {saveSuccess && (
-              <span style={{
-                fontSize: '13px',
-                color: 'var(--color-success)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M20 6L9 17l-5-5"/>
-                </svg>
-                {t("common.saved")}
-              </span>
-            )}
-            {saveError && (
-              <span style={{ fontSize: '13px', color: 'var(--color-error)' }}>
-                {saveError}
-              </span>
-            )}
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 16px',
-                fontSize: '13px',
-                fontWeight: 500,
-                color: 'var(--primary-foreground)',
-                backgroundColor: 'var(--foreground)',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: saving ? 'wait' : 'pointer',
-                opacity: saving ? 0.7 : 1,
-                transition: 'opacity 0.15s',
-              }}
-              onMouseEnter={(e) => !saving && (e.currentTarget.style.opacity = '0.9')}
-              onMouseLeave={(e) => !saving && (e.currentTarget.style.opacity = '1')}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                <polyline points="17 21 17 13 7 13 7 21"/>
-                <polyline points="7 3 7 8 15 8"/>
-              </svg>
-              {saving ? t("common.saving") : t("settings.saveSettings")}
-            </button>
-          </>
+          saveStatus !== 'idle' ? (
+            <div style={{
+              fontSize: '12px',
+              color: saveStatus === 'saved' ? 'var(--color-success)' : 'var(--muted-foreground)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              backgroundColor: saveStatus === 'saved' ? 'rgba(34, 197, 94, 0.1)' : 'var(--muted)',
+              borderRadius: '6px',
+              transition: 'all 0.2s ease',
+            }}>
+              {saveStatus === 'saving' ? (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                  {t("common.saving")}
+                </>
+              ) : (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 6L9 17l-5-5"/>
+                  </svg>
+                  {t("common.saved")}
+                </>
+              )}
+            </div>
+          ) : null
         }
       />
 
