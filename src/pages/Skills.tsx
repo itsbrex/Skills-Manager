@@ -406,7 +406,7 @@ export function Skills() {
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const { toasts, addToast, removeToast } = useToast();
+  const { toasts, addToast, updateToast, removeToast } = useToast();
   const skillMetadata = config?.skill_metadata;
   const listContainerRef = useRef<HTMLElement | null>(null);
   const hasRestoredScrollRef = useRef(false);
@@ -840,17 +840,29 @@ export function Skills() {
       if (!confirmed) return;
 
       setBatchTranslating(true);
+      let progressToastId: string | undefined;
       try {
         const ids = pending.map((s) => s.instance_id);
         const result = await translation.translateBatch(ids, language, (p) => {
-          addToast(
-            t("skills.batchTranslateProgress")
-              .replace("{current}", String(p.current))
-              .replace("{total}", String(p.total))
-              .replace("{name}", p.skill_name),
-            "info",
-          );
+          const progressMsg = t("skills.batchTranslateProgress")
+            .replace("{current}", String(p.current))
+            .replace("{total}", String(p.total))
+            .replace("{name}", p.skill_name);
+
+          if (!progressToastId) {
+            // 创建持久化进度 toast
+            progressToastId = addToast(progressMsg, "info", true);
+          } else {
+            // 更新现有 toast
+            updateToast(progressToastId, progressMsg);
+          }
         });
+
+        // 翻译完成：移除进度 toast，显示结果
+        if (progressToastId) {
+          removeToast(progressToastId);
+        }
+
         const fail = result.failed.length;
         const ok = result.succeeded.length;
         addToast(
@@ -861,12 +873,15 @@ export function Skills() {
           fail > 0 ? "error" : "success",
         );
       } catch (err) {
+        if (progressToastId) {
+          removeToast(progressToastId);
+        }
         addToast(formatTranslationError(err), "error");
       } finally {
         setBatchTranslating(false);
       }
     },
-    [translation, language, addToast, t, formatTranslationError],
+    [translation, language, addToast, updateToast, removeToast, t, formatTranslationError],
   );
 
   const handleDelete = async (skill: Skill) => {

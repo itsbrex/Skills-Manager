@@ -4,6 +4,7 @@ export interface Toast {
   id: string;
   message: string;
   type: "error" | "success" | "info";
+  persistent?: boolean; // 持久化 toast，不自动关闭
 }
 
 interface ToastItemProps {
@@ -15,12 +16,14 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
   const [isExiting, setIsExiting] = useState(false);
 
   useEffect(() => {
+    if (toast.persistent) return; // 持久化 toast 不自动关闭
+
     const timer = setTimeout(() => {
       setIsExiting(true);
       setTimeout(() => onRemove(toast.id), 300);
     }, 3000);
     return () => clearTimeout(timer);
-  }, [toast.id, onRemove]);
+  }, [toast.id, toast.persistent, onRemove]);
 
   const bgColor = toast.type === "error" ? "#fef2f2" : toast.type === "success" ? "#f0fdf4" : "#eff6ff";
   const borderColor = toast.type === "error" ? "#fecaca" : toast.type === "success" ? "#bbf7d0" : "#bfdbfe";
@@ -110,14 +113,25 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
 export function useToast() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((message: string, type: Toast["type"] = "error") => {
+  const addToast = useCallback((message: string, type: Toast["type"] = "error", persistent: boolean = false) => {
     const id = Date.now().toString();
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => [...prev, { id, message, type, persistent }]);
+    return id; // 返回 id 以便后续更新
+  }, []);
+
+  const updateToast = useCallback((id: string, message: string, type?: Toast["type"], persistent?: boolean) => {
+    setToasts((prev) =>
+      prev.map((t) =>
+        t.id === id
+          ? { ...t, message, type: type !== undefined ? type : t.type, persistent: persistent !== undefined ? persistent : t.persistent }
+          : t
+      )
+    );
   }, []);
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  return { toasts, addToast, removeToast };
+  return { toasts, addToast, updateToast, removeToast };
 }
