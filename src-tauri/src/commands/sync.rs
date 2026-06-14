@@ -129,30 +129,23 @@ pub fn fix_sync_issues() -> Result<LinkReport, String> {
                 continue;
             }
 
-            match current_status {
-                LinkStatus::Valid => match LinkerService::disable_skill_for_tool(
-                    &tool_config.skills_path,
-                    &skill.id,
-                    &tool_id,
-                ) {
-                    Ok(_) => combined_report.success.push(create_sync_result(
-                        skill.instance_id.clone(),
-                        tool_id.clone(),
-                        LinkStatus::Missing,
-                        "Disabled successfully",
-                    )),
-                    Err(e) => combined_report.failed.push(create_sync_error(
-                        skill.instance_id.clone(),
-                        tool_id.clone(),
-                        LinkStatus::Broken,
-                        e,
-                    )),
-                },
-                status => combined_report.failed.push(create_sync_error(
+            // 对于应该禁用的 skill，无论当前状态如何，都尝试删除目标文件
+            match LinkerService::disable_skill_for_tool(
+                &tool_config.skills_path,
+                &skill.id,
+                &tool_id,
+            ) {
+                Ok(_) => combined_report.success.push(create_sync_result(
                     skill.instance_id.clone(),
                     tool_id.clone(),
-                    status,
-                    "Target belongs to another instance or is invalid".to_string(),
+                    LinkStatus::Missing,
+                    "Disabled successfully",
+                )),
+                Err(e) => combined_report.failed.push(create_sync_error(
+                    skill.instance_id.clone(),
+                    tool_id.clone(),
+                    current_status,
+                    e,
                 )),
             }
         }
