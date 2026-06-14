@@ -8,7 +8,9 @@ pub mod tool;
 pub mod update;
 
 pub use auth::{AuthProfile, AuthSession};
-pub use config::{AppConfig, CustomToolConfig, LlmProvider, ProjectBinding, SkillMetadata, ToolConfig};
+pub use config::{
+    AppConfig, CustomToolConfig, LlmProvider, ProjectBinding, SkillMetadata, ToolConfig,
+};
 pub use editor::{DetectedEditor, EDITOR_DEFINITIONS};
 pub use marketplace::{
     GitHubContent, InstallResult, InstallStatus, MarketplaceSkill, MarketplaceSkillsResponse,

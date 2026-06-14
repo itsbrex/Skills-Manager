@@ -1,5 +1,5 @@
-use crate::services::config_manager::ConfigManager;
 use crate::models::SkillScope;
+use crate::services::config_manager::ConfigManager;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
@@ -39,7 +39,11 @@ fn copy_mode_metadata_path(target_path: &Path) -> PathBuf {
     target_path.join(COPY_MODE_METADATA_FILE)
 }
 
-fn write_copy_mode_metadata(target_path: &Path, skill_id: &str, skill_source: &Path) -> Result<(), String> {
+fn write_copy_mode_metadata(
+    target_path: &Path,
+    skill_id: &str,
+    skill_source: &Path,
+) -> Result<(), String> {
     let metadata = CopyModeMetadata {
         skill_id: skill_id.to_string(),
         source_path: skill_source.to_string_lossy().to_string(),
@@ -56,9 +60,15 @@ pub fn read_copy_mode_metadata(target_path: &Path) -> Option<(String, PathBuf)> 
     Some((metadata.skill_id, PathBuf::from(metadata.source_path)))
 }
 
-pub fn copy_mode_target_matches_source(target_path: &Path, skill_id: &str, skill_source: &Path) -> bool {
+pub fn copy_mode_target_matches_source(
+    target_path: &Path,
+    skill_id: &str,
+    skill_source: &Path,
+) -> bool {
     match read_copy_mode_metadata(target_path) {
-        Some((saved_skill_id, saved_source_path)) => saved_skill_id == skill_id && saved_source_path == skill_source,
+        Some((saved_skill_id, saved_source_path)) => {
+            saved_skill_id == skill_id && saved_source_path == skill_source
+        }
         None => false,
     }
 }

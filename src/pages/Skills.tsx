@@ -22,7 +22,11 @@ import {
   Tool,
 } from "@/types";
 import { useTranslation, TranslationPath } from "@/i18n";
-import { useSkillTranslation, makeTranslationKey } from "@/hooks/useSkillTranslation";
+import {
+  useSkillTranslation,
+  makeTranslationKey,
+  type SkillFileTranslationProgress,
+} from "@/hooks/useSkillTranslation";
 import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
 import {
   applyTagFilterAction,
@@ -369,6 +373,7 @@ export function Skills() {
   const navigate = useNavigate();
   const translation = useSkillTranslation();
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
+  const [skillTranslationProgress, setSkillTranslationProgress] = useState<Record<string, SkillFileTranslationProgress>>({});
   const [batchTranslating, setBatchTranslating] = useState(false);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [skillPackages, setSkillPackages] = useState<InstalledSkillPackage[]>([]);
@@ -789,10 +794,28 @@ export function Skills() {
         return next;
       });
       try {
-        await translation.translateSkill(skill.instance_id, language, force);
+        const result = await translation.translateSkillFiles(skill.instance_id, language, force, (progress) => {
+          setSkillTranslationProgress((prev) => ({
+            ...prev,
+            [skill.instance_id]: progress,
+          }));
+        });
+        if (result.failed.length > 0) {
+          addToast(
+            t("editor.translateFilesPartialFailed")
+              .replace("{ok}", String(result.files.length))
+              .replace("{fail}", String(result.failed.length)),
+            "error",
+          );
+        }
       } catch (err) {
         addToast(formatTranslationError(err), "error");
       } finally {
+        setSkillTranslationProgress((prev) => {
+          const next = { ...prev };
+          delete next[skill.instance_id];
+          return next;
+        });
         setTranslatingIds((prev) => {
           const next = new Set(prev);
           next.delete(skill.instance_id);
@@ -2262,6 +2285,18 @@ export function Skills() {
                     ? translated.description || t("skills.noDescription")
                     : item.description || t("skills.noDescription");
                 const previewChips = item.previewChips.map((chip) => `#${chip}`);
+                const fileProgress = item.kind === "skill" && item.skill
+                  ? skillTranslationProgress[item.skill.instance_id]
+                  : undefined;
+                const fileProgressText = fileProgress
+                  ? t("editor.translateFilesCompact")
+                      .replace("{current}", String(fileProgress.current))
+                      .replace("{total}", String(fileProgress.total))
+                      .replace("{path}", fileProgress.path)
+                  : null;
+                const fileProgressPercent = fileProgress && fileProgress.total > 0
+                  ? Math.max(0, Math.min(100, (fileProgress.current / fileProgress.total) * 100))
+                  : 0;
 
                 const isBatchSelected = selectedBatchItemKeys.has(item.key);
 
@@ -2416,7 +2451,53 @@ export function Skills() {
                       </div>
 
                       {!isBatchManageMode && item.kind === "skill" && item.skill && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 1, minWidth: 0 }}>
+                          {fileProgressText && (
+                            <div
+                              role="status"
+                              aria-live="polite"
+                              title={fileProgressText}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                                maxWidth: 190,
+                                minWidth: 0,
+                                height: 28,
+                                padding: "0 8px",
+                                fontSize: 11,
+                                color: "var(--foreground)",
+                                backgroundColor: "color-mix(in srgb, var(--primary) 7%, var(--background))",
+                                border: "1px solid var(--border)",
+                                borderRadius: 7,
+                                flexShrink: 1,
+                              }}
+                            >
+                              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {fileProgressText}
+                              </span>
+                              <div
+                                aria-hidden
+                                style={{
+                                  width: 46,
+                                  height: 3,
+                                  borderRadius: 999,
+                                  overflow: "hidden",
+                                  backgroundColor: "color-mix(in srgb, var(--foreground) 14%, transparent)",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: `${fileProgressPercent}%`,
+                                    height: "100%",
+                                    backgroundColor: "var(--primary)",
+                                    transition: "width 0.2s ease",
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
                           <TranslateIconButton
                             hasTranslation={translated != null}
                             showingTranslation={isTranslatedView}

@@ -66,7 +66,10 @@ fn load_provider_or_error() -> Result<LlmProvider, LlmError> {
 }
 
 fn find_skill_by_instance(skills: &[Skill], instance_id: &str) -> Option<Skill> {
-    skills.iter().find(|s| s.instance_id == instance_id).cloned()
+    skills
+        .iter()
+        .find(|s| s.instance_id == instance_id)
+        .cloned()
 }
 
 fn find_installed_for_marketplace(skills: &[Skill], marketplace_skill_id: &str) -> Option<Skill> {
@@ -113,6 +116,112 @@ fn read_skill_md(skill: &Skill) -> Option<String> {
     find_skill_md(&skill.path, 3).and_then(|p| fs::read_to_string(&p).ok())
 }
 
+fn is_ignored_doc_dir(name: &str) -> bool {
+    name.starts_with('.') || matches!(name, "node_modules" | "target" | "dist" | "build" | ".git")
+}
+
+fn is_translatable_doc_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| {
+            matches!(
+                ext.to_ascii_lowercase().as_str(),
+                "md" | "mdx" | "markdown" | "txt" | "text"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn normalize_relative_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn collect_translatable_doc_files(dir: &Path) -> Vec<PathBuf> {
+    fn walk(dir: &Path, files: &mut Vec<PathBuf>) {
+        let entries = match fs::read_dir(dir) {
+            Ok(entries) => entries,
+            Err(_) => return,
+        };
+
+        let mut paths: Vec<PathBuf> = entries
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| {
+                let file_type = entry.file_type().ok()?;
+                if file_type.is_symlink() {
+                    return None;
+                }
+                Some((entry.path(), file_type))
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .filter(|(path, file_type)| {
+                let name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default();
+                if file_type.is_dir() {
+                    !is_ignored_doc_dir(name)
+                } else {
+                    file_type.is_file() && is_translatable_doc_file(path)
+                }
+            })
+            .map(|(path, _)| path)
+            .collect();
+
+        paths.sort_by(|a, b| {
+            let a_name = a
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            let b_name = b
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            match (a.is_dir(), b.is_dir()) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a_name.cmp(&b_name),
+            }
+        });
+
+        for path in paths {
+            if path.is_dir() {
+                walk(&path, files);
+            } else {
+                files.push(path);
+            }
+        }
+    }
+
+    let mut files = Vec::new();
+    if dir.is_dir() {
+        walk(dir, &mut files);
+    }
+    files.sort_by(|a, b| {
+        let a_name = a
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let b_name = b
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let rank = |name: &str| match name {
+            "skill.md" => 0,
+            "readme.md" => 1,
+            _ => 2,
+        };
+        rank(&a_name)
+            .cmp(&rank(&b_name))
+            .then_with(|| normalize_relative_path(a).cmp(&normalize_relative_path(b)))
+    });
+    files
+}
+
 #[tauri::command]
 pub async fn translate_skill(
     instance_id: String,
@@ -135,6 +244,178 @@ pub async fn translate_skill(
     translation::translate_skill(&provider, &target_lang, input, force.unwrap_or(false)).await
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct SkillFileTranslationProgress {
+    pub current: usize,
+    pub total: usize,
+    pub instance_id: String,
+    pub skill_name: String,
+    pub path: String,
+    pub status: String,
+    pub target_lang: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SkillFileTranslationEntry {
+    pub path: String,
+    pub translation: SkillTranslationOutput,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SkillFileTranslationFailure {
+    pub path: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SkillFilesTranslationResult {
+    pub files: Vec<SkillFileTranslationEntry>,
+    pub failed: Vec<SkillFileTranslationFailure>,
+}
+
+const SKILL_FILES_PROGRESS_EVENT: &str = "llm:skill-files-progress";
+
+fn emit_skill_file_progress(
+    app: &AppHandle,
+    current: usize,
+    total: usize,
+    skill: &Skill,
+    path: &str,
+    status: &str,
+    target_lang: &str,
+) {
+    let _ = app.emit(
+        SKILL_FILES_PROGRESS_EVENT,
+        SkillFileTranslationProgress {
+            current,
+            total,
+            instance_id: skill.instance_id.clone(),
+            skill_name: skill.name.clone(),
+            path: path.to_string(),
+            status: status.to_string(),
+            target_lang: target_lang.to_string(),
+        },
+    );
+}
+
+#[tauri::command]
+pub async fn translate_skill_files(
+    instance_id: String,
+    target_lang: String,
+    force: Option<bool>,
+    app: AppHandle,
+) -> Result<SkillFilesTranslationResult, LlmError> {
+    let provider = load_provider_or_error()?;
+    let manager = ConfigManager::new();
+    let config = manager.load().map_err(LlmError::NetworkError)?;
+    let skills = ScannerService::scan_scoped_skills(&config).map_err(LlmError::NetworkError)?;
+    let skill = find_skill_by_instance(&skills, &instance_id)
+        .ok_or_else(|| LlmError::NetworkError(format!("skill not found: {instance_id}")))?;
+
+    let files = collect_translatable_doc_files(&skill.path);
+    let total = files.len();
+    let mut translated_files = Vec::new();
+    let mut failed = Vec::new();
+    let force_refresh = force.unwrap_or(false);
+
+    for (idx, path) in files.into_iter().enumerate() {
+        let current = idx + 1;
+        let relative = path
+            .strip_prefix(&skill.path)
+            .map(normalize_relative_path)
+            .unwrap_or_else(|_| normalize_relative_path(&path));
+
+        emit_skill_file_progress(
+            &app,
+            current,
+            total,
+            &skill,
+            &relative,
+            "started",
+            &target_lang,
+        );
+
+        let content = match fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(err) => {
+                let reason = err.to_string();
+                emit_skill_file_progress(
+                    &app,
+                    current,
+                    total,
+                    &skill,
+                    &relative,
+                    "failed",
+                    &target_lang,
+                );
+                failed.push(SkillFileTranslationFailure {
+                    path: relative,
+                    reason,
+                });
+                continue;
+            }
+        };
+
+        let is_skill_md = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|name| name.eq_ignore_ascii_case("SKILL.md"))
+            .unwrap_or(false);
+
+        let input = if is_skill_md {
+            SkillTranslationInput {
+                name: skill.name.clone(),
+                description: skill.description.clone().unwrap_or_default(),
+                content_md: Some(content),
+            }
+        } else {
+            SkillTranslationInput {
+                name: relative.clone(),
+                description: String::new(),
+                content_md: Some(content),
+            }
+        };
+
+        match translation::translate_skill(&provider, &target_lang, input, force_refresh).await {
+            Ok(output) => {
+                emit_skill_file_progress(
+                    &app,
+                    current,
+                    total,
+                    &skill,
+                    &relative,
+                    "completed",
+                    &target_lang,
+                );
+                translated_files.push(SkillFileTranslationEntry {
+                    path: relative,
+                    translation: output,
+                });
+            }
+            Err(err) => {
+                emit_skill_file_progress(
+                    &app,
+                    current,
+                    total,
+                    &skill,
+                    &relative,
+                    "failed",
+                    &target_lang,
+                );
+                failed.push(SkillFileTranslationFailure {
+                    path: relative,
+                    reason: err.to_string(),
+                });
+            }
+        }
+    }
+
+    Ok(SkillFilesTranslationResult {
+        files: translated_files,
+        failed,
+    })
+}
+
 #[tauri::command]
 pub async fn translate_marketplace_skill(
     input: MarketplaceTranslationInput,
@@ -143,14 +424,11 @@ pub async fn translate_marketplace_skill(
 ) -> Result<SkillTranslationOutput, LlmError> {
     let provider = load_provider_or_error()?;
     let manager = ConfigManager::new();
-    let installed_match = manager
-        .load()
-        .ok()
-        .and_then(|config| {
-            ScannerService::scan_scoped_skills(&config)
-                .ok()
-                .and_then(|skills| find_installed_for_marketplace(&skills, &input.id))
-        });
+    let installed_match = manager.load().ok().and_then(|config| {
+        ScannerService::scan_scoped_skills(&config)
+            .ok()
+            .and_then(|skills| find_installed_for_marketplace(&skills, &input.id))
+    });
 
     let payload = if let Some(skill) = installed_match {
         SkillTranslationInput {
@@ -195,15 +473,15 @@ fn determine_concurrency(provider: &LlmProvider) -> usize {
     let url = provider.base_url.to_lowercase();
 
     if url.contains("openai.com") {
-        5  // OpenAI TPM 限制较严
+        5 // OpenAI TPM 限制较严
     } else if url.contains("deepseek") {
-        8  // DeepSeek 速率较宽松
+        8 // DeepSeek 速率较宽松
     } else if url.contains("localhost") || url.contains("127.0.0.1") {
         12 // 本地 Ollama 无限制
     } else if url.contains("api.anthropic.com") {
-        6  // Claude API 中等限制
+        6 // Claude API 中等限制
     } else {
-        6  // 默认保守值
+        6 // 默认保守值
     }
 }
 
@@ -261,7 +539,14 @@ pub async fn translate_skills_batch(
                 content_md: read_skill_md(&skill),
             };
 
-            match translation::translate_skill(&provider_clone, &target_lang_clone, input, force_value).await {
+            match translation::translate_skill(
+                &provider_clone,
+                &target_lang_clone,
+                input,
+                force_value,
+            )
+            .await
+            {
                 Ok(_) => (idx, Ok(instance_id), String::new()),
                 Err(err) => (idx, Err(instance_id), err.to_string()),
             }
@@ -395,25 +680,26 @@ pub fn get_cached_marketplace_translations(
     let entries = inputs
         .into_iter()
         .map(|input| {
-            let translation = if let Some(skill) = find_installed_for_marketplace(&installed_skills, &input.id) {
-                lookup_skill_cache(&provider, &target_lang, &skill, &cache)
-            } else {
-                let description = input.description.clone().unwrap_or_default();
-                let key = CacheKey {
-                    base_url: &provider.base_url,
-                    model: &provider.model,
-                    target_lang: &target_lang,
-                    source_name: &input.name,
-                    source_description: &description,
-                    source_content_md: input.content_md.as_deref(),
+            let translation =
+                if let Some(skill) = find_installed_for_marketplace(&installed_skills, &input.id) {
+                    lookup_skill_cache(&provider, &target_lang, &skill, &cache)
+                } else {
+                    let description = input.description.clone().unwrap_or_default();
+                    let key = CacheKey {
+                        base_url: &provider.base_url,
+                        model: &provider.model,
+                        target_lang: &target_lang,
+                        source_name: &input.name,
+                        source_description: &description,
+                        source_content_md: input.content_md.as_deref(),
+                    };
+                    cache.get(&key).map(|hit| SkillTranslationOutput {
+                        name: hit.name,
+                        description: hit.description,
+                        content_md: hit.content_md,
+                        cached: true,
+                    })
                 };
-                cache.get(&key).map(|hit| SkillTranslationOutput {
-                    name: hit.name,
-                    description: hit.description,
-                    content_md: hit.content_md,
-                    cached: true,
-                })
-            };
             CachedTranslationEntry {
                 key: input.id,
                 translation,
@@ -471,6 +757,7 @@ pub fn get_cached_text_translation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn test_determine_concurrency_openai() {
@@ -535,5 +822,41 @@ mod tests {
             timeout_secs: None,
         };
         assert_eq!(determine_concurrency(&provider), 6);
+    }
+
+    #[test]
+    fn collect_translatable_doc_files_includes_nested_markdown() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path();
+        fs::create_dir_all(root.join("references")).expect("references dir");
+        fs::create_dir_all(root.join(".hidden")).expect("hidden dir");
+        fs::create_dir_all(root.join("dist")).expect("dist dir");
+        fs::write(root.join("SKILL.md"), "# Skill").expect("skill md");
+        fs::write(root.join("README.md"), "# Readme").expect("readme");
+        fs::write(
+            root.join("references").join("architecture.md"),
+            "# Architecture",
+        )
+        .expect("architecture");
+        fs::write(root.join("references").join("notes.txt"), "Notes").expect("notes");
+        fs::write(root.join(".hidden").join("secret.md"), "# Secret").expect("secret");
+        fs::write(root.join("dist").join("bundle.md"), "# Bundle").expect("bundle");
+        fs::write(root.join("references").join("image.png"), "png").expect("png");
+
+        let files = collect_translatable_doc_files(root);
+        let relative: Vec<String> = files
+            .iter()
+            .map(|path| normalize_relative_path(path.strip_prefix(root).expect("relative")))
+            .collect();
+
+        assert_eq!(
+            relative,
+            vec![
+                "SKILL.md",
+                "README.md",
+                "references/architecture.md",
+                "references/notes.txt",
+            ]
+        );
     }
 }

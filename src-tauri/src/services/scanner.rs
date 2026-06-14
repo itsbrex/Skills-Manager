@@ -4,8 +4,8 @@ use std::fs;
 use std::path::Path;
 
 use crate::models::{
-    AppConfig, MarketplaceMeta, ProjectBinding, Skill, SkillPackageMeta, SkillScope,
-    SkillSource, VaultMeta,
+    AppConfig, MarketplaceMeta, ProjectBinding, Skill, SkillPackageMeta, SkillScope, SkillSource,
+    VaultMeta,
 };
 use crate::services::detector::DetectorService;
 use crate::services::linker::LinkerService;
@@ -80,13 +80,21 @@ impl ScannerService {
         let mut skills = Self::scan_global_skills(config)?;
 
         if let Some(active_project_id) = config.active_project_id.as_deref() {
-            if let Some(project_binding) = config.projects.iter().find(|project| project.id == active_project_id) {
+            if let Some(project_binding) = config
+                .projects
+                .iter()
+                .find(|project| project.id == active_project_id)
+            {
                 let mut project_skills = Self::scan_project_skills(project_binding, config)?;
                 skills.append(&mut project_skills);
             }
         }
 
-        skills.sort_by(|a, b| a.instance_id.cmp(&b.instance_id).then_with(|| a.path.cmp(&b.path)));
+        skills.sort_by(|a, b| {
+            a.instance_id
+                .cmp(&b.instance_id)
+                .then_with(|| a.path.cmp(&b.path))
+        });
         Self::ensure_unique_instance_ids(&skills)?;
         Ok(skills)
     }
@@ -133,7 +141,10 @@ impl ScannerService {
 
         skills.sort_by(|a, b| {
             a.id.cmp(&b.id)
-                .then_with(|| Self::skill_depth(&a.path, skills_dir).cmp(&Self::skill_depth(&b.path, skills_dir)))
+                .then_with(|| {
+                    Self::skill_depth(&a.path, skills_dir)
+                        .cmp(&Self::skill_depth(&b.path, skills_dir))
+                })
                 .then_with(|| a.path.cmp(&b.path))
         });
         Self::dedupe_skill_ids_preferring_shallower_paths(skills, skills_dir)
@@ -673,7 +684,10 @@ description: "Description from SKILL.md"
     fn load_skill_with_config_keeps_package_meta_absent_for_plain_skill() {
         with_temp_home(|home| {
             let config = AppConfig::default();
-            let skill_dir = home.join(".skills-manager").join("skills").join("plain-skill");
+            let skill_dir = home
+                .join(".skills-manager")
+                .join("skills")
+                .join("plain-skill");
             fs::create_dir_all(&skill_dir).expect("create skill dir");
 
             fs::write(
@@ -710,8 +724,7 @@ description: "Description from SKILL.md"
             .expect("write valid SKILL.md");
 
             for container_dir in [".skill-studio", "learned", "superpowers"] {
-                fs::create_dir_all(skills_dir.join(container_dir))
-                    .expect("create container dir");
+                fs::create_dir_all(skills_dir.join(container_dir)).expect("create container dir");
             }
 
             let mut skills =
@@ -807,13 +820,16 @@ description: "Description from SKILL.md"
             let config: AppConfig =
                 serde_json::from_value(config_value).expect("deserialize config with projects");
 
-            let mut skills = ScannerService::scan_scoped_skills(&config)
-                .expect("scan scoped skills");
+            let mut skills =
+                ScannerService::scan_scoped_skills(&config).expect("scan scoped skills");
             skills.sort_by(|a, b| a.instance_id.cmp(&b.instance_id));
 
             assert_eq!(skills.len(), 4);
             assert_eq!(
-                skills.iter().map(|skill| skill.instance_id.as_str()).collect::<Vec<_>>(),
+                skills
+                    .iter()
+                    .map(|skill| skill.instance_id.as_str())
+                    .collect::<Vec<_>>(),
                 vec![
                     "global:global-only-skill",
                     "global:shared-skill",
@@ -827,7 +843,12 @@ description: "Description from SKILL.md"
                 .find(|skill| skill.instance_id == "global:shared-skill")
                 .expect("global shared skill");
             assert_eq!(global_shared.id, "shared-skill");
-            assert_eq!(serde_json::to_value(global_shared).expect("serialize global").get("scope"), Some(&json!("global")));
+            assert_eq!(
+                serde_json::to_value(global_shared)
+                    .expect("serialize global")
+                    .get("scope"),
+                Some(&json!("global"))
+            );
             assert_eq!(global_shared.project_id, None);
             assert_eq!(global_shared.project_name, None);
 
@@ -836,9 +857,17 @@ description: "Description from SKILL.md"
                 .find(|skill| skill.instance_id == "project:project-alpha:shared-skill")
                 .expect("project shared skill");
             assert_eq!(project_shared.id, "shared-skill");
-            assert_eq!(serde_json::to_value(project_shared).expect("serialize project").get("scope"), Some(&json!("project")));
+            assert_eq!(
+                serde_json::to_value(project_shared)
+                    .expect("serialize project")
+                    .get("scope"),
+                Some(&json!("project"))
+            );
             assert_eq!(project_shared.project_id.as_deref(), Some("project-alpha"));
-            assert_eq!(project_shared.project_name.as_deref(), Some("Project Alpha"));
+            assert_eq!(
+                project_shared.project_name.as_deref(),
+                Some("Project Alpha")
+            );
         });
     }
 
@@ -848,15 +877,21 @@ description: "Description from SKILL.md"
             let global_skills_dir = home.join(".skills-manager").join("skills");
             let global_skill_dir = global_skills_dir.join("shared-skill");
             fs::create_dir_all(&global_skill_dir).expect("create global skill dir");
-            fs::write(global_skill_dir.join("SKILL.md"), "---\nname: shared-skill\n---\n")
-                .expect("write global skill");
+            fs::write(
+                global_skill_dir.join("SKILL.md"),
+                "---\nname: shared-skill\n---\n",
+            )
+            .expect("write global skill");
 
             let project_root = home.join("code").join("project-alpha");
             let project_skills_dir = project_root.join(".claude").join("skills");
             let project_skill_dir = project_skills_dir.join("shared-skill");
             fs::create_dir_all(&project_skill_dir).expect("create project skill dir");
-            fs::write(project_skill_dir.join("SKILL.md"), "---\nname: shared-skill\n---\n")
-                .expect("write project skill");
+            fs::write(
+                project_skill_dir.join("SKILL.md"),
+                "---\nname: shared-skill\n---\n",
+            )
+            .expect("write project skill");
 
             let tool_skills_dir = home.join(".claude").join("skills");
             fs::create_dir_all(&tool_skills_dir).expect("create tool skills dir");
@@ -883,11 +918,18 @@ description: "Description from SKILL.md"
                 }],
                 "active_project_id": "project-alpha",
                 "initialized": true
-            })).expect("deserialize config");
+            }))
+            .expect("deserialize config");
 
             let skills = ScannerService::scan_scoped_skills(&config).expect("scan scoped skills");
-            let global = skills.iter().find(|skill| skill.instance_id == "global:shared-skill").expect("global instance");
-            let project = skills.iter().find(|skill| skill.instance_id == "project:project-alpha:shared-skill").expect("project instance");
+            let global = skills
+                .iter()
+                .find(|skill| skill.instance_id == "global:shared-skill")
+                .expect("global instance");
+            let project = skills
+                .iter()
+                .find(|skill| skill.instance_id == "project:project-alpha:shared-skill")
+                .expect("project instance");
 
             assert_eq!(global.enabled.get("claude").copied(), Some(false));
             assert_eq!(project.enabled.get("claude").copied(), Some(true));
@@ -900,14 +942,20 @@ description: "Description from SKILL.md"
             let global_skills_dir = home.join(".skills-manager").join("skills");
             let global_skill_dir = global_skills_dir.join("shared-skill");
             fs::create_dir_all(&global_skill_dir).expect("create global skill dir");
-            fs::write(global_skill_dir.join("SKILL.md"), "---\nname: shared-skill\n---\n")
-                .expect("write global skill");
+            fs::write(
+                global_skill_dir.join("SKILL.md"),
+                "---\nname: shared-skill\n---\n",
+            )
+            .expect("write global skill");
 
             let iflow_skills_dir = home.join(".iflow").join("skills");
             let copied_skill_dir = iflow_skills_dir.join("shared-skill");
             fs::create_dir_all(&copied_skill_dir).expect("create copied skill dir");
-            fs::write(copied_skill_dir.join("SKILL.md"), "---\nname: shared-skill\n---\n")
-                .expect("write copied skill");
+            fs::write(
+                copied_skill_dir.join("SKILL.md"),
+                "---\nname: shared-skill\n---\n",
+            )
+            .expect("write copied skill");
 
             let config: AppConfig = serde_json::from_value(json!({
                 "version": "2.0.1",
@@ -922,7 +970,8 @@ description: "Description from SKILL.md"
                 },
                 "custom_tools": {},
                 "initialized": true
-            })).expect("deserialize config");
+            }))
+            .expect("deserialize config");
 
             let skills = ScannerService::scan_global_skills(&config).expect("scan global skills");
             let global = skills
@@ -959,8 +1008,8 @@ description: "Description from SKILL.md"
             )
             .expect("write nested skill");
 
-            let mut skills = ScannerService::scan_skills_with_config(&skills_dir, &config)
-                .expect("scan skills");
+            let mut skills =
+                ScannerService::scan_skills_with_config(&skills_dir, &config).expect("scan skills");
             skills.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.path.cmp(&b.path)));
 
             assert_eq!(skills.len(), 1);
@@ -987,8 +1036,11 @@ description: "Description from SKILL.md"
             let skills = ScannerService::scan_skills_with_config(&skills_dir, &config)
                 .expect("scan should not fail on duplicates");
             let dup_skills: Vec<_> = skills.iter().filter(|s| s.id == "dup-skill").collect();
-            assert_eq!(dup_skills.len(), 1, "expected single deduped entry, got {dup_skills:?}");
+            assert_eq!(
+                dup_skills.len(),
+                1,
+                "expected single deduped entry, got {dup_skills:?}"
+            );
         });
     }
-
 }

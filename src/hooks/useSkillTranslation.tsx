@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
-import { useLocation } from "react-router";
+import { useLocation } from "react-router-dom";
 import { useTranslation } from "../i18n";
 
 export interface SkillTranslationOutput {
@@ -35,12 +35,41 @@ export interface BatchTranslationResult {
   failed: BatchTranslationFailure[];
 }
 
+export type SkillFileTranslationStatus = "started" | "completed" | "failed";
+
+export interface SkillFileTranslationProgress {
+  current: number;
+  total: number;
+  instance_id: string;
+  skill_name: string;
+  path: string;
+  status: SkillFileTranslationStatus;
+  target_lang: string;
+}
+
+export interface SkillFileTranslationEntry {
+  path: string;
+  translation: SkillTranslationOutput;
+}
+
+export interface SkillFileTranslationFailure {
+  path: string;
+  reason: string;
+}
+
+export interface SkillFilesTranslationResult {
+  files: SkillFileTranslationEntry[];
+  failed: SkillFileTranslationFailure[];
+}
+
 type ViewMode = "translated" | "original";
 
 interface TranslationStore {
   results: Map<string, SkillTranslationOutput>;
+  fileResults: Map<string, SkillTranslationOutput>;
   view: Map<string, ViewMode>;
   inFlight: Map<string, Promise<SkillTranslationOutput>>;
+  fileInFlight: Map<string, Promise<SkillFilesTranslationResult>>;
 }
 
 interface SkillTranslationContextValue {
@@ -57,7 +86,14 @@ interface SkillTranslationContextValue {
     targetLang: string,
     onProgress?: (p: BatchTranslationProgress) => void
   ) => Promise<BatchTranslationResult>;
+  translateSkillFiles: (
+    instanceId: string,
+    targetLang: string,
+    force?: boolean,
+    onProgress?: (p: SkillFileTranslationProgress) => void
+  ) => Promise<SkillFilesTranslationResult>;
   getTranslation: (key: string) => SkillTranslationOutput | null;
+  getFileTranslation: (instanceId: string, targetLang: string, path: string) => SkillTranslationOutput | null;
   getView: (key: string) => ViewMode;
   setView: (key: string, mode: ViewMode) => void;
   preloadCachedSkills: (instanceIds: string[], targetLang: string) => Promise<void>;
@@ -71,11 +107,17 @@ interface SkillTranslationContextValue {
 
 const SkillTranslationContext = createContext<SkillTranslationContextValue | null>(null);
 
+function normalizeTranslationPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\.\/+/, "").replace(/^\/+/, "");
+}
+
 export function SkillTranslationProvider({ children }: { children: ReactNode }) {
   const storeRef = useRef<TranslationStore>({
     results: new Map(),
+    fileResults: new Map(),
     view: new Map(),
     inFlight: new Map(),
+    fileInFlight: new Map(),
   });
   const [, forceRender] = useState(0);
   const bump = useCallback(() => forceRender((n) => n + 1), []);
@@ -100,6 +142,9 @@ export function SkillTranslationProvider({ children }: { children: ReactNode }) 
 
   const cacheKey = (instanceId: string, targetLang: string) =>
     `${targetLang}::${instanceId}`;
+
+  const fileCacheKey = (instanceId: string, targetLang: string, path: string) =>
+    `${targetLang}::${instanceId}::${normalizeTranslationPath(path)}`;
 
   const translateSkill = useCallback(
     async (instanceId: string, targetLang: string, force: boolean = false): Promise<SkillTranslationOutput> => {
@@ -189,8 +234,70 @@ export function SkillTranslationProvider({ children }: { children: ReactNode }) 
     [bump]
   );
 
+  const translateSkillFiles = useCallback(
+    async (
+      instanceId: string,
+      targetLang: string,
+      force: boolean = false,
+      onProgress?: (p: SkillFileTranslationProgress) => void
+    ): Promise<SkillFilesTranslationResult> => {
+      const key = cacheKey(instanceId, targetLang);
+      const inflightKey = force ? `${key}::files::force` : `${key}::files`;
+      const existing = storeRef.current.fileInFlight.get(inflightKey);
+      if (existing) return existing;
+
+      const promise = (async () => {
+        let unlisten: UnlistenFn | null = null;
+        if (onProgress) {
+          unlisten = await listen<SkillFileTranslationProgress>(
+            "llm:skill-files-progress",
+            (event) => {
+              const payload = event.payload;
+              if (payload.instance_id === instanceId && payload.target_lang === targetLang) {
+                onProgress(payload);
+              }
+            }
+          );
+        }
+
+        try {
+          const result = await invoke<SkillFilesTranslationResult>("translate_skill_files", {
+            instanceId,
+            targetLang,
+            force,
+          });
+          for (const file of result.files) {
+            const normalizedPath = normalizeTranslationPath(file.path);
+            storeRef.current.fileResults.set(
+              fileCacheKey(instanceId, targetLang, normalizedPath),
+              file.translation,
+            );
+            if (normalizedPath.toLowerCase().endsWith("skill.md")) {
+              storeRef.current.results.set(key, file.translation);
+              storeRef.current.view.set(key, "translated");
+            }
+          }
+          bump();
+          return result;
+        } finally {
+          if (unlisten) unlisten();
+        }
+      })().finally(() => {
+        storeRef.current.fileInFlight.delete(inflightKey);
+      });
+
+      storeRef.current.fileInFlight.set(inflightKey, promise);
+      return promise;
+    },
+    [bump]
+  );
+
   const getTranslation = useCallback((key: string) => {
     return storeRef.current.results.get(key) ?? null;
+  }, []);
+
+  const getFileTranslation = useCallback((instanceId: string, targetLang: string, path: string) => {
+    return storeRef.current.fileResults.get(fileCacheKey(instanceId, targetLang, path)) ?? null;
   }, []);
 
   const getView = useCallback((key: string): ViewMode => {
@@ -207,6 +314,7 @@ export function SkillTranslationProvider({ children }: { children: ReactNode }) 
 
   const clearAll = useCallback(() => {
     storeRef.current.results.clear();
+    storeRef.current.fileResults.clear();
     storeRef.current.view.clear();
     bump();
   }, [bump]);
@@ -307,7 +415,9 @@ export function SkillTranslationProvider({ children }: { children: ReactNode }) 
     translateSkill,
     translateMarketplace,
     translateBatch,
+    translateSkillFiles,
     getTranslation,
+    getFileTranslation,
     getView,
     setView,
     preloadCachedSkills,

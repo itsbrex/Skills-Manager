@@ -16,11 +16,11 @@ use commands::{
     install_marketplace_skill_by_ref, install_skill_package_from_path, is_initialized,
     list_skill_packages, list_skills, logout_auth, mark_initialized, open_in_editor,
     read_directory_tree, read_file, refresh_editors, refresh_skills, refresh_tools,
-    remove_skill_package, save_config, save_llm_provider, scan_existing_skills,
-    set_tool_enabled, start_github_auth, start_google_auth, submit_feedback,
-    sync_marketplace_installed_skills, test_llm_provider, toggle_marketplace_source,
-    translate_marketplace_skill, translate_skill, translate_skills_batch,
-    translate_text_content, update_custom_tool, update_tool_paths, write_file,
+    remove_skill_package, save_config, save_llm_provider, scan_existing_skills, set_tool_enabled,
+    start_github_auth, start_google_auth, submit_feedback, sync_marketplace_installed_skills,
+    test_llm_provider, toggle_marketplace_source, translate_marketplace_skill, translate_skill,
+    translate_skill_files, translate_skills_batch, translate_text_content, update_custom_tool,
+    update_tool_paths, write_file,
 };
 use services::{AppCache, MarketplaceCache};
 use tauri::{Emitter, Manager};
@@ -112,6 +112,7 @@ pub fn run() {
             clear_llm_provider,
             test_llm_provider,
             translate_skill,
+            translate_skill_files,
             translate_marketplace_skill,
             translate_skills_batch,
             translate_text_content,

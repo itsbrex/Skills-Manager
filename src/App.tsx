@@ -112,8 +112,8 @@ function App() {
     >
       <I18nProvider language={language} onLanguageChange={handleLanguageChange}>
         <AuthProvider>
-          <SkillTranslationProvider>
-            <BrowserRouter>
+          <BrowserRouter>
+            <SkillTranslationProvider>
               <Routes>
                 <Route path="/" element={<Layout />}>
                   <Route index element={<Skills />} />
@@ -125,8 +125,8 @@ function App() {
                 <Route path="/editor" element={<EditorPage />} />
               </Routes>
               <ToastContainer toasts={toasts} onRemove={removeToast} />
-            </BrowserRouter>
-          </SkillTranslationProvider>
+            </SkillTranslationProvider>
+          </BrowserRouter>
         </AuthProvider>
       </I18nProvider>
     </ThemeProvider>

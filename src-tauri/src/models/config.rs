@@ -1,5 +1,5 @@
-use crate::models::marketplace::{MarketplaceSource, SourceType};
 use crate::models::auth::AuthSession;
+use crate::models::marketplace::{MarketplaceSource, SourceType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -132,7 +132,11 @@ impl TryFrom<LegacyProjectBinding> for ProjectBinding {
     fn try_from(value: LegacyProjectBinding) -> Result<Self, Self::Error> {
         let skills_dir = value
             .skills_dir
-            .or_else(|| value.root_path.map(|root| root.join(".claude").join("skills")))
+            .or_else(|| {
+                value
+                    .root_path
+                    .map(|root| root.join(".claude").join("skills"))
+            })
             .ok_or_else(|| "missing field `skills_dir`".to_string())?;
 
         Ok(Self {

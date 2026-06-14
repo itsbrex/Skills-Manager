@@ -89,35 +89,25 @@ fn build_marketplace_skill_from_reference(
     if skill_path.is_empty() && !is_github_reference {
         return Err("skill_path is required".to_string());
     }
-    let source_id = reference
-        .marketplace_source_id
-        .unwrap_or_else(|| {
-            if is_github_reference {
-                DIRECT_GITHUB_SOURCE_ID.to_string()
-            } else {
-                "marketplace".to_string()
-            }
-        });
-    let slug = reference
-        .marketplace_skill_slug
-        .clone()
-        .or_else(|| {
-            if skill_path.is_empty() {
-                repo_url
-                    .rsplit('/')
-                    .next()
-                    .map(str::to_string)
-                    .filter(|value| !value.trim().is_empty())
-            } else {
-                Some(skill_path.clone())
-            }
-        });
-    let fallback_id = build_reference_skill_id(
-        &source_id,
-        &repo_url,
-        &skill_path,
-        slug.as_deref(),
-    );
+    let source_id = reference.marketplace_source_id.unwrap_or_else(|| {
+        if is_github_reference {
+            DIRECT_GITHUB_SOURCE_ID.to_string()
+        } else {
+            "marketplace".to_string()
+        }
+    });
+    let slug = reference.marketplace_skill_slug.clone().or_else(|| {
+        if skill_path.is_empty() {
+            repo_url
+                .rsplit('/')
+                .next()
+                .map(str::to_string)
+                .filter(|value| !value.trim().is_empty())
+        } else {
+            Some(skill_path.clone())
+        }
+    });
+    let fallback_id = build_reference_skill_id(&source_id, &repo_url, &skill_path, slug.as_deref());
     let name = reference.name.trim().to_string();
     let name = if name.is_empty() {
         skill_display_name(slug.as_deref(), &repo_url, &skill_path)
@@ -176,7 +166,10 @@ fn is_remote_skill_manifest_name(name: &str) -> bool {
     )
 }
 
-fn expand_skill_group_reference(skill: &MarketplaceSkill, tree: &SkillFileNode) -> Vec<MarketplaceSkill> {
+fn expand_skill_group_reference(
+    skill: &MarketplaceSkill,
+    tree: &SkillFileNode,
+) -> Vec<MarketplaceSkill> {
     let root_has_manifest = tree.children.as_ref().is_some_and(|children| {
         children
             .iter()
@@ -242,7 +235,12 @@ fn skill_display_name<'a>(
     }
     slug.and_then(|value| value.rsplit('/').next())
         .filter(|value| !value.trim().is_empty())
-        .or_else(|| repo_url.rsplit('/').next().filter(|value| !value.trim().is_empty()))
+        .or_else(|| {
+            repo_url
+                .rsplit('/')
+                .next()
+                .filter(|value| !value.trim().is_empty())
+        })
 }
 
 fn resolve_marketplace_source_name(
@@ -430,7 +428,11 @@ async fn merge_installed_marketplace_skills_into_page(
         normalized_source_filter,
     );
 
-    let existing_ids: HashSet<String> = response.skills.iter().map(|skill| skill.id.clone()).collect();
+    let existing_ids: HashSet<String> = response
+        .skills
+        .iter()
+        .map(|skill| skill.id.clone())
+        .collect();
     let mut hydrated_installed = Vec::new();
     for skill in installed_skills
         .into_iter()
@@ -752,8 +754,12 @@ pub async fn install_marketplace_skill_by_ref(
     let skill = build_marketplace_skill_from_reference(reference)?;
     let result = if let Some(repo_url) = skill.repo_url.as_deref() {
         let requested_path = skill.skill_path.as_deref().unwrap_or_default();
-        let tree = MarketplaceService::fetch_skill_files(repo_url, requested_path, github_token.as_deref())
-            .await?;
+        let tree = MarketplaceService::fetch_skill_files(
+            repo_url,
+            requested_path,
+            github_token.as_deref(),
+        )
+        .await?;
         let group_members = expand_skill_group_reference(&skill, &tree);
 
         if group_members.is_empty() {
@@ -960,11 +966,11 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{Duration, SystemTime};
 
-    use crate::services::marketplace::{DIRECT_GITHUB_SOURCE_ID, DIRECT_GITHUB_SOURCE_NAME};
     use crate::models::{
         InstallStatus, MarketplaceMeta, MarketplaceSkill, MarketplaceSkillsResponse,
         MarketplaceSource, Skill, SkillFileNode, SkillSource, SourceType,
     };
+    use crate::services::marketplace::{DIRECT_GITHUB_SOURCE_ID, DIRECT_GITHUB_SOURCE_NAME};
     use crate::test_support::with_temp_home;
 
     use super::{
@@ -972,8 +978,7 @@ mod tests {
         expand_skill_group_reference, load_last_update_check_time, persist_update_check_time,
         prepend_missing_installed_marketplace_skills, resolve_cache_source_scope,
         should_hydrate_missing_installed_marketplace_skill, should_run_marketplace_update_check,
-        MarketplaceSkillReference,
-        MARKETPLACE_UPDATE_CHECK_INTERVAL,
+        MarketplaceSkillReference, MARKETPLACE_UPDATE_CHECK_INTERVAL,
     };
 
     fn make_source(id: &str, enabled: bool) -> MarketplaceSource {
@@ -1172,7 +1177,9 @@ mod tests {
             created_at: None,
             repo_url: Some("https://github.com/JimLiu/baoyu-skills".to_string()),
             skill_path: Some("skills".to_string()),
-            external_url: Some("https://github.com/JimLiu/baoyu-skills/tree/main/skills".to_string()),
+            external_url: Some(
+                "https://github.com/JimLiu/baoyu-skills/tree/main/skills".to_string(),
+            ),
             remote_revision: None,
             tags: Vec::new(),
             install_status: InstallStatus::NotInstalled,

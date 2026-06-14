@@ -58,8 +58,12 @@ impl Skill {
         self.project_name = project_name;
         self.instance_id = match (&self.scope, &self.project_id) {
             (SkillScope::Global, _) => Self::global_instance_id(&self.id),
-            (SkillScope::Project, Some(project_id)) => Self::project_instance_id(project_id, &self.id),
-            (SkillScope::Project, None) => panic!("project_id is required for project-scoped skills"),
+            (SkillScope::Project, Some(project_id)) => {
+                Self::project_instance_id(project_id, &self.id)
+            }
+            (SkillScope::Project, None) => {
+                panic!("project_id is required for project-scoped skills")
+            }
         };
         self
     }
@@ -120,4 +124,3 @@ pub enum SkillSource {
     Marketplace,
     Vault,
 }
-

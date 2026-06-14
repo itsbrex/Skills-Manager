@@ -26,10 +26,7 @@ pub async fn check_for_updates(
         .header("User-Agent", "Skills-Manager-App")
         .header("Accept", "application/vnd.github+json");
 
-    if let Some(token) = github_token
-        .map(|t| t.trim())
-        .filter(|t| !t.is_empty())
-    {
+    if let Some(token) = github_token.map(|t| t.trim()).filter(|t| !t.is_empty()) {
         request = request.bearer_auth(token);
     }
 

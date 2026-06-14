@@ -3,10 +3,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::models::skill_package::{SkillPackageManifest, SkillPackageMember};
 use crate::models::InstalledSkillPackage;
-use crate::models::skill_package::{
-    SkillPackageManifest, SkillPackageMember,
-};
 
 pub struct SkillPackageService;
 
@@ -41,8 +39,8 @@ impl SkillPackageService {
     }
 
     pub fn read_manifest(path: &Path) -> Result<SkillPackageManifest, String> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read skill-pack.toml: {e}"))?;
+        let content =
+            fs::read_to_string(path).map_err(|e| format!("Failed to read skill-pack.toml: {e}"))?;
         Self::parse_manifest(&content)
     }
 
@@ -76,15 +74,21 @@ impl SkillPackageService {
         Ok(packages)
     }
 
-    pub fn list_discovered_packages(skills_dir: &Path) -> Result<Vec<InstalledSkillPackage>, String> {
+    pub fn list_discovered_packages(
+        skills_dir: &Path,
+    ) -> Result<Vec<InstalledSkillPackage>, String> {
         let mut packages = Self::list_installed_packages()?;
-        let existing_ids: HashSet<String> = packages.iter().map(|item| item.package_id.clone()).collect();
+        let existing_ids: HashSet<String> = packages
+            .iter()
+            .map(|item| item.package_id.clone())
+            .collect();
 
         if skills_dir.exists() {
-            for entry in fs::read_dir(skills_dir)
-                .map_err(|e| format!("Failed to read skills directory for package discovery: {e}"))?
-            {
-                let entry = entry.map_err(|e| format!("Failed to read skills directory entry: {e}"))?;
+            for entry in fs::read_dir(skills_dir).map_err(|e| {
+                format!("Failed to read skills directory for package discovery: {e}")
+            })? {
+                let entry =
+                    entry.map_err(|e| format!("Failed to read skills directory entry: {e}"))?;
                 let path = entry.path();
                 if !path.is_dir() {
                     continue;
@@ -93,7 +97,10 @@ impl SkillPackageService {
                 let Some(package_id) = path.file_name().and_then(|name| name.to_str()) else {
                     continue;
                 };
-                if package_id.starts_with('.') || existing_ids.contains(package_id) || is_skill_dir(&path) {
+                if package_id.starts_with('.')
+                    || existing_ids.contains(package_id)
+                    || is_skill_dir(&path)
+                {
                     continue;
                 }
 
@@ -101,7 +108,8 @@ impl SkillPackageService {
                 for child in fs::read_dir(&path)
                     .map_err(|e| format!("Failed to read package container directory: {e}"))?
                 {
-                    let child = child.map_err(|e| format!("Failed to read package child entry: {e}"))?;
+                    let child =
+                        child.map_err(|e| format!("Failed to read package child entry: {e}"))?;
                     let child_path = child.path();
                     if !child_path.is_dir() || !is_skill_dir(&child_path) {
                         continue;
@@ -210,8 +218,9 @@ impl SkillPackageService {
             if let Some(path) = &package.path {
                 let group_dir = PathBuf::from(path);
                 if group_dir.exists() {
-                    fs::remove_dir_all(&group_dir)
-                        .map_err(|e| format!("Failed to remove discovered package directory: {e}"))?;
+                    fs::remove_dir_all(&group_dir).map_err(|e| {
+                        format!("Failed to remove discovered package directory: {e}")
+                    })?;
                 }
             }
         } else {
@@ -308,14 +317,16 @@ fn current_unix_timestamp() -> i64 {
 }
 
 fn is_skill_dir(path: &Path) -> bool {
-    path.join("meta.json").exists() || path.join("SKILL.md").exists() || path.join("skill.md").exists()
+    path.join("meta.json").exists()
+        || path.join("SKILL.md").exists()
+        || path.join("skill.md").exists()
 }
 
 #[cfg(test)]
 mod tests {
     use super::SkillPackageService;
-    use crate::models::{AppConfig, InstalledSkillPackage};
     use crate::models::skill_package::SkillPackageInstallStrategy;
+    use crate::models::{AppConfig, InstalledSkillPackage};
     use crate::services::ScannerService;
     use crate::test_support::with_temp_home;
     use serde_json::Value;
@@ -324,8 +335,8 @@ mod tests {
     #[test]
     fn list_installed_skill_packages_returns_empty_when_packages_dir_missing() {
         with_temp_home(|_home| {
-            let packages = SkillPackageService::list_installed_packages()
-                .expect("list installed packages");
+            let packages =
+                SkillPackageService::list_installed_packages().expect("list installed packages");
             assert!(packages.is_empty());
         });
     }
@@ -345,19 +356,17 @@ mod tests {
                 updated_at: 2,
             };
 
-            SkillPackageService::write_installed_package(&state)
-                .expect("write installed package");
+            SkillPackageService::write_installed_package(&state).expect("write installed package");
             let stored = SkillPackageService::read_installed_package("superpowers")
                 .expect("read installed package");
 
             assert_eq!(stored, state);
-            assert!(
-                home.join(".skills-manager")
-                    .join("packages")
-                    .join("superpowers")
-                    .join("state.json")
-                    .exists()
-            );
+            assert!(home
+                .join(".skills-manager")
+                .join("packages")
+                .join("superpowers")
+                .join("state.json")
+                .exists());
         });
     }
 
@@ -387,7 +396,8 @@ path = "skills/writing-plans"
             )
             .expect("write manifest");
 
-            let err = SkillPackageService::read_manifest(&manifest_path).expect_err("duplicate member ids");
+            let err = SkillPackageService::read_manifest(&manifest_path)
+                .expect_err("duplicate member ids");
             assert!(err.contains("duplicate member_id"), "{err}");
         });
     }
@@ -418,7 +428,8 @@ path = "skills/writing-plans"
             )
             .expect("write manifest");
 
-            let err = SkillPackageService::read_manifest(&manifest_path).expect_err("duplicate skill ids");
+            let err = SkillPackageService::read_manifest(&manifest_path)
+                .expect_err("duplicate skill ids");
             assert!(err.contains("duplicate skill_id"), "{err}");
         });
     }
@@ -465,15 +476,20 @@ name = "brainstorming"
                 .expect("create translate dir");
             fs::create_dir_all(skills_dir.join("baoyu-skills").join("baoyu-slide-deck"))
                 .expect("create slide dir");
-            fs::create_dir_all(skills_dir.join("plain-skill"))
-                .expect("create plain skill dir");
+            fs::create_dir_all(skills_dir.join("plain-skill")).expect("create plain skill dir");
             fs::write(
-                skills_dir.join("baoyu-skills").join("baoyu-translate").join("SKILL.md"),
+                skills_dir
+                    .join("baoyu-skills")
+                    .join("baoyu-translate")
+                    .join("SKILL.md"),
                 "---\nname: baoyu-translate\n---\n",
             )
             .expect("write translate skill");
             fs::write(
-                skills_dir.join("baoyu-skills").join("baoyu-slide-deck").join("SKILL.md"),
+                skills_dir
+                    .join("baoyu-skills")
+                    .join("baoyu-slide-deck")
+                    .join("SKILL.md"),
                 "---\nname: baoyu-slide-deck\n---\n",
             )
             .expect("write slide skill");
@@ -490,7 +506,10 @@ name = "brainstorming"
             assert_eq!(packages[0].package_id, "baoyu-skills");
             assert_eq!(
                 packages[0].installed_members,
-                vec!["baoyu-slide-deck".to_string(), "baoyu-translate".to_string()]
+                vec![
+                    "baoyu-slide-deck".to_string(),
+                    "baoyu-translate".to_string()
+                ]
             );
             assert_eq!(
                 packages[0].path.as_deref(),
@@ -529,12 +548,18 @@ path = "skills/writing-plans"
             )
             .expect("write manifest");
             fs::write(
-                source_dir.join("skills").join("brainstorming").join("SKILL.md"),
+                source_dir
+                    .join("skills")
+                    .join("brainstorming")
+                    .join("SKILL.md"),
                 "---\nname: brainstorming\n---\n",
             )
             .expect("write brainstorming skill");
             fs::write(
-                source_dir.join("skills").join("writing-plans").join("SKILL.md"),
+                source_dir
+                    .join("skills")
+                    .join("writing-plans")
+                    .join("SKILL.md"),
                 "---\nname: writing-plans\n---\n",
             )
             .expect("write writing plans skill");
@@ -581,7 +606,10 @@ path = "skills/brainstorming"
             )
             .expect("write manifest");
             fs::write(
-                source_dir.join("skills").join("brainstorming").join("SKILL.md"),
+                source_dir
+                    .join("skills")
+                    .join("brainstorming")
+                    .join("SKILL.md"),
                 "---\nname: brainstorming\n---\n",
             )
             .expect("write skill");
@@ -630,7 +658,10 @@ path = "skills/brainstorming"
             )
             .expect("write manifest");
             fs::write(
-                source_dir.join("skills").join("brainstorming").join("SKILL.md"),
+                source_dir
+                    .join("skills")
+                    .join("brainstorming")
+                    .join("SKILL.md"),
                 "---\nname: brainstorming\n---\n",
             )
             .expect("write skill");
@@ -650,12 +681,11 @@ path = "skills/brainstorming"
 
             assert!(!skills_dir.join("superpowers--brainstorming").exists());
             assert!(skills_dir.join("plain-skill").exists());
-            assert!(
-                !home.join(".skills-manager")
-                    .join("packages")
-                    .join("superpowers")
-                    .exists()
-            );
+            assert!(!home
+                .join(".skills-manager")
+                .join("packages")
+                .join("superpowers")
+                .exists());
         });
     }
 
@@ -666,11 +696,8 @@ path = "skills/brainstorming"
             let group_dir = skills_dir.join("team-pack");
             let member_dir = group_dir.join("member-a");
             fs::create_dir_all(&member_dir).expect("create member dir");
-            fs::write(
-                member_dir.join("SKILL.md"),
-                "---\nname: member-a\n---\n",
-            )
-            .expect("write member skill");
+            fs::write(member_dir.join("SKILL.md"), "---\nname: member-a\n---\n")
+                .expect("write member skill");
 
             SkillPackageService::remove_package("team-pack", &skills_dir)
                 .expect("remove discovered group");
@@ -709,12 +736,18 @@ path = "skills/writing-plans"
             )
             .expect("write manifest");
             fs::write(
-                source_dir.join("skills").join("brainstorming").join("SKILL.md"),
+                source_dir
+                    .join("skills")
+                    .join("brainstorming")
+                    .join("SKILL.md"),
                 "---\nname: brainstorming\n---\n",
             )
             .expect("write brainstorming skill");
             fs::write(
-                source_dir.join("skills").join("writing-plans").join("SKILL.md"),
+                source_dir
+                    .join("skills")
+                    .join("writing-plans")
+                    .join("SKILL.md"),
                 "---\nname: writing-plans\n---\n",
             )
             .expect("write writing plans skill");
@@ -726,8 +759,8 @@ path = "skills/writing-plans"
                 .expect("install package");
 
             let config = AppConfig::default();
-            let mut scanned = ScannerService::scan_skills_with_config(&skills_dir, &config)
-                .expect("scan skills");
+            let mut scanned =
+                ScannerService::scan_skills_with_config(&skills_dir, &config).expect("scan skills");
             scanned.sort_by(|a, b| a.id.cmp(&b.id));
             let ids: Vec<&str> = scanned.iter().map(|skill| skill.id.as_str()).collect();
 

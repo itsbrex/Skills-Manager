@@ -19,8 +19,10 @@ pub fn install_skill_package_from_path(
 ) -> Result<InstalledSkillPackage, String> {
     let manager = ConfigManager::new();
     let config = manager.load()?;
-    let state =
-        SkillPackageService::install_from_local_source(Path::new(&source_path), &config.skills_dir)?;
+    let state = SkillPackageService::install_from_local_source(
+        Path::new(&source_path),
+        &config.skills_dir,
+    )?;
     app_cache.invalidate_skills();
     Ok(state)
 }

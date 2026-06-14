@@ -3,7 +3,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::models::{AppConfig, ProjectBinding, SkillMetadata, SourceType, ToolConfig, SUPPORTED_TOOLS};
+use crate::models::{
+    AppConfig, ProjectBinding, SkillMetadata, SourceType, ToolConfig, SUPPORTED_TOOLS,
+};
 #[cfg(windows)]
 use crate::services::linker::LinkerService;
 use crate::services::linker::{is_symlink_or_junction, normalize_path, remove_symlink_or_junction};
@@ -106,12 +108,19 @@ impl ConfigManager {
                 format!("global:{}", trimmed_id)
             };
 
-            if normalized.insert(normalized_id, SkillMetadata { tags }).is_some() {
+            if normalized
+                .insert(normalized_id, SkillMetadata { tags })
+                .is_some()
+            {
                 changed = true;
             }
         }
 
-        if changed { normalized } else { metadata.clone() }
+        if changed {
+            normalized
+        } else {
+            metadata.clone()
+        }
     }
 
     fn normalize_project_name_from_skills_dir(skills_dir: &Path) -> String {
@@ -172,7 +181,11 @@ impl ConfigManager {
                 .get("skills_dir")
                 .and_then(|value| value.as_str())
                 .map(PathBuf::from)
-                .or_else(|| legacy_root_path.clone().map(|root| root.join(".claude").join("skills")));
+                .or_else(|| {
+                    legacy_root_path
+                        .clone()
+                        .map(|root| root.join(".claude").join("skills"))
+                });
 
             let Some(skills_dir_path) = skills_dir.take() else {
                 changed = true;
@@ -221,7 +234,12 @@ impl ConfigManager {
         let normalized_active_project_id = config
             .active_project_id
             .as_ref()
-            .filter(|active_id| config.projects.iter().any(|project| &project.id == *active_id))
+            .filter(|active_id| {
+                config
+                    .projects
+                    .iter()
+                    .any(|project| &project.id == *active_id)
+            })
             .cloned();
         if config.active_project_id != normalized_active_project_id {
             config.active_project_id = normalized_active_project_id;
@@ -731,9 +749,12 @@ mod tests {
             manager.save(&config).expect("save config");
 
             let loaded = manager.load().expect("load config");
-            assert_eq!(loaded.skill_metadata.get("global:shared-skill"), Some(&SkillMetadata {
-                tags: vec!["legacy-tag".to_string()],
-            }));
+            assert_eq!(
+                loaded.skill_metadata.get("global:shared-skill"),
+                Some(&SkillMetadata {
+                    tags: vec!["legacy-tag".to_string()],
+                })
+            );
             assert_eq!(loaded.skill_metadata.get("shared-skill"), None);
         });
     }
@@ -763,7 +784,10 @@ mod tests {
             let loaded_value = serde_json::to_value(&loaded).expect("serialize loaded config");
 
             assert_eq!(loaded_value.get("projects"), Some(&json!([])));
-            assert_eq!(loaded_value.get("active_project_id"), Some(&serde_json::Value::Null));
+            assert_eq!(
+                loaded_value.get("active_project_id"),
+                Some(&serde_json::Value::Null)
+            );
 
             let updated_config_json = json!({
                 "version": "2.0.1",
@@ -798,18 +822,24 @@ mod tests {
             assert_eq!(reloaded.projects.len(), 2);
             assert_eq!(
                 reloaded.projects[0].skills_dir,
-                home_dir.join("code").join("alpha").join(".claude").join("skills")
+                home_dir
+                    .join("code")
+                    .join("alpha")
+                    .join(".claude")
+                    .join("skills")
             );
             assert_eq!(reloaded.projects[1].name, "custom-skills");
 
             manager.save(&reloaded).expect("save config with projects");
 
-            let saved_value: serde_json::Value = serde_json::from_str(
-                &fs::read_to_string(&config_path).expect("read saved config"),
-            )
-            .expect("parse saved config");
+            let saved_value: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&config_path).expect("read saved config"))
+                    .expect("parse saved config");
 
-            assert_eq!(saved_value.get("active_project_id"), Some(&serde_json::Value::Null));
+            assert_eq!(
+                saved_value.get("active_project_id"),
+                Some(&serde_json::Value::Null)
+            );
             assert_eq!(
                 saved_value
                     .get("projects")
@@ -864,7 +894,11 @@ mod tests {
             assert_eq!(loaded.projects.len(), 1);
             assert_eq!(
                 loaded.projects[0].skills_dir,
-                home_dir.join("code").join("alpha").join(".claude").join("skills")
+                home_dir
+                    .join("code")
+                    .join("alpha")
+                    .join(".claude")
+                    .join("skills")
             );
             assert_eq!(loaded.active_project_id.as_deref(), Some("project-alpha"));
         });
@@ -1000,7 +1034,10 @@ mod tests {
                 .expect("atomic save should replace readonly config file");
 
             let restored = manager.load().expect("load config");
-            assert!(restored.initialized, "updated config should persist after save");
+            assert!(
+                restored.initialized,
+                "updated config should persist after save"
+            );
         });
     }
 }

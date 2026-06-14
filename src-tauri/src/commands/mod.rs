@@ -25,7 +25,7 @@ pub use llm::{
     clear_llm_provider, clear_translation_cache, get_cached_marketplace_translations,
     get_cached_skill_translations, get_cached_text_translation, get_llm_provider,
     save_llm_provider, test_llm_provider, translate_marketplace_skill, translate_skill,
-    translate_skills_batch, translate_text_content,
+    translate_skill_files, translate_skills_batch, translate_text_content,
 };
 pub use marketplace::{
     check_marketplace_updates_if_stale, fetch_marketplace_skill_descriptions,

@@ -3,8 +3,8 @@ use std::path::Path;
 
 use crate::models::{AppConfig, InstalledSkillPackage, Skill, SkillScope};
 use crate::services::{
-    is_symlink_or_junction, AppCache, ConfigManager, LinkerService,
-    ScannerService, SkillPackageService,
+    is_symlink_or_junction, AppCache, ConfigManager, LinkerService, ScannerService,
+    SkillPackageService,
 };
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -167,7 +167,12 @@ fn apply_skill_tool_enabled(
             return Err(format!("Skill not found: {}", instance_id));
         }
 
-        return LinkerService::enable_skill_for_tool(&skill_path, &tool_config.skills_path, &skill.id, tool_id);
+        return LinkerService::enable_skill_for_tool(
+            &skill_path,
+            &tool_config.skills_path,
+            &skill.id,
+            tool_id,
+        );
     }
 
     let skill = load_skill_by_instance_id(config, instance_id)?;
@@ -182,7 +187,10 @@ fn apply_skill_tool_enabled(
             LinkerService::disable_skill_for_tool(&tool_config.skills_path, &skill.id, tool_id)
         }
         crate::services::LinkStatus::Missing => Ok(()),
-        _ => Err(format!("Skill target belongs to another instance: {}", instance_id)),
+        _ => Err(format!(
+            "Skill target belongs to another instance: {}",
+            instance_id
+        )),
     }
 }
 
@@ -202,7 +210,11 @@ fn delete_skill_from_disk(config: &AppConfig, instance_id: &str) -> Result<(), S
             &skill.scope,
         ) {
             crate::services::LinkStatus::Valid => {
-                let _ = LinkerService::disable_skill_for_tool(&tool_config.skills_path, &skill.id, &tool_id);
+                let _ = LinkerService::disable_skill_for_tool(
+                    &tool_config.skills_path,
+                    &skill.id,
+                    &tool_id,
+                );
             }
             crate::services::LinkStatus::Missing => {}
             _ => {}
@@ -272,7 +284,8 @@ fn resolve_batch_targets(
 
                     let Some(preferred_skill) = matching_skills
                         .iter()
-                        .find(|skill| skill.scope == SkillScope::Global) else {
+                        .find(|skill| skill.scope == SkillScope::Global)
+                    else {
                         failures.push(batch_failure(
                             BatchSkillToolTargetKind::Group,
                             target.id.clone(),
@@ -413,9 +426,13 @@ pub fn batch_set_skill_tools(
         let skill_path = skills_by_instance_id
             .get(&operation.skill_id)
             .map(|skill| skill.path.as_path());
-        if let Err(message) =
-            apply_skill_tool_enabled(&config, &operation.skill_id, &operation.tool_id, should_enable, skill_path)
-        {
+        if let Err(message) = apply_skill_tool_enabled(
+            &config,
+            &operation.skill_id,
+            &operation.tool_id,
+            should_enable,
+            skill_path,
+        ) {
             failures.push(batch_failure(
                 operation.target_kind.clone(),
                 operation.target_id.clone(),
@@ -433,8 +450,10 @@ pub fn batch_set_skill_tools(
         cache.invalidate_skills();
     }
 
-    let failures: Vec<BatchSetSkillToolsFailure> =
-        failures.into_iter().map(BatchFailureContext::into_failure).collect();
+    let failures: Vec<BatchSetSkillToolsFailure> = failures
+        .into_iter()
+        .map(BatchFailureContext::into_failure)
+        .collect();
     let failed_count = failures.len();
 
     Ok(BatchSetSkillToolsResponse {
@@ -535,8 +554,14 @@ mod tests {
             package_id: package_id.to_string(),
             name: package_id.to_string(),
             version: "1.0.0".to_string(),
-            installed_members: installed_members.iter().map(|item| item.to_string()).collect(),
-            selected_members: installed_members.iter().map(|item| item.to_string()).collect(),
+            installed_members: installed_members
+                .iter()
+                .map(|item| item.to_string())
+                .collect(),
+            selected_members: installed_members
+                .iter()
+                .map(|item| item.to_string())
+                .collect(),
             path: None,
             manifest_hash: None,
             installed_at: 0,
@@ -670,7 +695,10 @@ mod tests {
             delete_skill_from_disk(&config, "global:baoyu-translate").expect("delete nested skill");
 
             assert!(!nested_skill_dir.exists());
-            assert!(tool_skills_dir.join("baoyu-translate").symlink_metadata().is_err());
+            assert!(tool_skills_dir
+                .join("baoyu-translate")
+                .symlink_metadata()
+                .is_err());
         });
     }
 
@@ -859,10 +887,20 @@ mod tests {
             let global_skills_dir = home.join(".skills-manager").join("skills");
             let project_root = home.join("code").join("project-alpha");
             let project_skills_dir = project_root.join(".claude").join("skills");
-            fs::create_dir_all(global_skills_dir.join("shared-skill")).expect("create global shared skill");
-            fs::create_dir_all(project_skills_dir.join("shared-skill")).expect("create project shared skill");
-            fs::write(global_skills_dir.join("shared-skill").join("SKILL.md"), "---\nname: shared-skill\n---\n").expect("write global skill");
-            fs::write(project_skills_dir.join("shared-skill").join("SKILL.md"), "---\nname: shared-skill\n---\n").expect("write project skill");
+            fs::create_dir_all(global_skills_dir.join("shared-skill"))
+                .expect("create global shared skill");
+            fs::create_dir_all(project_skills_dir.join("shared-skill"))
+                .expect("create project shared skill");
+            fs::write(
+                global_skills_dir.join("shared-skill").join("SKILL.md"),
+                "---\nname: shared-skill\n---\n",
+            )
+            .expect("write global skill");
+            fs::write(
+                project_skills_dir.join("shared-skill").join("SKILL.md"),
+                "---\nname: shared-skill\n---\n",
+            )
+            .expect("write project skill");
 
             let config: AppConfig = serde_json::from_value(serde_json::json!({
                 "version": "2.0.1",
@@ -880,7 +918,8 @@ mod tests {
                 }],
                 "active_project_id": "project-alpha",
                 "initialized": true,
-            })).expect("deserialize config");
+            }))
+            .expect("deserialize config");
 
             let error = load_skill_by_id(&config, "shared-skill")
                 .expect_err("legacy skill id should be ambiguous");
@@ -915,7 +954,13 @@ pub fn enable_skill(
     let config = manager.load()?;
 
     let skill = load_skill_by_instance_id(&config, &instance_id)?;
-    apply_skill_tool_enabled(&config, &instance_id, &tool_id, true, Some(skill.path.as_path()))?;
+    apply_skill_tool_enabled(
+        &config,
+        &instance_id,
+        &tool_id,
+        true,
+        Some(skill.path.as_path()),
+    )?;
 
     // Invalidate cache after modification
     cache.invalidate_skills();
@@ -937,7 +982,6 @@ pub fn disable_skill(
     cache.invalidate_skills();
     Ok(())
 }
-
 
 #[tauri::command]
 pub fn scan_existing_skills() -> Result<Vec<crate::models::Skill>, String> {

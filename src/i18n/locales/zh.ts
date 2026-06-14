@@ -524,6 +524,10 @@ export const zh = {
     translationReadOnly: "翻译视图为只读",
     translationFailed: "翻译失败",
     llmNotConfigured: "请先配置 AI 提供商",
+    translateFilesProgress: "正在翻译文件 {current}/{total}：{path}",
+    translateFilesCompact: "翻译 {current}/{total}：{path}",
+    translateFilesDone: "已翻译 {count} 个文件",
+    translateFilesPartialFailed: "已翻译 {ok} 个文件，{fail} 个失败",
   },
   sync: {
     issuesDetected: "检测到 {count} 个链接问题需要修复",

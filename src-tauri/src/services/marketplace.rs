@@ -1200,7 +1200,8 @@ impl MarketplaceService {
         resolved.skill_path = Some(tree.path.clone());
         resolved.remote_revision = remote_revision;
         resolved.external_url = build_marketplace_external_url(
-            skill.external_url
+            skill
+                .external_url
                 .as_deref()
                 .or(skill.install_url.as_deref()),
             Some(repo_url),

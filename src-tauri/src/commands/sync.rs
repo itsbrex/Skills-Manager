@@ -1,5 +1,5 @@
-use crate::services::{ConfigManager, LinkReport, LinkStatus, LinkerService, ScannerService};
 use crate::services::linker::LinkResult;
+use crate::services::{ConfigManager, LinkReport, LinkStatus, LinkerService, ScannerService};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,8 +157,8 @@ pub fn fix_sync_issues() -> Result<LinkReport, String> {
 #[cfg(test)]
 mod tests {
     use super::{collect_active_tool_configs, should_report_sync_issue};
-    use crate::services::LinkStatus;
     use crate::models::{AppConfig, CustomToolConfig, ToolConfig};
+    use crate::services::LinkStatus;
     use std::collections::HashMap;
     use std::path::PathBuf;
 

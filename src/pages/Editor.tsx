@@ -7,7 +7,12 @@ import { FileTree } from "@/components/editor/FileTree";
 import { FileNode, Skill } from "@/types";
 import { useTranslation } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
-import { useSkillTranslation, makeTranslationKey, type SkillTranslationOutput } from "@/hooks/useSkillTranslation";
+import {
+  useSkillTranslation,
+  makeTranslationKey,
+  type SkillFileTranslationProgress,
+  type SkillTranslationOutput,
+} from "@/hooks/useSkillTranslation";
 import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
 
 // Helper for timeout removed as per user request
@@ -33,28 +38,38 @@ export function EditorPage() {
   const [translatingFile, setTranslatingFile] = useState(false);
   const [fileTranslation, setFileTranslation] = useState<SkillTranslationOutput | null>(null);
   const [fileViewMode, setFileViewMode] = useState<"original" | "translated">("original");
+  const [skillFileProgress, setSkillFileProgress] = useState<SkillFileTranslationProgress | null>(null);
+  const [translationNotice, setTranslationNotice] = useState<string | null>(null);
 
   const isSkillMdFile = selectedPath.toLowerCase().endsWith("skill.md");
   const isTranslatableFile = /\.(md|mdx|markdown|txt|text)$/i.test(selectedPath);
   const translationKey = relatedSkill ? makeTranslationKey(relatedSkill.instance_id, language) : null;
   const translatedResult = translationKey ? translation.getTranslation(translationKey) : null;
   const viewMode = translationKey ? translation.getView(translationKey) : "original";
+  const relatedSelectedPath = useMemo(
+    () => getPathWithinSkill(rootPath, selectedPath, relatedSkill?.path ?? null),
+    [rootPath, selectedPath, relatedSkill?.path],
+  );
+  const cachedFileTranslation = relatedSkill && relatedSelectedPath
+    ? translation.getFileTranslation(relatedSkill.instance_id, language, relatedSelectedPath)
+    : null;
+  const activeFileTranslation = cachedFileTranslation ?? fileTranslation;
   const showingSkillTranslation =
     isSkillMdFile && translatedResult != null && viewMode === "translated" && !!translatedResult.content_md;
   const showingFileTranslation =
-    !showingSkillTranslation && fileTranslation != null && fileViewMode === "translated" && !!fileTranslation.content_md;
+    !showingSkillTranslation && activeFileTranslation != null && fileViewMode === "translated" && !!activeFileTranslation.content_md;
   const showingTranslation = showingSkillTranslation || showingFileTranslation;
   const hasTranslationForCurrentFile =
-    (isSkillMdFile && translatedResult != null) || (!isSkillMdFile && fileTranslation != null);
+    (isSkillMdFile && translatedResult != null) || (!isSkillMdFile && activeFileTranslation != null);
   const canTranslateCurrentFile = isTranslatableFile && content.length > 0;
   const displayContent = useMemo(
     () =>
       showingSkillTranslation
         ? translatedResult?.content_md ?? content
         : showingFileTranslation
-          ? fileTranslation?.content_md ?? content
+          ? activeFileTranslation?.content_md ?? content
           : content,
-    [showingSkillTranslation, showingFileTranslation, translatedResult, fileTranslation, content],
+    [showingSkillTranslation, showingFileTranslation, translatedResult, activeFileTranslation, content],
   );
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
@@ -114,10 +129,10 @@ export function EditorPage() {
 
         if (!found && selectedPath) {
           const fileAbs = normalize(`${rootPath}/${selectedPath}`);
-          if (fileAbs.toLowerCase().endsWith("/skill.md")) {
-            const parentDir = fileAbs.slice(0, -"/SKILL.md".length);
-            found = skills.find((s) => normalize(s.path) === parentDir) ?? null;
-          }
+          found = skills
+            .map((skill) => ({ skill, path: normalize(skill.path) }))
+            .filter(({ path }) => fileAbs === path || fileAbs.startsWith(`${path}/`))
+            .sort((a, b) => b.path.length - a.path.length)[0]?.skill ?? null;
         }
 
         setRelatedSkill(found);
@@ -139,8 +154,8 @@ export function EditorPage() {
   }, [t]);
 
   const handleTranslateFile = useCallback(async (force: boolean = false) => {
-    // Branch: SKILL.md with a related skill → use skill-level translation cache
-    if (isSkillMdFile && relatedSkill) {
+    // Skill docs branch: translate every translatable file under the skill root.
+    if (relatedSkill) {
       let configured = translation.isConfigured;
       if (!configured) {
         configured = await translation.refreshConfigured();
@@ -150,12 +165,46 @@ export function EditorPage() {
         return;
       }
       setTranslatingFile(true);
+      setSkillFileProgress(null);
+      setTranslationNotice(null);
       try {
-        await translation.translateSkill(relatedSkill.instance_id, language, force);
+        const result = await translation.translateSkillFiles(
+          relatedSkill.instance_id,
+          language,
+          force,
+          (progress) => {
+            setSkillFileProgress(progress);
+            setTranslationNotice(
+              t("editor.translateFilesProgress")
+                .replace("{current}", String(progress.current))
+                .replace("{total}", String(progress.total))
+                .replace("{path}", progress.path),
+            );
+          },
+        );
+        if (isSkillMdFile && translationKey) {
+          translation.setView(translationKey, "translated");
+        } else if (relatedSelectedPath) {
+          const currentTranslation = result.files.find(
+            (file) => normalizePath(file.path) === normalizePath(relatedSelectedPath),
+          )?.translation;
+          if (currentTranslation) {
+            setFileTranslation(currentTranslation);
+            setFileViewMode("translated");
+          }
+        }
+
+        const doneMessage = result.failed.length > 0
+          ? t("editor.translateFilesPartialFailed")
+              .replace("{ok}", String(result.files.length))
+              .replace("{fail}", String(result.failed.length))
+          : t("editor.translateFilesDone").replace("{count}", String(result.files.length));
+        setTranslationNotice(doneMessage);
       } catch (err) {
         setError(formatTranslationError(err));
       } finally {
         setTranslatingFile(false);
+        setSkillFileProgress(null);
       }
       return;
     }
@@ -171,6 +220,7 @@ export function EditorPage() {
       return;
     }
     setTranslatingFile(true);
+    setTranslationNotice(null);
     try {
       const result = await invoke<SkillTranslationOutput>("translate_text_content", {
         label: selectedPath,
@@ -188,6 +238,8 @@ export function EditorPage() {
   }, [
     isSkillMdFile,
     relatedSkill,
+    relatedSelectedPath,
+    translationKey,
     translation,
     language,
     t,
@@ -218,7 +270,7 @@ export function EditorPage() {
     void (async () => {
       try {
         const hit = await invoke<SkillTranslationOutput | null>("get_cached_text_translation", {
-          label: selectedPath,
+          label: relatedSelectedPath ?? selectedPath,
           content,
           targetLang: language,
         });
@@ -233,7 +285,7 @@ export function EditorPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedPath, content, language, isTranslatableFile, isSkillMdFile]);
+  }, [selectedPath, relatedSelectedPath, content, language, isTranslatableFile, isSkillMdFile]);
 
   // Load file content
   useEffect(() => {
@@ -335,6 +387,15 @@ export function EditorPage() {
   };
 
   const skillName = fileTree?.name || rootPath.split("/").pop() || "";
+  const translationProgressPercent = skillFileProgress && skillFileProgress.total > 0
+    ? Math.max(0, Math.min(100, (skillFileProgress.current / skillFileProgress.total) * 100))
+    : 0;
+  const compactTranslationStatus = translatingFile && skillFileProgress
+    ? t("editor.translateFilesCompact")
+        .replace("{current}", String(skillFileProgress.current))
+        .replace("{total}", String(skillFileProgress.total))
+        .replace("{path}", skillFileProgress.path)
+    : translationNotice;
 
   return (
     <div style={{
@@ -389,6 +450,55 @@ export function EditorPage() {
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {compactTranslationStatus && (
+            <div
+              role="status"
+              aria-live="polite"
+              title={compactTranslationStatus}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                maxWidth: 320,
+                minWidth: 0,
+                height: 28,
+                padding: "0 10px",
+                border: "1px solid var(--border)",
+                borderRadius: 7,
+                backgroundColor: "color-mix(in srgb, var(--primary) 7%, var(--background))",
+                color: "var(--foreground)",
+                fontSize: 12,
+                lineHeight: 1,
+                flexShrink: 1,
+              }}
+            >
+              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {compactTranslationStatus}
+              </span>
+              {translatingFile && skillFileProgress && (
+                <div
+                  aria-hidden
+                  style={{
+                    width: 72,
+                    height: 4,
+                    borderRadius: 999,
+                    overflow: "hidden",
+                    backgroundColor: "color-mix(in srgb, var(--foreground) 14%, transparent)",
+                    flexShrink: 0,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${translationProgressPercent}%`,
+                      height: "100%",
+                      backgroundColor: "var(--primary)",
+                      transition: "width 0.2s ease",
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
           {canTranslateCurrentFile && (
             <TranslateIconButton
               hasTranslation={hasTranslationForCurrentFile}
@@ -573,4 +683,23 @@ function findSkillMdFile(node: FileNode): string | null {
     }
   }
   return null;
+}
+
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+function normalizeRelativePath(path: string): string {
+  return normalizePath(path).replace(/^\.\/+/, "").replace(/^\/+/, "");
+}
+
+function getPathWithinSkill(rootPath: string, selectedPath: string, skillPath: string | null): string | null {
+  if (!rootPath || !selectedPath || !skillPath) return null;
+  const root = normalizePath(rootPath);
+  const skillRoot = normalizePath(skillPath);
+  const selectedAbs = normalizePath(selectedPath === "." ? root : `${root}/${selectedPath}`);
+
+  if (selectedAbs === skillRoot) return ".";
+  if (!selectedAbs.startsWith(`${skillRoot}/`)) return null;
+  return normalizeRelativePath(selectedAbs.slice(skillRoot.length + 1));
 }

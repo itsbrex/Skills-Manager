@@ -4,7 +4,7 @@ use crate::services::translation_cache::{CacheKey, CachedTranslation, Translatio
 use serde::{Deserialize, Serialize};
 
 const MAX_CONTENT_CHARS: usize = 32_000;
-const MAX_CHUNK_CHARS: usize = 28_000;  // 留 4k buffer 给 prompt
+const MAX_CHUNK_CHARS: usize = 28_000; // 留 4k buffer 给 prompt
 const OVERLAP_CHARS: usize = 200;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -225,7 +225,8 @@ pub async fn translate_skill(
             .map(|s| s.chars().count())
             .unwrap_or(0);
 
-    let (translated_name, translated_desc, translated_content) = if total_chars <= MAX_CONTENT_CHARS {
+    let (translated_name, translated_desc, translated_content) = if total_chars <= MAX_CONTENT_CHARS
+    {
         // 短文档：直接翻译
         let messages = build_prompt(target_lang, &input);
         let raw = chat(
@@ -243,7 +244,9 @@ pub async fn translate_skill(
 
         (
             parsed.name.unwrap_or_else(|| input.name.clone()),
-            parsed.description.unwrap_or_else(|| input.description.clone()),
+            parsed
+                .description
+                .unwrap_or_else(|| input.description.clone()),
             parsed.content_md.or(input.content_md.clone()),
         )
     } else {
@@ -269,7 +272,9 @@ pub async fn translate_skill(
             .map_err(|e| LlmError::ParseError(format!("{e}; raw: {}", truncate(&raw, 200))))?;
 
         let name = parsed.name.unwrap_or_else(|| input.name.clone());
-        let description = parsed.description.unwrap_or_else(|| input.description.clone());
+        let description = parsed
+            .description
+            .unwrap_or_else(|| input.description.clone());
 
         // 如果有 content_md，分段翻译
         let content = if let Some(md) = &input.content_md {
@@ -404,10 +409,7 @@ mod tests {
 
     #[test]
     fn merge_chunks_removes_overlap() {
-        let chunks = vec![
-            "Hello world".to_string(),
-            "world again".to_string(),
-        ];
+        let chunks = vec!["Hello world".to_string(), "world again".to_string()];
         let result = merge_chunks(chunks, 5);
         // 应该去除重叠的 "world"（5个字符）
         assert!(result.contains("Hello"));

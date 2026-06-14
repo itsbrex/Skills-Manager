@@ -524,6 +524,10 @@ export const en = {
     translationReadOnly: "Translation view is read-only",
     translationFailed: "Translation failed",
     llmNotConfigured: "LLM not configured",
+    translateFilesProgress: "Translating file {current}/{total}: {path}",
+    translateFilesCompact: "Translating {current}/{total}: {path}",
+    translateFilesDone: "Translated {count} file(s)",
+    translateFilesPartialFailed: "Translated {ok} file(s), {fail} failed",
   },
   sync: {
     issuesDetected: "Detected {count} broken link(s) that need fixing",
