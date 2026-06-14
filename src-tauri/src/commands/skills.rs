@@ -571,6 +571,7 @@ mod tests {
             projects: Vec::new(),
             active_project_id: None,
             llm_provider: None,
+            auth_session: None,
             initialized: true,
         }
     }
@@ -607,6 +608,7 @@ mod tests {
                 projects: Vec::new(),
                 active_project_id: None,
                 llm_provider: None,
+                auth_session: None,
                 initialized: true,
             };
 
@@ -661,6 +663,7 @@ mod tests {
                 projects: Vec::new(),
                 active_project_id: None,
                 llm_provider: None,
+                auth_session: None,
                 initialized: true,
             };
 
