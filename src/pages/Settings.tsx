@@ -782,75 +782,9 @@ export function Settings() {
               )}
             </SettingsRow>
 
-            <SettingsRow
-              label={t("settings.cloudSync")}
-              description={t("settings.cloudSyncDesc")}
-              isLast={false}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                    {authProfile ? t("cloudSync.statusConnected") : t("cloudSync.statusDisconnected")}
-                  </span>
-                  <button
-                    onClick={handleManualSync}
-                    disabled={!authProfile || cloudSync.syncing}
-                    style={{
-                      padding: '8px 12px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      color: authProfile ? 'var(--foreground)' : 'var(--muted-foreground)',
-                      backgroundColor: 'var(--secondary)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                      cursor: !authProfile || cloudSync.syncing ? 'not-allowed' : 'pointer',
-                      opacity: !authProfile || cloudSync.syncing ? 0.6 : 1,
-                    }}
-                  >
-                    {cloudSync.syncing ? t("cloudSync.syncing") : t("cloudSync.syncNow")}
-                  </button>
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                  {authProfile ? lastSyncedLabel : t("cloudSync.notSignedIn")}
-                </div>
-                {cloudSync.syncStage === "pulling" && (
-                  <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                    {t("cloudSync.pulling")}
-                  </div>
-                )}
-                {cloudSync.syncStage === "pushing" && (
-                  <div style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
-                    {t("cloudSync.pushing")}
-                  </div>
-                )}
-                {cloudSync.conflict && (
-                  <div style={{ fontSize: '12px', color: 'var(--color-warning)' }}>
-                    {t("cloudSync.conflictNotice")}
-                  </div>
-                )}
-                {cloudSync.error && (
-                  <div style={{ fontSize: '12px', color: 'var(--color-error)' }}>
-                    {cloudSync.error}
-                  </div>
-                )}
-              </div>
-            </SettingsRow>
+            
 
-            <SettingsRow
-              label={t("settings.telemetryConsent")}
-              description={t("settings.telemetryConsentDesc")}
-              isLast={false}
-            >
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
-                <Toggle
-                  checked={telemetryConsent === "granted"}
-                  onChange={(v) => updatePreference("telemetry_consent", v ? "granted" : "denied")}
-                />
-                <div style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
-                  {telemetryConsentLabel}
-                </div>
-              </div>
-            </SettingsRow>
+            
 
             <SettingsRow
               label={t("settings.vaultBackupConsent")}
@@ -879,33 +813,7 @@ export function Settings() {
               />
             </SettingsRow>
 
-            <SettingsRow
-              label={t("settings.cloudSyncInterval")}
-              description={t("settings.cloudSyncIntervalDesc")}
-              isLast={true}
-            >
-              <select
-                value={prefs.cloud_sync_interval_minutes}
-                disabled={!prefs.cloud_sync_auto}
-                onChange={(e) => updatePreference("cloud_sync_interval_minutes", Number(e.target.value))}
-                style={{
-                  padding: '8px 10px',
-                  fontSize: '12px',
-                  color: 'var(--foreground)',
-                  backgroundColor: 'var(--secondary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  opacity: prefs.cloud_sync_auto ? 1 : 0.6,
-                  cursor: prefs.cloud_sync_auto ? 'pointer' : 'not-allowed',
-                }}
-              >
-                {cloudSyncIntervals.map((minutes: number) => (
-                  <option key={minutes} value={minutes}>
-                    {t("settings.cloudSyncIntervalOption").replace("{minutes}", String(minutes))}
-                  </option>
-                ))}
-              </select>
-            </SettingsRow>
+            
           </SettingsCard>
 
           {/* About Section */}
