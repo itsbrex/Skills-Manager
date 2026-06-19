@@ -10,18 +10,22 @@ interface Skill {
   path: string;
 }
 
+type ToastFn = (message: string, type?: "error" | "success" | "info", persistent?: boolean) => void;
+
 interface ImportSkillsStepProps {
   onNext: () => void;
   onBack: () => void;
+  onError?: ToastFn;
 }
 
-export function ImportSkillsStep({ onNext, onBack }: ImportSkillsStepProps) {
+export function ImportSkillsStep({ onNext, onBack, onError }: ImportSkillsStepProps) {
   const { t } = useTranslation();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [isScanning, setIsScanning] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [importComplete, setImportComplete] = useState(false);
+  const [focusedSkillPath, setFocusedSkillPath] = useState<string | null>(null);
 
   useEffect(() => {
     scanSkills();
@@ -34,9 +38,11 @@ export function ImportSkillsStep({ onNext, onBack }: ImportSkillsStepProps) {
       // Filter out hidden directories (starting with .)
       const filteredSkills = result.filter((s) => !s.name.startsWith('.'));
       setSkills(filteredSkills);
-      setSelectedSkills(new Set(filteredSkills.map((s) => s.path)));
+      // Default: select none, let user explicitly choose what to import
+      setSelectedSkills(new Set());
     } catch (error) {
       console.error("Failed to scan skills:", error);
+      onError?.(t("welcome.scanSkillsFailed") + ": " + String(error), "error");
     } finally {
       setIsScanning(false);
     }
@@ -52,6 +58,14 @@ export function ImportSkillsStep({ onNext, onBack }: ImportSkillsStepProps) {
     setSelectedSkills(newSelected);
   }
 
+  function selectAll() {
+    setSelectedSkills(new Set(skills.map((s) => s.path)));
+  }
+
+  function selectNone() {
+    setSelectedSkills(new Set());
+  }
+
   async function handleImport(): Promise<boolean> {
     if (selectedSkills.size === 0) {
       return true;
@@ -63,10 +77,14 @@ export function ImportSkillsStep({ onNext, onBack }: ImportSkillsStepProps) {
         skillPaths: Array.from(selectedSkills),
       });
       setImportComplete(true);
+      onError?.(
+        t("welcome.importedCount").replace("{count}", String(selectedSkills.size)),
+        "success"
+      );
       return true;
     } catch (error) {
       console.error("Failed to import skills:", error);
-      alert("Failed to import skills: " + String(error));
+      onError?.(t("welcome.importFailed") + ": " + String(error), "error");
       return false;
     } finally {
       setIsImporting(false);
@@ -145,57 +163,167 @@ export function ImportSkillsStep({ onNext, onBack }: ImportSkillsStepProps) {
           </div>
         ) : (
           <>
-            <div style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: '12px' }}>
-              {skills.map((skill) => {
-                const isSelected = selectedSkills.has(skill.path);
-                return (
-                  <button
-                    key={skill.path}
-                    onClick={() => toggleSkill(skill.path)}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 14px',
-                      marginBottom: '8px',
-                      borderRadius: '10px',
-                      border: isSelected ? '1px solid rgba(9, 105, 218, 0.3)' : '1px solid transparent',
-                      backgroundColor: isSelected ? 'rgba(9, 105, 218, 0.08)' : 'var(--secondary)',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                    }}
-                  >
-                    <div
+            <div className="welcome-shell" style={{ marginBottom: '14px' }}>
+              <div
+                role="listbox"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (skills.length === 0) return;
+                    const currentIndex = skills.findIndex((s) => s.path === focusedSkillPath);
+                    let nextIndex: number;
+                    if (currentIndex === -1) {
+                      nextIndex = e.key === 'ArrowDown' ? 0 : skills.length - 1;
+                    } else {
+                      nextIndex = e.key === 'ArrowDown'
+                        ? (currentIndex + 1) % skills.length
+                        : (currentIndex - 1 + skills.length) % skills.length;
+                    }
+                    setFocusedSkillPath(skills[nextIndex].path);
+                  } else if (e.key === ' ' || e.key === 'Enter') {
+                    if (focusedSkillPath) {
+                      e.preventDefault();
+                      toggleSkill(focusedSkillPath);
+                    }
+                  }
+                }}
+                style={{
+                  maxHeight: '280px',
+                  overflowY: 'auto',
+                  outline: 'none',
+                }}
+                className="welcome-listbox"
+              >
+                {skills.map((skill) => {
+                  const isSelected = selectedSkills.has(skill.path);
+                  const isFocused = focusedSkillPath === skill.path;
+                  const description = skill.description?.trim();
+                  return (
+                    <button
+                      key={skill.path}
+                      role="option"
+                      aria-selected={isFocused}
+                      data-focused={isFocused}
+                      data-selected={isSelected}
+                      onClick={() => toggleSkill(skill.path)}
+                      onMouseEnter={() => setFocusedSkillPath(skill.path)}
+                      className="welcome-row"
                       style={{
-                        width: '20px',
-                        height: '20px',
-                        borderRadius: '6px',
-                        border: isSelected ? 'none' : '2px solid var(--border)',
-                        backgroundColor: isSelected ? 'var(--primary)' : 'transparent',
+                        width: '100%',
                         display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
+                        alignItems: 'flex-start',
+                        gap: '11px',
+                        padding: '11px 14px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        border: 'none',
+                        backgroundColor: 'transparent',
                       }}
                     >
-                      {isSelected && <Check style={{ width: '12px', height: '12px', color: '#fff' }} />}
-                    </div>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontSize: '14px', fontWeight: isSelected ? 500 : 400, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {skill.name}
+                      <div
+                        style={{
+                          width: '16px',
+                          height: '16px',
+                          borderRadius: '4px',
+                          border: isSelected ? 'none' : '1.5px solid var(--border)',
+                          backgroundColor: isSelected ? 'var(--foreground)' : 'transparent',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          marginTop: '2px',
+                          transition: 'background-color 0.15s, border-color 0.15s',
+                        }}
+                      >
+                        {isSelected && <Check style={{ width: '11px', height: '11px', color: 'var(--background)', strokeWidth: 3 }} />}
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {skill.path}
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{
+                          fontSize: '13px',
+                          fontWeight: isSelected ? 500 : 400,
+                          color: 'var(--foreground)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          letterSpacing: '-0.01em',
+                        }}>
+                          {skill.name}
+                        </div>
+                        {description ? (
+                          <div style={{
+                            fontSize: '12px',
+                            color: 'var(--muted-foreground)',
+                            marginTop: '2px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            lineHeight: 1.4,
+                          }}>
+                            {description}
+                          </div>
+                        ) : null}
+                        <div className="welcome-mono" style={{
+                          fontSize: '11px',
+                          color: 'var(--muted-foreground)',
+                          opacity: 0.7,
+                          marginTop: description ? '3px' : '2px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          lineHeight: 1.4,
+                        }}>
+                          {skill.path}
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                );
-              })}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <p style={{ fontSize: '12px', color: 'var(--muted-foreground)', textAlign: 'center' }}>
-              {t("welcome.selectedCount").replace("{selected}", String(selectedSkills.size)).replace("{total}", String(skills.length))}
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <p style={{ fontSize: '12px', color: 'var(--muted-foreground)', margin: 0 }}>
+                {t("welcome.selectedCount").replace("{selected}", String(selectedSkills.size)).replace("{total}", String(skills.length))}
+              </p>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  onClick={selectAll}
+                  disabled={selectedSkills.size === skills.length}
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    padding: '4px 10px',
+                    borderRadius: '5px',
+                    border: '1px solid var(--border)',
+                    backgroundColor: 'transparent',
+                    color: selectedSkills.size === skills.length ? 'var(--muted-foreground)' : 'var(--foreground)',
+                    cursor: selectedSkills.size === skills.length ? 'not-allowed' : 'pointer',
+                    opacity: selectedSkills.size === skills.length ? 0.5 : 1,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {t("welcome.selectAll")}
+                </button>
+                <button
+                  onClick={selectNone}
+                  disabled={selectedSkills.size === 0}
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    padding: '4px 10px',
+                    borderRadius: '5px',
+                    border: '1px solid var(--border)',
+                    backgroundColor: 'transparent',
+                    color: selectedSkills.size === 0 ? 'var(--muted-foreground)' : 'var(--foreground)',
+                    cursor: selectedSkills.size === 0 ? 'not-allowed' : 'pointer',
+                    opacity: selectedSkills.size === 0 ? 0.5 : 1,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {t("welcome.selectNone")}
+                </button>
+              </div>
+            </div>
           </>
         )}
       </div>

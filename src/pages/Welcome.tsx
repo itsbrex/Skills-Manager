@@ -10,6 +10,7 @@ import { useTranslation } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
 import { AppConfig } from "@/types";
 import { defaultPreferences } from "@/constants/preferences";
+import { ToastContainer, useToast } from "@/components/ui/toast";
 
 type WizardStep = "welcome" | "tools" | "directory" | "import";
 
@@ -18,12 +19,29 @@ interface WelcomeProps {
 }
 
 export function Welcome({ onComplete }: WelcomeProps) {
-  const { language, setLanguage } = useTranslation();
+  const { t, language, setLanguage } = useTranslation();
   const { theme, setTheme } = useTheme();
   const [currentStep, setCurrentStep] = useState<WizardStep>("welcome");
+  const [appVersion, setAppVersion] = useState<string>("");
+  const { toasts, addToast, removeToast } = useToast();
 
   const steps: WizardStep[] = ["welcome", "tools", "directory", "import"];
   const currentIndex = steps.indexOf(currentStep);
+
+  // Load app version once on mount
+  useEffect(() => {
+    async function loadVersion() {
+      try {
+        const config = await invoke<AppConfig>("get_config");
+        if (config.version) {
+          setAppVersion(config.version);
+        }
+      } catch (error) {
+        console.error("Failed to load app version:", error);
+      }
+    }
+    loadVersion();
+  }, []);
 
   // Save preferences to config whenever they change
   useEffect(() => {
@@ -40,16 +58,16 @@ export function Welcome({ onComplete }: WelcomeProps) {
           },
         };
         await invoke("save_config", { config: updatedConfig });
-        const prefs = updatedConfig.preferences;
-        if (prefs) {  // 
-      //  // Removed: cloud sync feature
-        }
       } catch (error) {
-        // Error handled silently - preferences will be saved on next attempt
+        console.error("Failed to save preferences:", error);
+        addToast(
+          `${t("welcome.savePreferencesFailed")}: ${String(error)}`,
+          "error"
+        );
       }
     }
     savePreferences();
-  }, [language, theme]);
+  }, [language, theme, addToast, t]);
 
   async function goNext() {
     if (currentIndex < steps.length - 1) {
@@ -59,9 +77,10 @@ export function Welcome({ onComplete }: WelcomeProps) {
         await onComplete();
       } catch (error) {
         console.error("Failed to complete setup:", error);
-        // Alert user since we don't have toast here easily accessible without prop drilling
-        // or we could use window.alert as a fallback for critical failure
-        alert("Failed to complete setup: " + String(error));
+        addToast(
+          `${t("welcome.completeSetupFailed")}: ${String(error)}`,
+          "error"
+        );
       }
     }
   }
@@ -82,6 +101,58 @@ export function Welcome({ onComplete }: WelcomeProps) {
         overflow: 'hidden',
       }}
     >
+      {/* Unified listbox styles for welcome steps */}
+      <style>{`
+        .welcome-listbox {
+          scrollbar-width: thin;
+          scrollbar-color: transparent transparent;
+          transition: scrollbar-color 0.2s;
+        }
+        .welcome-listbox:hover {
+          scrollbar-color: var(--border) transparent;
+        }
+        .welcome-listbox::-webkit-scrollbar {
+          width: 4px;
+        }
+        .welcome-listbox::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .welcome-listbox::-webkit-scrollbar-thumb {
+          background: transparent;
+          border-radius: 2px;
+          transition: background-color 0.2s;
+        }
+        .welcome-listbox:hover::-webkit-scrollbar-thumb {
+          background: var(--border);
+        }
+        .welcome-listbox::-webkit-scrollbar-thumb:hover {
+          background: var(--muted-foreground);
+        }
+
+        .welcome-shell {
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          background-color: var(--secondary);
+          overflow: hidden;
+        }
+        .welcome-row {
+          position: relative;
+          transition: background-color 0.15s ease;
+        }
+        .welcome-row + .welcome-row {
+          border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+        }
+        .welcome-row[data-focused="true"] {
+          background-color: color-mix(in srgb, var(--foreground) 3%, transparent);
+        }
+        .welcome-row[data-selected="true"] {
+          background-color: color-mix(in srgb, var(--foreground) 4%, transparent);
+        }
+        .welcome-mono {
+          font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        }
+      `}</style>
+
       {/* Draggable title bar */}
       <div
         onMouseDown={(e) => {
@@ -159,13 +230,13 @@ export function Welcome({ onComplete }: WelcomeProps) {
         <div style={{ width: '100%', maxWidth: '560px', flexShrink: 0 }}>
           {currentStep === "welcome" && <WelcomeStep onNext={goNext} />}
           {currentStep === "tools" && (
-            <ToolDetectionStep onNext={goNext} onBack={goBack} />
+            <ToolDetectionStep onNext={goNext} onBack={goBack} onError={addToast} />
           )}
           {currentStep === "directory" && (
-            <DirectorySetupStep onNext={goNext} onBack={goBack} />
+            <DirectorySetupStep onNext={goNext} onBack={goBack} onError={addToast} />
           )}
           {currentStep === "import" && (
-            <ImportSkillsStep onNext={goNext} onBack={goBack} />
+            <ImportSkillsStep onNext={goNext} onBack={goBack} onError={addToast} />
           )}
         </div>
       </div>
@@ -181,10 +252,12 @@ export function Welcome({ onComplete }: WelcomeProps) {
             onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
             onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
           >
-            Skills Manager
+            Skills Manager{appVersion ? ` v${appVersion}` : ""}
           </a>
         </p>
       </div>
+
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

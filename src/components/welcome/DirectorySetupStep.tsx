@@ -9,12 +9,15 @@ interface AppConfig {
   tools: Record<string, unknown>;
 }
 
+type ToastFn = (message: string, type?: "error" | "success" | "info", persistent?: boolean) => void;
+
 interface DirectorySetupStepProps {
   onNext: () => void;
   onBack: () => void;
+  onError?: ToastFn;
 }
 
-export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) {
+export function DirectorySetupStep({ onNext, onBack, onError }: DirectorySetupStepProps) {
   const { t } = useTranslation();
   const [skillsDir, setSkillsDir] = useState("");
 
@@ -28,6 +31,7 @@ export function DirectorySetupStep({ onNext, onBack }: DirectorySetupStepProps) 
       setSkillsDir(config.skills_dir);
     } catch (error) {
       console.error("Failed to load config:", error);
+      onError?.(t("welcome.loadConfigFailed") + ": " + String(error), "error");
     }
   }
 
