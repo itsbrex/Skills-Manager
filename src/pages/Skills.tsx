@@ -146,6 +146,138 @@ type SkillCardActionMenuProps = {
   onDelete: () => void;
 };
 
+type SkillsHeaderMoreMenuItem = {
+  id: string;
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+};
+
+function SkillsHeaderMoreMenu({
+  label,
+  items,
+}: {
+  label: string;
+  items: SkillsHeaderMoreMenuItem[];
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  const menuItemBaseStyle: CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    width: "100%",
+    padding: "10px 12px",
+    fontSize: "13px",
+    fontWeight: 500,
+    color: "var(--popover-foreground)",
+    backgroundColor: "transparent",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    textAlign: "left",
+    transition: "background-color 0.15s ease",
+  };
+
+  return (
+    <div style={{ position: "relative", flexShrink: 0 }}>
+      <button
+        type="button"
+        aria-label={label}
+        onClick={() => setOpen((current) => !current)}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "6px",
+          padding: "8px 12px",
+          fontSize: "13px",
+          fontWeight: 500,
+          color: "var(--foreground)",
+          backgroundColor: "var(--background)",
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d={open ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"} />
+        </svg>
+      </button>
+
+      {open && (
+        <>
+          <button
+            type="button"
+            aria-label={label}
+            onClick={() => setOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              margin: 0,
+              cursor: "default",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 8px)",
+              right: 0,
+              display: "flex",
+              flexDirection: "column",
+              gap: "2px",
+              minWidth: "160px",
+              padding: "4px",
+              backgroundColor: "var(--popover)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              boxShadow: "0 8px 24px rgba(0, 0, 0, 0.25)",
+              backdropFilter: "blur(10px)",
+              zIndex: MODAL_LAYER_Z_INDEX,
+            }}
+          >
+            {items.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                disabled={item.disabled}
+                onClick={() => {
+                  setOpen(false);
+                  if (!item.disabled) {
+                    item.onClick();
+                  }
+                }}
+                style={{
+                  ...menuItemBaseStyle,
+                  cursor: item.disabled ? "not-allowed" : "pointer",
+                  opacity: item.disabled ? 0.6 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!item.disabled) {
+                    e.currentTarget.style.backgroundColor = "color-mix(in srgb, var(--foreground) 8%, transparent)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function renderPreviewChips(chips: string[], overflowCount: number) {
   if (chips.length === 0 && overflowCount === 0) {
     return null;
@@ -411,6 +543,8 @@ export function Skills() {
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedCardKeys, setExpandedCardKeys] = useState<Set<string>>(new Set());
+  const [batchDeleting, setBatchDeleting] = useState(false);
   const { toasts, addToast, updateToast, removeToast } = useToast();
   const skillMetadata = config?.skill_metadata;
   const listContainerRef = useRef<HTMLElement | null>(null);
@@ -941,13 +1075,46 @@ export function Skills() {
     }
   };
 
-  const handleCreateSkill = async (skillName: string, skillDescription: string) => {
+  const handleCreateSkill = async (
+    skillName: string,
+    skillDescription: string,
+    targetToolIds: string[],
+    tags: string[],
+  ) => {
     setCreating(true);
     try {
       const newSkill = await invoke<Skill>("create_skill", {
         name: skillName,
         description: skillDescription || null,
       });
+
+      // 创建后按选择启用到目标工具
+      for (const toolId of targetToolIds) {
+        try {
+          await invoke("enable_skill", { instanceId: newSkill.instance_id, toolId });
+        } catch (err) {
+          addToast(
+            t("skills.enableFailed").replace("{tool}", getToolDisplayName(toolId, tools)),
+            "error",
+          );
+        }
+      }
+
+      // 创建后按输入设置标签
+      if (tags.length > 0 && config) {
+        try {
+          const nextSkillMetadata = updateSkillTagsForSkill(newSkill, tags, config.skill_metadata);
+          const nextConfig: AppConfig = {
+            ...config,
+            skill_metadata: nextSkillMetadata,
+          };
+          await invoke("save_config", { config: nextConfig });
+          setConfig(nextConfig);
+        } catch (err) {
+          addToast(err instanceof Error ? err.message : String(err), "error");
+        }
+      }
+
       addToast(t("skills.createSuccess").replace("{name}", skillName), "success");
       setShowCreateDialog(false);
 
@@ -993,9 +1160,21 @@ export function Skills() {
     [selectedTags, untaggedOnly],
   );
 
+  const activeProjectName = useMemo(() => {
+    const projects = config?.projects ?? [];
+    const activeId = resolveActiveProjectId(config?.active_project_id, projects);
+    if (!activeId) {
+      return null;
+    }
+    return projects.find((project) => project.id === activeId)?.name ?? null;
+  }, [config?.active_project_id, config?.projects]);
+
   const tagFilterButtonLabel = useMemo(() => {
     if (scopeFilter !== "all") {
-      return scopeFilter === "global" ? t("skills.scopeGlobal") : t("skills.scopeProject");
+      if (scopeFilter === "global") {
+        return t("skills.scopeGlobal");
+      }
+      return activeProjectName ?? t("skills.scopeProject");
     }
     switch (tagFilterSelection.kind) {
       case "untagged":
@@ -1007,7 +1186,7 @@ export function Skills() {
       default:
         return t("skills.tagFilterButton");
     }
-  }, [scopeFilter, tagFilterSelection, t]);
+  }, [activeProjectName, scopeFilter, tagFilterSelection, t]);
 
   const hasActiveSkillFilters = Boolean(searchQuery.trim()) || selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all";
 
@@ -1073,6 +1252,19 @@ export function Skills() {
     setSelectedBatchItemKeys(new Set());
     setIsBatchToolDialogOpen(false);
     setBatchToolQuery("");
+    setExpandedCardKeys(new Set());
+  }, []);
+
+  const handleToggleCardExpand = useCallback((itemKey: string) => {
+    setExpandedCardKeys((current) => {
+      const next = new Set(current);
+      if (next.has(itemKey)) {
+        next.delete(itemKey);
+      } else {
+        next.add(itemKey);
+      }
+      return next;
+    });
   }, []);
 
   const handleToggleBatchItemSelection = useCallback((itemKey: string) => {
@@ -1430,6 +1622,90 @@ export function Skills() {
       closeOnSuccess: false,
     });
   }, [batchSelectionSummary.totalCount, handleSubmitBatchToolAction, t]);
+
+  const handleBatchTranslateSelected = useCallback(async () => {
+    const targets = selectedBatchItems
+      .filter((item) => item.kind === "skill" && item.skill)
+      .map((item) => item.skill!) as Skill[];
+    if (targets.length === 0) {
+      addToast(t("skills.batchTranslateNoSkills"), "info");
+      return;
+    }
+    await handleBatchTranslate(targets);
+  }, [addToast, handleBatchTranslate, selectedBatchItems, t]);
+
+  const handleBatchDeleteSelected = useCallback(async () => {
+    if (selectedBatchItems.length === 0) {
+      return;
+    }
+    const confirmed = await confirm(
+      t("skills.batchDeleteConfirm").replace("{count}", String(selectedBatchItems.length)),
+      {
+        title: t("skills.batchDeleteConfirmTitle"),
+        kind: "warning",
+      },
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setBatchDeleting(true);
+    let successCount = 0;
+    let failedCount = 0;
+    try {
+      for (const item of selectedBatchItems) {
+        try {
+          if (item.kind === "skill" && item.skill) {
+            await invoke("delete_skill", { instanceId: item.skill.instance_id });
+            if (config?.skill_metadata && hasSkillMetadataEntry(item.skill, config.skill_metadata)) {
+              const nextConfig: AppConfig = {
+                ...config,
+                skill_metadata: removeSkillMetadataEntry(item.skill, config.skill_metadata),
+              };
+              try {
+                await invoke("save_config", { config: nextConfig });
+                setConfig(nextConfig);
+              } catch {
+                // metadata 清理失败不阻断主流程
+              }
+            }
+          } else if (item.kind === "group" && item.skillPackage) {
+            await invoke("remove_skill_package", { packageId: item.skillPackage.package_id });
+            if (config?.skill_metadata) {
+              const nextConfig: AppConfig = {
+                ...config,
+                skill_metadata: removeGroupSkillMetadataEntries(
+                  config.skill_metadata,
+                  item.skillPackage.installed_members,
+                  item.skillPackage.package_id,
+                ),
+              };
+              try {
+                await invoke("save_config", { config: nextConfig });
+                setConfig(nextConfig);
+              } catch {
+                // metadata 清理失败不阻断主流程
+              }
+            }
+          }
+          successCount += 1;
+        } catch {
+          failedCount += 1;
+        }
+      }
+
+      if (successCount > 0) {
+        addToast(t("skills.batchDeleteSuccess").replace("{count}", String(successCount)), "success");
+      }
+      if (failedCount > 0) {
+        addToast(t("skills.batchDeletePartialFailed").replace("{count}", String(failedCount)), "error");
+      }
+      exitBatchManageMode();
+      await reloadData();
+    } finally {
+      setBatchDeleting(false);
+    }
+  }, [addToast, config, exitBatchManageMode, reloadData, selectedBatchItems, t]);
 
   useEffect(() => {
     if (!isBatchManageMode) {
@@ -2013,7 +2289,8 @@ export function Skills() {
 
                       <div style={{
                         display: "flex",
-                        gap: "4px",
+                        flexDirection: "column",
+                        gap: "2px",
                         padding: "4px",
                         marginBottom: "8px",
                         backgroundColor: "var(--muted)",
@@ -2022,34 +2299,55 @@ export function Skills() {
                         {([
                           { value: "all" as const, label: t("skills.scopeFilterAll"), count: unifiedItems.length },
                           { value: "global" as const, label: t("skills.scopeGlobal"), count: scopeFilterCounts.global },
-                          { value: "project" as const, label: t("skills.scopeProject"), count: scopeFilterCounts.project },
-                        ]).map(({ value, label, count }) => (
-                          <button
-                            key={value}
-                            type="button"
-                            onClick={() => { setScopeFilter(value); setShowTagFilterMenu(false); }}
-                            style={{
-                              flex: 1,
-                              display: "flex",
-                              flexDirection: "column",
-                              alignItems: "center",
-                              gap: "1px",
-                              padding: "5px 0",
-                              fontSize: "11px",
-                              fontWeight: scopeFilter === value ? 600 : 400,
-                              color: scopeFilter === value ? "var(--primary)" : "var(--muted-foreground)",
-                              backgroundColor: scopeFilter === value ? "var(--background)" : "transparent",
-                              border: "none",
-                              borderRadius: "6px",
-                              cursor: "pointer",
-                              boxShadow: scopeFilter === value ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-                              transition: "background-color 0.15s, color 0.15s",
-                            }}
-                          >
-                            <span>{label}</span>
-                            <span style={{ fontSize: "10px", opacity: 0.72 }}>{count}</span>
-                          </button>
-                        ))}
+                          { value: "project" as const, label: activeProjectName ?? t("skills.scopeProject"), count: scopeFilterCounts.project },
+                        ]).map(({ value, label, count }) => {
+                          const isActive = scopeFilter === value;
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => { setScopeFilter(value); setShowTagFilterMenu(false); }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: "8px",
+                                padding: "6px 10px",
+                                fontSize: "12px",
+                                fontWeight: isActive ? 600 : 500,
+                                color: isActive ? "var(--primary)" : "var(--foreground)",
+                                backgroundColor: isActive ? "var(--background)" : "transparent",
+                                border: "none",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                boxShadow: isActive ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                                transition: "background-color 0.15s, color 0.15s",
+                                minWidth: 0,
+                                textAlign: "left",
+                              }}
+                            >
+                              <span style={{
+                                minWidth: 0,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                flex: 1,
+                              }}>
+                                {label}
+                              </span>
+                              <span style={{
+                                fontSize: "11px",
+                                fontWeight: 500,
+                                color: isActive ? "var(--primary)" : "var(--muted-foreground)",
+                                opacity: 0.8,
+                                flexShrink: 0,
+                                fontVariantNumeric: "tabular-nums",
+                              }}>
+                                {count}
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
 
                       <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -2136,47 +2434,45 @@ export function Skills() {
               />
             </div>
 
-            {!isBatchManageMode && (
-              <button
-                type="button"
-                onClick={() => {
-                  const targets = sortedUnifiedItems
-                    .filter((it) => it.kind === "skill" && it.skill)
-                    .map((it) => it.skill!) as Skill[];
-                  void handleBatchTranslate(targets);
-                }}
-                disabled={batchTranslating || sortedUnifiedItems.length === 0}
-                title={t("skills.batchTranslate")}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  padding: "8px 12px",
-                  fontSize: "13px",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  backgroundColor: "var(--background)",
-                  color: "var(--foreground)",
-                  cursor: batchTranslating ? "wait" : "pointer",
-                  opacity: batchTranslating ? 0.6 : 1,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {t("skills.batchTranslate")}
-              </button>
+            {headerActionLayout.primaryActionIds.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                {headerActionLayout.primaryActionIds.map((actionId) =>
+                  renderHeaderActionButton(actionId),
+                )}
+              </div>
             )}
 
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              {headerActionLayout.primaryActionIds.map((actionId) =>
-                renderHeaderActionButton(actionId),
-              )}
-            </div>
+            {headerActionLayout.moreActionIds.length > 0 && (
+              <SkillsHeaderMoreMenu
+                label={t("skills.more")}
+                items={headerActionLayout.moreActionIds.map<SkillsHeaderMoreMenuItem | null>((actionId) => {
+                  switch (actionId) {
+                    case "batch-manage":
+                      return {
+                        id: actionId,
+                        label: t("skills.batchManage"),
+                        onClick: enterBatchManageMode,
+                      };
+                    case "project-bindings":
+                      return {
+                        id: actionId,
+                        label: t("settings.projectBindings"),
+                        onClick: handleOpenProjectBindingsDialog,
+                      };
+                    default:
+                      return null;
+                  }
+                }).filter((item): item is SkillsHeaderMoreMenuItem => item !== null)}
+              />
+            )}
 
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              {headerActionLayout.secondaryActionIds.map((actionId) =>
-                renderHeaderActionButton(actionId),
-              )}
-            </div>
+            {headerActionLayout.secondaryActionIds.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                {headerActionLayout.secondaryActionIds.map((actionId) =>
+                  renderHeaderActionButton(actionId),
+                )}
+              </div>
+            )}
           </>
         }
       />
@@ -2234,6 +2530,7 @@ export function Skills() {
                   <button
                     type="button"
                     onClick={handleClearBatchSelection}
+                    disabled={batchDeleting || batchTranslating}
                     style={{
                       padding: "7px 10px",
                       fontSize: "12px",
@@ -2242,10 +2539,51 @@ export function Skills() {
                       backgroundColor: "var(--background)",
                       border: "1px solid var(--border)",
                       borderRadius: "8px",
-                      cursor: "pointer",
+                      cursor: batchDeleting || batchTranslating ? "not-allowed" : "pointer",
+                      opacity: batchDeleting || batchTranslating ? 0.6 : 1,
                     }}
                   >
                     {t("skills.batchClearSelection")}
+                  </button>
+                )}
+                {batchSelectionSummary.skillCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void handleBatchTranslateSelected()}
+                    disabled={batchDeleting || batchTranslating}
+                    style={{
+                      padding: "7px 10px",
+                      fontSize: "12px",
+                      fontWeight: 500,
+                      color: "var(--primary)",
+                      backgroundColor: "rgba(9, 105, 218, 0.08)",
+                      border: "1px solid rgba(9, 105, 218, 0.25)",
+                      borderRadius: "8px",
+                      cursor: batchDeleting || batchTranslating ? "not-allowed" : "pointer",
+                      opacity: batchDeleting || batchTranslating ? 0.6 : 1,
+                    }}
+                  >
+                    {batchTranslating ? t("skills.translating") : t("skills.batchTranslateSelected")}
+                  </button>
+                )}
+                {batchSelectionSummary.totalCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void handleBatchDeleteSelected()}
+                    disabled={batchDeleting || batchTranslating}
+                    style={{
+                      padding: "7px 10px",
+                      fontSize: "12px",
+                      fontWeight: 500,
+                      color: "#b91c1c",
+                      backgroundColor: "rgba(220, 38, 38, 0.08)",
+                      border: "1px solid rgba(220, 38, 38, 0.25)",
+                      borderRadius: "8px",
+                      cursor: batchDeleting || batchTranslating ? "not-allowed" : "pointer",
+                      opacity: batchDeleting || batchTranslating ? 0.6 : 1,
+                    }}
+                  >
+                    {batchDeleting ? t("common.loading") : t("skills.batchDeleteSelected")}
                   </button>
                 )}
               </div>
@@ -2299,14 +2637,16 @@ export function Skills() {
                   : 0;
 
                 const isBatchSelected = selectedBatchItemKeys.has(item.key);
+                const isCardExpanded = expandedCardKeys.has(item.key);
+                const canToggleExpand = !isBatchManageMode;
 
                 return (
                   <div
                     key={item.key}
                     onClick={isBatchManageMode
                       ? () => handleToggleBatchItemSelection(item.key)
-                      : canOpen
-                        ? () => void handleOpenUnifiedItem(item)
+                      : canToggleExpand
+                        ? () => handleToggleCardExpand(item.key)
                         : undefined}
                     style={{
                       display: "flex",
@@ -2314,25 +2654,31 @@ export function Skills() {
                       padding: "18px 20px",
                       backgroundColor: isBatchSelected ? "rgba(9, 105, 218, 0.08)" : "var(--secondary)",
                       borderRadius: "14px",
-                      border: isBatchSelected ? "1px solid rgba(9, 105, 218, 0.4)" : "1px solid var(--border)",
-                      transition: canOpen && !isBatchManageMode ? "border-color 0.2s, box-shadow 0.2s, transform 0.2s" : undefined,
-                      cursor: isBatchManageMode ? "pointer" : canOpen ? "pointer" : "default",
+                      border: isBatchSelected
+                        ? "1px solid rgba(9, 105, 218, 0.4)"
+                        : isCardExpanded
+                          ? "1px solid var(--ring)"
+                          : "1px solid var(--border)",
+                      transition: canToggleExpand ? "border-color 0.2s, box-shadow 0.2s" : undefined,
+                      cursor: canToggleExpand ? "pointer" : isBatchManageMode ? "pointer" : "default",
                     }}
                     onMouseEnter={(e) => {
-                      if (!canOpen || isBatchManageMode) {
+                      if (!canToggleExpand) {
                         return;
                       }
-                      e.currentTarget.style.borderColor = "var(--ring)";
-                      e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)";
-                      e.currentTarget.style.transform = "translateY(-2px)";
+                      e.currentTarget.style.borderColor = isCardExpanded ? "var(--ring)" : "var(--ring)";
+                      e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.06)";
                     }}
                     onMouseLeave={(e) => {
-                      if (!canOpen || isBatchManageMode) {
+                      if (!canToggleExpand) {
                         return;
                       }
-                      e.currentTarget.style.borderColor = "var(--border)";
+                      e.currentTarget.style.borderColor = isBatchSelected
+                        ? "rgba(9, 105, 218, 0.4)"
+                        : isCardExpanded
+                          ? "var(--ring)"
+                          : "var(--border)";
                       e.currentTarget.style.boxShadow = "none";
-                      e.currentTarget.style.transform = "translateY(0)";
                     }}
                   >
                     <div style={{ display: "flex", gap: "14px", marginBottom: "16px", alignItems: "flex-start" }}>
@@ -2415,7 +2761,7 @@ export function Skills() {
                               borderRadius: "4px",
                             }}>
                               {item.scopeLabel === "project"
-                                ? t("skills.scopeProject")
+                                ? (activeProjectName ?? t("skills.scopeProject"))
                                 : t("skills.scopeGlobal")}
                             </span>
                           )}
@@ -2498,6 +2844,45 @@ export function Skills() {
                               </div>
                             </div>
                           )}
+                          {canOpen && (
+                            <button
+                              type="button"
+                              title={t("skills.openEditor")}
+                              aria-label={t("skills.openEditor")}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleOpenUnifiedItem(item);
+                              }}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                width: "28px",
+                                height: "28px",
+                                padding: 0,
+                                borderRadius: "8px",
+                                border: "none",
+                                backgroundColor: "transparent",
+                                color: "var(--muted-foreground)",
+                                cursor: "pointer",
+                                flexShrink: 0,
+                                transition: "color 0.15s ease, background-color 0.15s ease",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.color = "var(--foreground)";
+                                e.currentTarget.style.backgroundColor = "rgba(15, 23, 42, 0.06)";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.color = "var(--muted-foreground)";
+                                e.currentTarget.style.backgroundColor = "transparent";
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M7 17 17 7" />
+                                <path d="M7 7h10v10" />
+                              </svg>
+                            </button>
+                          )}
                           <TranslateIconButton
                             hasTranslation={translated != null}
                             showingTranslation={isTranslatedView}
@@ -2518,7 +2903,7 @@ export function Skills() {
                           />
                           <SkillCardActionMenu
                             deleting={deletingSkill === item.skill.instance_id}
-                            editLabel={t("common.edit")}
+                            editLabel={t("skills.configureTools")}
                             deleteLabel={t("skills.delete")}
                             moreActionsLabel={t("skills.moreActions")}
                             onEdit={() => openSkillEditor(item.skill!.instance_id, "tools")}
@@ -2529,7 +2914,7 @@ export function Skills() {
                       {!isBatchManageMode && item.kind === "group" && item.skillPackage && (
                         <SkillCardActionMenu
                           deleting={deletingGroupId === item.id}
-                          editLabel={t("common.edit")}
+                          editLabel={t("skills.configureTools")}
                           deleteLabel={t("skills.delete")}
                           moreActionsLabel={t("skills.moreActions")}
                           onEdit={() => openGroupEditor(item.id)}
@@ -2590,6 +2975,162 @@ export function Skills() {
                         </div>
                       )}
                     </div>
+
+                    {isCardExpanded && !isBatchManageMode && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          marginTop: "12px",
+                          paddingTop: "12px",
+                          borderTop: "1px dashed var(--border)",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "10px",
+                        }}
+                      >
+                        {item.kind === "skill" && item.skill && (
+                          <>
+                            <div>
+                              <div style={{
+                                fontSize: "11px",
+                                fontWeight: 600,
+                                color: "var(--muted-foreground)",
+                                marginBottom: "4px",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.04em",
+                              }}>
+                                {t("skills.skillDescription")}
+                              </div>
+                              <div style={{
+                                fontSize: "13px",
+                                color: "var(--foreground)",
+                                lineHeight: 1.6,
+                                whiteSpace: "pre-wrap",
+                                wordBreak: "break-word",
+                              }}>
+                                {item.skill.description || t("skills.noDescription")}
+                              </div>
+                            </div>
+                            {item.openPath && (
+                              <div>
+                                <div style={{
+                                  fontSize: "11px",
+                                  fontWeight: 600,
+                                  color: "var(--muted-foreground)",
+                                  marginBottom: "4px",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.04em",
+                                }}>
+                                  {t("skills.skillPath")}
+                                </div>
+                                <div style={{
+                                  fontSize: "12px",
+                                  color: "var(--muted-foreground)",
+                                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                                  wordBreak: "break-all",
+                                  lineHeight: 1.5,
+                                }}>
+                                  {item.openPath}
+                                </div>
+                              </div>
+                            )}
+                            {toolIds.length > 0 && (
+                              <div>
+                                <div style={{
+                                  fontSize: "11px",
+                                  fontWeight: 600,
+                                  color: "var(--muted-foreground)",
+                                  marginBottom: "6px",
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.04em",
+                                }}>
+                                  {t("skills.configureToolsTitle")}
+                                </div>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                                  {toolIds.map((toolId) => {
+                                    const isEnabled = item.skill!.enabled[toolId] ?? false;
+                                    const tool = tools.find((it) => it.id === toolId);
+                                    const isDetected = tool?.detected ?? false;
+                                    return (
+                                      <span
+                                        key={toolId}
+                                        style={{
+                                          fontSize: "12px",
+                                          fontWeight: 500,
+                                          padding: "4px 8px",
+                                          borderRadius: "6px",
+                                          whiteSpace: "nowrap",
+                                          border: isEnabled
+                                            ? "1px solid rgba(9, 105, 218, 0.35)"
+                                            : "1px solid var(--border)",
+                                          color: isEnabled
+                                            ? "var(--primary)"
+                                            : isDetected
+                                              ? "var(--muted-foreground)"
+                                              : "var(--muted-foreground)",
+                                          backgroundColor: isEnabled
+                                            ? "rgba(9, 105, 218, 0.12)"
+                                            : "var(--background)",
+                                          opacity: isDetected ? 1 : 0.6,
+                                        }}
+                                      >
+                                        {getToolDisplayName(toolId, tools)}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        {item.kind === "group" && item.skillPackage && (
+                          <>
+                            <div>
+                              <div style={{
+                                fontSize: "11px",
+                                fontWeight: 600,
+                                color: "var(--muted-foreground)",
+                                marginBottom: "4px",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.04em",
+                              }}>
+                                {t("skills.skillDescription")}
+                              </div>
+                              <div style={{
+                                fontSize: "13px",
+                                color: "var(--foreground)",
+                                lineHeight: 1.6,
+                                whiteSpace: "pre-wrap",
+                                wordBreak: "break-word",
+                              }}>
+                                {item.description || t("skills.noDescription")}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{
+                                fontSize: "11px",
+                                fontWeight: 600,
+                                color: "var(--muted-foreground)",
+                                marginBottom: "4px",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.04em",
+                              }}>
+                                {t("skills.groupMembersCount").replace("{count}", "")}
+                              </div>
+                              <div style={{
+                                fontSize: "12px",
+                                color: "var(--muted-foreground)",
+                                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                                wordBreak: "break-all",
+                                lineHeight: 1.5,
+                              }}>
+                                {item.skillPackage.installed_members.join(", ")}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -2734,6 +3275,7 @@ export function Skills() {
         <CreateSkillDialog
           creating={creating}
           existingIds={skills.filter((skill) => skill.scope === "global").map((skill) => skill.id)}
+          tools={tools}
           onCancel={() => setShowCreateDialog(false)}
           onCreate={handleCreateSkill}
           t={t}
@@ -3259,22 +3801,38 @@ function SkillManageDialog({
 function CreateSkillDialog({
   creating,
   existingIds,
+  tools,
   onCancel,
   onCreate,
   t,
 }: {
   creating: boolean;
   existingIds: string[];
+  tools: Tool[];
   onCancel: () => void;
-  onCreate: (name: string, description: string) => void;
+  onCreate: (name: string, description: string, targetToolIds: string[], tags: string[]) => void;
   t: (key: TranslationPath) => string;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
+  const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(new Set());
+  const [tagsInput, setTagsInput] = useState("");
+
+  const actionableTools = useMemo(
+    () => tools.filter((tool) => tool.detected && tool.config.enabled),
+    [tools],
+  );
 
   const toId = (n: string): string =>
     n.trim().toLowerCase().replace(/ /g, "-").replace(/[^a-z0-9_-]/g, "");
+
+  const parseTags = (input: string): string[] => {
+    return input
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0);
+  };
 
   const handleSubmit = () => {
     const trimmed = name.trim();
@@ -3287,7 +3845,19 @@ function CreateSkillDialog({
       setError(t("skills.nameConflict").replace("{name}", trimmed));
       return;
     }
-    onCreate(trimmed, description.trim());
+    onCreate(trimmed, description.trim(), [...selectedToolIds], parseTags(tagsInput));
+  };
+
+  const toggleTool = (toolId: string) => {
+    setSelectedToolIds((current) => {
+      const next = new Set(current);
+      if (next.has(toolId)) {
+        next.delete(toolId);
+      } else {
+        next.add(toolId);
+      }
+      return next;
+    });
   };
 
   return (
@@ -3367,13 +3937,89 @@ function CreateSkillDialog({
             color: "var(--foreground)",
             outline: "none",
             boxSizing: "border-box",
-            marginBottom: "24px",
+            marginBottom: "20px",
             resize: "vertical",
             maxHeight: "120px",
             fontFamily: "inherit",
             lineHeight: 1.5,
           }}
         />
+
+        {actionableTools.length > 0 && (
+          <div style={{ marginBottom: "20px" }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "6px" }}>
+              <label style={{ fontSize: "13px", fontWeight: 500, color: "var(--foreground)" }}>
+                {t("skills.createTargetTools")}
+              </label>
+              <span style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+                {t("skills.createTargetToolsHint")}
+              </span>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {actionableTools.map((tool) => {
+                const isSelected = selectedToolIds.has(tool.id);
+                return (
+                  <button
+                    key={tool.id}
+                    type="button"
+                    onClick={() => toggleTool(tool.id)}
+                    disabled={creating}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "6px 12px",
+                      fontSize: "12px",
+                      fontWeight: 500,
+                      color: isSelected ? "var(--primary-foreground, #fff)" : "var(--foreground)",
+                      backgroundColor: isSelected ? "var(--primary, #6366f1)" : "var(--background)",
+                      border: isSelected ? "1px solid var(--primary, #6366f1)" : "1px solid var(--border)",
+                      borderRadius: "8px",
+                      cursor: creating ? "not-allowed" : "pointer",
+                      transition: "background-color 0.15s, color 0.15s, border-color 0.15s",
+                    }}
+                  >
+                    {isSelected && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    )}
+                    {tool.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div style={{ marginBottom: "24px" }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "6px" }}>
+            <label style={{ fontSize: "13px", fontWeight: 500, color: "var(--foreground)" }}>
+              {t("skills.createTags")}
+            </label>
+            <span style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+              {t("skills.createTagsHint")}
+            </span>
+          </div>
+          <input
+            type="text"
+            placeholder={t("skills.createTagsPlaceholder")}
+            value={tagsInput}
+            onChange={(e) => setTagsInput(e.target.value)}
+            disabled={creating}
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              fontSize: "13px",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              backgroundColor: "var(--background)",
+              color: "var(--foreground)",
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
           <button
