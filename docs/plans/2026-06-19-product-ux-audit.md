@@ -1,7 +1,7 @@
 # 产品体验审查与改进计划
 
 > **创建时间**: 2026-06-19
-> **状态**: 阶段一（Welcome 流程）、阶段二（Skills 核心页面）、阶段三（全局搜索）、阶段四（Marketplace）、阶段六（Settings 模块五）已完成
+> **状态**: 阶段一（Welcome 流程）、阶段二（Skills 核心页面）、阶段三（全局搜索）、阶段四（Marketplace）、阶段五（Editor）、阶段六（Settings 模块五）已完成
 > **目标**: 从用户角度全面挖掘产品不合理/不好用之处，形成可执行改进计划，支持后续实施与结果对照
 > **审查范围**: Welcome / Skills / Tools / Marketplace / Settings / Editor / Feedback / Sidebar / 整体体验
 
@@ -353,10 +353,10 @@
 - **影响**：用户想在 Skill 里加新文件（如 examples、子文档）必须去系统文件操作，破坏应用内闭环。
 - **改进建议**：文件树支持右键菜单（新建文件/文件夹、重命名、删除）。
 - **验收标准**：
-  - [ ] 文件树支持新建文件/文件夹
-  - [ ] 文件树支持重命名
-  - [ ] 文件树支持删除（带二次确认）
-  - [ ] 操作后文件树自动刷新
+  - [x] 文件树支持新建文件/文件夹
+  - [x] 文件树支持重命名
+  - [x] 文件树支持删除（带二次确认）
+  - [x] 操作后文件树自动刷新
 - **关联文件**：`src/pages/Editor.tsx`、`src-tauri/src/commands/`
 
 ### E-02 🟢 无文件搜索
@@ -365,9 +365,9 @@
 - **影响**：大型 Skill 文件多时定位困难。
 - **改进建议**：文件树顶部加搜索框，支持模糊匹配。
 - **验收标准**：
-  - [ ] 文件树顶部有搜索框
-  - [ ] 支持模糊匹配
-  - [ ] 匹配项高亮
+  - [x] 文件树顶部有搜索框
+  - [x] 支持模糊匹配
+  - [x] 匹配项高亮
 - **关联文件**：`src/pages/Editor.tsx`
 
 ### E-03 🟢 Linux 体验差
@@ -376,7 +376,7 @@
 - **影响**：Linux 用户失去语法高亮、自动补全等核心编辑能力。
 - **改进建议**：至少在 UI 上明确提示"Linux 下编辑器功能受限"，或尝试在 Linux 上也启用 Monaco（排查具体不兼容原因）。
 - **验收标准**：
-  - [ ] Linux 下有明确的功能降级提示
+  - [x] Linux 下有明确的功能降级提示
   - [ ] 或：Linux 下 Monaco 可用
 - **关联文件**：`src/pages/Editor.tsx`
 
@@ -386,9 +386,9 @@
 - **影响**：用户可能尝试编辑翻译结果却改不了，困惑。
 - **改进建议**：翻译模式下顶部明显横幅提示"当前为翻译预览，只读"，并提供"返回编辑"按钮。
 - **验收标准**：
-  - [ ] 翻译模式有醒目横幅
-  - [ ] 提供"返回编辑"按钮
-  - [ ] 只读状态视觉清晰
+  - [x] 翻译模式有醒目横幅
+  - [x] 提供"返回编辑"按钮
+  - [x] 只读状态视觉清晰
 - **关联文件**：`src/pages/Editor.tsx`
 
 ---
@@ -597,10 +597,10 @@
 
 ### 阶段五验收
 
-- [ ] E-01：文件树可新建/删除/重命名
-- [ ] E-02：文件树可搜索
-- [ ] E-04：翻译只读有横幅
-- [ ] E-03：Linux 有降级提示或 Monaco 可用
+- [x] E-01：文件树可新建/删除/重命名
+- [x] E-02：文件树可搜索
+- [x] E-04：翻译只读有横幅
+- [x] E-03：Linux 有降级提示或 Monaco 可用
 
 ### 阶段六验收
 
@@ -662,6 +662,35 @@
 ---
 
 ## 修复记录
+
+### 2026-06-19 模块六（Editor）实现
+
+完成模块六全部 4 个任务的实现：
+
+| 任务 | 编号 | 实现内容 |
+|------|------|----------|
+| 文件树新建/删除/重命名 | E-01 | 后端新增 `create_file`/`create_directory`/`delete_path`/`rename_path` 四个 Tauri 命令（`services/file_ops.rs` + `commands/files.rs`）；前端 FileTree 重构，支持右键菜单（新建文件/文件夹、重命名、删除）、工具栏快捷按钮、内联输入框（Enter 提交/Esc 取消/失焦提交）、删除二次确认（`@tauri-apps/plugin-dialog` 的 `confirm`），操作后自动刷新文件树并智能更新选中态 |
+| 文件搜索 | E-02 | FileTree 顶部新增搜索框，大小写不敏感的子串模糊匹配；搜索时自动展开所有包含匹配项的目录；匹配文本通过 `<mark>` 高亮；无匹配时显示空状态文案 |
+| Linux 体验差 | E-03 | 采用"提示"方案：Linux 下编辑器顶部显示醒目的黄色警告横幅，说明 Monaco 不可用、已降级为简化编辑器、文件读写正常；提供"知道了"按钮，点击后通过 localStorage 持久化关闭状态，避免重复打扰 |
+| 翻译只读提示不明显 | E-04 | 翻译预览模式下编辑器顶部显示主题色横幅，明确提示"当前为翻译预览，只读模式"，并提供醒目的"返回编辑"按钮一键切回原文视图 |
+
+**关键设计决策**：
+- FileTree 的 `rootPath` 和 `onRefresh` 设为可选，仅在两者同时提供时启用文件操作功能；SkillDetailModal 等只读预览场景不传这两个 prop，自动降级为纯展示模式（无工具栏、无右键菜单）
+- 文件操作错误通过 `window.dispatchEvent(new CustomEvent("filetree:error"))` 上抛，Editor 监听后在编辑器顶部显示红色错误条，避免在 FileTree 内引入 toast 依赖
+- 删除文件后若选中文件被删，自动清空编辑器内容（loadFile effect 在 selectedPath 为空时清空 content/originalContent）
+
+**新增 i18n 文案**（zh/en 同步）：
+- `editor.newFile` / `newFolder` / `rename` / `delete` / `refresh`
+- `editor.deleteConfirm` / `deleteConfirmTitle`
+- `editor.searchFiles` / `noResults`
+- `editor.linuxLimitedTitle` / `linuxLimitedDesc` / `linuxLimitedDismiss`
+- `editor.translationBannerTitle` / `backToEdit`
+
+**新增后端命令**：
+- `create_file(path: String)` — 创建文件（含父目录自动创建）
+- `create_directory(path: String)` — 创建目录
+- `delete_path(path: String)` — 删除文件或目录（目录递归删除）
+- `rename_path(old_path: String, new_path: String)` — 重命名/移动，目标已存在则报错
 
 ### 2026-06-19 模块五（Settings）实现
 

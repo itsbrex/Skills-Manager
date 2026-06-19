@@ -15,6 +15,8 @@ import {
 } from "@/hooks/useSkillTranslation";
 import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
 
+const LINUX_NOTICE_DISMISSED_KEY = "skills-manager:linux-editor-notice-dismissed";
+
 // Helper for timeout removed as per user request
 
 export function EditorPage() {
@@ -40,6 +42,14 @@ export function EditorPage() {
   const [fileViewMode, setFileViewMode] = useState<"original" | "translated">("original");
   const [skillFileProgress, setSkillFileProgress] = useState<SkillFileTranslationProgress | null>(null);
   const [translationNotice, setTranslationNotice] = useState<string | null>(null);
+  const [linuxNoticeDismissed, setLinuxNoticeDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(LINUX_NOTICE_DISMISSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [treeError, setTreeError] = useState<string | null>(null);
 
   const isSkillMdFile = selectedPath.toLowerCase().endsWith("skill.md");
   const isTranslatableFile = /\.(md|mdx|markdown|txt|text)$/i.test(selectedPath);
@@ -111,6 +121,38 @@ export function EditorPage() {
     }
     loadTree();
   }, [rootPath]);
+
+  // Refresh file tree (called by FileTree after create/rename/delete operations)
+  const refreshFileTree = useCallback(async () => {
+    if (!rootPath) return;
+    try {
+      const tree = await invoke<FileNode>("read_directory_tree", { path: rootPath });
+      setFileTree(tree);
+      setTreeError(null);
+    } catch (err) {
+      console.error("[Editor] Tree refresh error:", err);
+      setTreeError(String(err));
+    }
+  }, [rootPath]);
+
+  // Listen for file tree operation errors dispatched by FileTree
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      setTreeError(detail ?? "Operation failed");
+    };
+    window.addEventListener("filetree:error", handler as EventListener);
+    return () => window.removeEventListener("filetree:error", handler as EventListener);
+  }, []);
+
+  const dismissLinuxNotice = useCallback(() => {
+    setLinuxNoticeDismissed(true);
+    try {
+      localStorage.setItem(LINUX_NOTICE_DISMISSED_KEY, "1");
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
 
   // Look up related skill: try exact path match first, then derive from the
   // currently-open SKILL.md absolute path (handles skill packages where
@@ -293,6 +335,9 @@ export function EditorPage() {
     if (!rootPath || !selectedPath) {
       console.log("[Editor] Missing path, setting loading false");
       setLoading(false);
+      // Clear editor content when no file is selected (e.g. after deletion)
+      setContent("");
+      setOriginalContent("");
       return;
     }
 
@@ -551,15 +596,159 @@ export function EditorPage() {
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         {/* File tree */}
         {fileTree && (
-          <FileTree
-            root={fileTree}
-            selectedPath={selectedPath}
-            onSelectFile={handleSelectFile}
-          />
+          <div style={{ width: 220, flexShrink: 0, borderRight: "1px solid var(--border)" }}>
+            <FileTree
+              root={fileTree}
+              rootPath={rootPath}
+              selectedPath={selectedPath}
+              onSelectFile={handleSelectFile}
+              onRefresh={refreshFileTree}
+            />
+          </div>
         )}
 
         {/* Editor */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
+          {treeError && (
+            <div
+              role="alert"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "8px 12px",
+                backgroundColor: "#fef2f2",
+                borderBottom: "1px solid #fecaca",
+                color: "#dc2626",
+                fontSize: 12,
+                flexShrink: 0,
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4M12 16h.01" />
+              </svg>
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {treeError}
+              </span>
+              <button
+                type="button"
+                onClick={() => setTreeError(null)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 2,
+                  color: "#dc2626",
+                  opacity: 0.7,
+                  flexShrink: 0,
+                }}
+                aria-label="dismiss"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* E-03: Linux editor degradation notice */}
+          {isLinux && !linuxNoticeDismissed && !loading && !error && (
+            <div
+              role="status"
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 10,
+                padding: "10px 14px",
+                backgroundColor: "#fffbeb",
+                borderBottom: "1px solid #fde68a",
+                color: "#92400e",
+                fontSize: 12,
+                lineHeight: 1.5,
+                flexShrink: 0,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: 1 }}>
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, marginBottom: 2 }}>
+                  {t("editor.linuxLimitedTitle")}
+                </div>
+                <div>{t("editor.linuxLimitedDesc")}</div>
+              </div>
+              <button
+                type="button"
+                onClick={dismissLinuxNotice}
+                style={{
+                  background: "transparent",
+                  border: "1px solid #fde68a",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  padding: "3px 10px",
+                  color: "#92400e",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  flexShrink: 0,
+                }}
+              >
+                {t("editor.linuxLimitedDismiss")}
+              </button>
+            </div>
+          )}
+
+          {/* E-04: Translation read-only banner */}
+          {showingTranslation && !loading && !error && (
+            <div
+              role="status"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 14px",
+                backgroundColor: "color-mix(in srgb, var(--primary) 10%, var(--background))",
+                borderBottom: "1px solid color-mix(in srgb, var(--primary) 30%, var(--border))",
+                color: "var(--foreground)",
+                fontSize: 12,
+                flexShrink: 0,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, color: "var(--primary)" }}>
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+              </svg>
+              <span style={{ flex: 1, fontWeight: 500 }}>
+                {t("editor.translationBannerTitle")}
+              </span>
+              <button
+                type="button"
+                onClick={toggleView}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  background: "var(--primary)",
+                  border: "none",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  padding: "4px 10px",
+                  color: "var(--primary-foreground)",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  flexShrink: 0,
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 12H5M12 19l-7-7 7-7" />
+                </svg>
+                {t("editor.backToEdit")}
+              </button>
+            </div>
+          )}
+
           {loading ? (
             <div style={{
               flex: 1,

@@ -104,3 +104,56 @@ pub fn read_file_content(path: &str) -> Result<String, String> {
 pub fn write_file_content(path: &str, content: &str) -> Result<(), String> {
     fs::write(path, content).map_err(|e| format!("Failed to write file: {}", e))
 }
+
+pub fn create_file(path: &str) -> Result<(), String> {
+    let p = Path::new(path);
+    if p.exists() {
+        return Err(format!("Path already exists: {}", path));
+    }
+    if let Some(parent) = p.parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent).map_err(|e| format!("Failed to create parent directory: {}", e))?;
+        }
+    }
+    fs::File::create(p)
+        .map_err(|e| format!("Failed to create file: {}", e))?;
+    Ok(())
+}
+
+pub fn create_directory(path: &str) -> Result<(), String> {
+    let p = Path::new(path);
+    if p.exists() {
+        return Err(format!("Path already exists: {}", path));
+    }
+    fs::create_dir_all(p).map_err(|e| format!("Failed to create directory: {}", e))?;
+    Ok(())
+}
+
+pub fn delete_path(path: &str) -> Result<(), String> {
+    let p = Path::new(path);
+    if !p.exists() {
+        return Err(format!("Path does not exist: {}", path));
+    }
+    if p.is_dir() {
+        fs::remove_dir_all(p).map_err(|e| format!("Failed to remove directory: {}", e))
+    } else {
+        fs::remove_file(p).map_err(|e| format!("Failed to remove file: {}", e))
+    }
+}
+
+pub fn rename_path(old_path: &str, new_path: &str) -> Result<(), String> {
+    let from = Path::new(old_path);
+    let to = Path::new(new_path);
+    if !from.exists() {
+        return Err(format!("Source path does not exist: {}", old_path));
+    }
+    if to.exists() {
+        return Err(format!("Target path already exists: {}", new_path));
+    }
+    if let Some(parent) = to.parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent).map_err(|e| format!("Failed to create parent directory: {}", e))?;
+        }
+    }
+    fs::rename(from, to).map_err(|e| format!("Failed to rename: {}", e))
+}

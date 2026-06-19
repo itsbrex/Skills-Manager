@@ -20,7 +20,10 @@ pub use editors::{
     detect_available_editors, get_available_editors, open_in_editor, refresh_editors,
 };
 pub use feedback::submit_feedback;
-pub use files::{read_directory_tree, read_file, write_file};
+pub use files::{
+    create_directory, create_file, delete_path, read_directory_tree, read_file, rename_path,
+    write_file,
+};
 pub use llm::{
     clear_llm_provider, clear_translation_cache, get_cached_marketplace_translations,
     get_cached_skill_translations, get_cached_text_translation, get_llm_provider,
