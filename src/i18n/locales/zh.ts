@@ -305,6 +305,7 @@ export const zh = {
     customIdLabel: "工具 ID",
     customIdPlaceholder: "例如：my-cli",
     customIdLocked: "创建后 ID 不可修改",
+    customIdHint: "创建后不可修改，请谨慎填写",
     customConfigPathLabel: "配置目录",
     customConfigPathPlaceholder: "配置目录路径",
     customSkillsPathLabel: "Skills 目录",
@@ -343,6 +344,7 @@ export const zh = {
     skillsManageDisabled: "请先启用该工具",
     customEdit: "编辑",
     customDelete: "删除",
+    notDetectedTooltip: "未检测到 {tool} 安装，无法启用",
   },
   settings: {
     title: "设 置",

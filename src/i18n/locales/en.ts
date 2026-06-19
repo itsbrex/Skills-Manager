@@ -305,6 +305,7 @@ export const en = {
     customIdLabel: "Tool ID",
     customIdPlaceholder: "e.g. my-cli",
     customIdLocked: "ID is locked after creation",
+    customIdHint: "Cannot be changed after creation. Choose carefully.",
     customConfigPathLabel: "Config Directory",
     customConfigPathPlaceholder: "Path to config directory",
     customSkillsPathLabel: "Skills Directory",
@@ -343,6 +344,7 @@ export const en = {
     skillsManageDisabled: "Enable this tool first",
     customEdit: "Edit",
     customDelete: "Delete",
+    notDetectedTooltip: "{tool} is not detected on your system and cannot be enabled",
   },
   settings: {
     title: "Settings",

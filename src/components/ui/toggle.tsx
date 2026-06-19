@@ -4,9 +4,10 @@ interface ToggleProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
+  title?: string;
 }
 
-export function Toggle({ checked, onChange, disabled = false }: ToggleProps) {
+export function Toggle({ checked, onChange, disabled = false, title }: ToggleProps) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
 
@@ -16,6 +17,7 @@ export function Toggle({ checked, onChange, disabled = false }: ToggleProps) {
       role="switch"
       aria-checked={checked}
       disabled={disabled}
+      title={title}
       onClick={() => onChange(!checked)}
       style={{
         width: 44,

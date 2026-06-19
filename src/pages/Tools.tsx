@@ -976,6 +976,9 @@ export function Tools() {
               checked={tool.config.enabled}
               disabled={!tool.detected && !tool.config.enabled}
               onChange={(enabled) => toggleToolEnabled(tool, enabled)}
+              title={!tool.detected && !tool.config.enabled
+                ? t("tools.notDetectedTooltip").replace("{tool}", tool.name)
+                : undefined}
             />
           </div>
         </div>
@@ -1444,6 +1447,11 @@ export function Tools() {
                   {editingToolId && (
                     <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
                       {t("tools.customIdLocked")}
+                    </span>
+                  )}
+                  {!editingToolId && (
+                    <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
+                      {t("tools.customIdHint")}
                     </span>
                   )}
                 </div>
