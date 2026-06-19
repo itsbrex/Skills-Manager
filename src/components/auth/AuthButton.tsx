@@ -26,6 +26,7 @@ export function AuthButton({ variant = "sidebar" }: AuthButtonProps) {
             alignItems: "center",
             gap: "10px",
             padding: "8px 10px",
+            justifyContent: "flex-start",
             borderRadius: "8px",
             fontSize: "13px",
             color: "var(--muted-foreground)",
@@ -52,6 +53,7 @@ export function AuthButton({ variant = "sidebar" }: AuthButtonProps) {
               alignItems: "center",
               justifyContent: "center",
               overflow: "hidden",
+              flexShrink: 0,
             }}
           >
             {authProfile?.avatar_url ? (
@@ -67,7 +69,7 @@ export function AuthButton({ variant = "sidebar" }: AuthButtonProps) {
               </svg>
             )}
           </div>
-          <span style={{ color: "var(--foreground)" }}>{displayName}</span>
+          <span style={{ color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
         </button>
 
         <AuthModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />

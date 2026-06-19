@@ -38,6 +38,51 @@ interface ParsedFrontmatter {
 const skillTreeCache = new Map<string, SkillFileNode>();
 const fileContentCache = new Map<string, string>();
 
+// LRU limits to keep memory bounded during long sessions.
+// Tree cache is small and reused on reopen; content cache can grow large
+// because each entry holds a full file body.
+const SKILL_TREE_CACHE_MAX = 24;
+const FILE_CONTENT_CACHE_MAX = 60;
+
+function touchCacheKey(cache: Map<string, unknown>, key: string) {
+  const value = cache.get(key);
+  if (value === undefined) return;
+  cache.delete(key);
+  cache.set(key, value);
+}
+
+function setBoundedCache<V>(
+  cache: Map<string, V>,
+  key: string,
+  value: V,
+  max: number,
+) {
+  if (cache.size >= max) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey !== undefined) {
+      cache.delete(oldestKey);
+    }
+  }
+  cache.set(key, value);
+}
+
+/**
+ * Clear file-content cache entries that belong to a specific skill tree.
+ * Called when the detail modal closes so memory does not grow unbounded
+ * across many skill previews in a long session.
+ */
+function clearFileContentCacheForTree(tree: SkillFileNode | null) {
+  if (!tree) {
+    fileContentCache.clear();
+    return;
+  }
+  const urlMap = new Map<string, string>();
+  collectDownloadUrls(tree, urlMap);
+  for (const url of urlMap.values()) {
+    fileContentCache.delete(url);
+  }
+}
+
 export function SkillDetailModal({ skill, onClose, onInstall, installing }: SkillDetailModalProps) {
   const { t, language } = useTranslation();
   const { theme } = useTheme();
@@ -53,6 +98,9 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const previewRequestId = useRef(0);
+  // Keep a ref to the latest file tree so the unmount cleanup can release the
+  // associated file-content cache entries without stale-closure issues.
+  const fileTreeRef = useRef<SkillFileNode | null>(null);
   const canShowFiles = Boolean(skill.repo_url && skill.skill_path);
   const externalUrl = skill.external_url || skill.repo_url;
   const isUpdateAvailable = skill.install_status === "update_available";
@@ -286,6 +334,21 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
     return countFiles(fileTree);
   }, [fileTree]);
 
+  // Mirror fileTree into a ref so the unmount cleanup below can read the
+  // latest value without re-subscribing on every tree change.
+  useEffect(() => {
+    fileTreeRef.current = fileTree;
+  }, [fileTree]);
+
+  // Release the file-content cache entries for the skill that was open when
+  // the modal closes. Tree cache is retained (LRU-bounded) so reopening a
+  // skill stays fast; only per-file contents are dropped to bound memory.
+  useEffect(() => {
+    return () => {
+      clearFileContentCacheForTree(fileTreeRef.current);
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     previewRequestId.current += 1;
@@ -323,7 +386,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
           skillPath,
         });
         if (!cancelled && requestId === previewRequestId.current) {
-          skillTreeCache.set(cacheKey, tree);
+          setBoundedCache(skillTreeCache, cacheKey, tree, SKILL_TREE_CACHE_MAX);
           setFileTree(tree);
         }
       } catch (err) {
@@ -358,6 +421,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
 
     const cachedContent = fileContentCache.get(downloadUrl);
     if (cachedContent !== undefined) {
+      touchCacheKey(fileContentCache, downloadUrl);
       setPreviewContent(cachedContent);
       setContentLoading(false);
       return;
@@ -372,7 +436,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
       if (requestId !== previewRequestId.current) {
         return;
       }
-      fileContentCache.set(downloadUrl, content);
+      setBoundedCache(fileContentCache, downloadUrl, content, FILE_CONTENT_CACHE_MAX);
       setPreviewContent(content);
     } catch (err) {
       if (requestId !== previewRequestId.current) {
@@ -627,7 +691,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
                                     padding: "2px 8px",
                                   }}
                                 >
-                                  compatibility: {item}
+                                  {t("marketplace.compatibilityLabel")}: {item}
                                 </span>
                               ))}
                               {Object.entries(parsedMarkdown.frontmatter.metadata).map(([key, value]) => (

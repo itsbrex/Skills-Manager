@@ -85,7 +85,7 @@ export function EditorPage() {
     if (!rootPath) {
       console.log("[Editor] No rootPath, setting loading false");
       setLoading(false);
-      setError("No root path specified");
+      setError(t("editor.noRootPath"));
       return;
     }
 

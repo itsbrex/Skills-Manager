@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { Layout } from "@/components/layout/Layout";
 import { Skills } from "@/pages/Skills";
@@ -17,8 +17,34 @@ import { I18nProvider, Language } from "@/i18n";
 import { FontFamilyPreset, normalizeFontFamilyPreset } from "@/lib/fontFamily";
 import { AppConfig, MarketplaceUpdateCheckResult } from "@/types";
 import { ToastContainer, useToast } from "@/components/ui/toast";
+import { CommandPalette } from "@/components/CommandPalette";
 
 type Theme = "light" | "dark" | "system";
+
+function GlobalShortcuts({ onOpenPalette }: { onOpenPalette: () => void }) {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMod = e.metaKey || e.ctrlKey;
+      if (!isMod) return;
+      // Cmd+K / Ctrl+K: open command palette
+      if (e.key === "k" || e.key === "K") {
+        e.preventDefault();
+        onOpenPalette();
+        return;
+      }
+      // Cmd+, / Ctrl, (macOS Settings convention): open settings
+      if (e.key === ",") {
+        e.preventDefault();
+        navigate("/settings");
+        return;
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [navigate, onOpenPalette]);
+  return null;
+}
 
 function App() {
   const { isInitialized, isLoading: initLoading, markInitialized } = useInitialization();
@@ -26,6 +52,7 @@ function App() {
   const [theme, setTheme] = useState<Theme>("system");
   const [fontFamily, setFontFamily] = useState<FontFamilyPreset>("system");
   const [configLoaded, setConfigLoaded] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const { toasts, removeToast } = useToast();
 
   // Load preferences from config on mount
@@ -114,6 +141,7 @@ function App() {
         <AuthProvider>
           <BrowserRouter>
             <SkillTranslationProvider>
+              <GlobalShortcuts onOpenPalette={() => setPaletteOpen(true)} />
               <Routes>
                 <Route path="/" element={<Layout />}>
                   <Route index element={<Skills />} />
@@ -124,6 +152,7 @@ function App() {
                 </Route>
                 <Route path="/editor" element={<EditorPage />} />
               </Routes>
+              <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
               <ToastContainer toasts={toasts} onRemove={removeToast} />
             </SkillTranslationProvider>
           </BrowserRouter>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
@@ -30,6 +31,7 @@ import { resolveActiveProjectId } from "./projectBindings";
 export function Settings() {
   const { t, language, setLanguage } = useTranslation();
   const { setTheme, setFontFamily } = useTheme();
+  const location = useLocation();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -45,6 +47,18 @@ export function Settings() {
     tRef.current = t;
     addToastRef.current = addToast;
   });
+
+  // Scroll to the section requested via location hash (e.g. "#settings-llm")
+  // so the command palette can deep-link to a specific settings section.
+  useEffect(() => {
+    if (!config) return;
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash) return;
+    const el = document.getElementById(hash);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [config, location]);
 
   const fetchConfig = useCallback(async () => {
     setError(null);
@@ -300,7 +314,7 @@ export function Settings() {
       }}>
         <div style={{ maxWidth: '680px' }}>
           {/* General Section */}
-          <SectionTitle>{t("settings.general")}</SectionTitle>
+          <SectionTitle id="settings-general">{t("settings.general")}</SectionTitle>
           <SettingsCard>
             <SettingsRow
               label={t("settings.skillsDirectory")}
@@ -468,7 +482,7 @@ export function Settings() {
           </SettingsCard>
 
           {/* Marketplace Section */}
-          <SectionTitle>{t("settings.marketplace")}</SectionTitle>
+          <SectionTitle id="settings-marketplace">{t("settings.marketplace")}</SectionTitle>
           <SettingsCard>
             <SettingsRow
               label={t("settings.githubToken")}
@@ -535,7 +549,7 @@ export function Settings() {
           </SettingsCard>
 
           {/* Appearance Section */}
-          <SectionTitle>{t("settings.appearance")}</SectionTitle>
+          <SectionTitle id="settings-appearance">{t("settings.appearance")}</SectionTitle>
           <SettingsCard>
             <SettingsRow
               label={t("settings.theme")}
@@ -581,7 +595,7 @@ export function Settings() {
           </SettingsCard>
 
           {/* AI Translation */}
-          <SectionTitle>{t("settings.llmTitle")}</SectionTitle>
+          <SectionTitle id="settings-llm">{t("settings.llmTitle")}</SectionTitle>
           <SettingsCard>
             <LlmProviderSection
               provider={config.llm_provider ?? null}
@@ -592,7 +606,7 @@ export function Settings() {
           </SettingsCard>
 
           {/* Account & Cloud Sync */}
-          <SectionTitle>{t("settings.account")}</SectionTitle>
+          <SectionTitle id="settings-account">{t("settings.account")}</SectionTitle>
           <SettingsCard>
             <SettingsRow
               label={t("settings.accountStatus")}
@@ -601,20 +615,30 @@ export function Settings() {
             >
               <AuthButton variant="inline" />
             </SettingsRow>
+          </SettingsCard>
 
-            
-
-            
-
-            
-
-            
-
-            
+          {/* Keyboard shortcuts */}
+          <SectionTitle>{t("shortcuts.title")}</SectionTitle>
+          <SettingsCard>
+            <ShortcutRow
+              keys={detectModKey() + "K"}
+              description={t("shortcuts.openCommandPalette")}
+              isLast={false}
+            />
+            <ShortcutRow
+              keys={detectModKey() + ","}
+              description={t("shortcuts.openSettings")}
+              isLast={false}
+            />
+            <ShortcutRow
+              keys={detectModKey() + "S"}
+              description={t("shortcuts.saveFile")}
+              isLast={true}
+            />
           </SettingsCard>
 
           {/* About Section */}
-          <SectionTitle>{t("settings.about")}</SectionTitle>
+          <SectionTitle id="settings-about">{t("settings.about")}</SectionTitle>
           <SettingsCard>
             <div style={{ padding: '16px 0' }}>
               {/* First row: App info and version */}
@@ -811,14 +835,18 @@ export function Settings() {
 
 // --- Sub-components ---
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+function SectionTitle({ children, id }: { children: React.ReactNode; id?: string }) {
   return (
-    <h2 style={{
-      fontSize: '15px',
-      fontWeight: 600,
-      color: 'var(--foreground)',
-      margin: '0 0 12px 0',
-    }}>
+    <h2
+      id={id}
+      style={{
+        fontSize: '15px',
+        fontWeight: 600,
+        color: 'var(--foreground)',
+        margin: '0 0 12px 0',
+        scrollMarginTop: '24px',
+      }}
+    >
       {children}
     </h2>
   );
@@ -1348,6 +1376,51 @@ function Field({
           {hint}
         </span>
       )}
+    </div>
+  );
+}
+
+function detectModKey(): string {
+  if (typeof navigator === "undefined") return "Ctrl+";
+  const ua = navigator.userAgent.toLowerCase();
+  return ua.includes("macintosh") || ua.includes("mac os") ? "⌘+" : "Ctrl+";
+}
+
+function ShortcutRow({
+  keys,
+  description,
+  isLast,
+}: {
+  keys: string;
+  description: string;
+  isLast: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "14px 0",
+        borderBottom: isLast ? "none" : "1px solid var(--border)",
+      }}
+    >
+      <div style={{ fontSize: "13px", color: "var(--foreground)" }}>{description}</div>
+      <kbd
+        style={{
+          fontSize: "12px",
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+          color: "var(--foreground)",
+          backgroundColor: "var(--background)",
+          border: "1px solid var(--border)",
+          borderRadius: "6px",
+          padding: "3px 8px",
+          boxShadow: "0 1px 0 var(--border)",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {keys}
+      </kbd>
     </div>
   );
 }
