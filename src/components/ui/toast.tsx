@@ -1,10 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface Toast {
   id: string;
   message: string;
   type: "error" | "success" | "info";
   persistent?: boolean; // 持久化 toast，不自动关闭
+  action?: ToastAction; // 可选的操作按钮（如"去查看"）
 }
 
 interface ToastItemProps {
@@ -15,15 +21,20 @@ interface ToastItemProps {
 function ToastItem({ toast, onRemove }: ToastItemProps) {
   const [isExiting, setIsExiting] = useState(false);
 
+  const dismiss = useCallback(() => {
+    setIsExiting(true);
+    setTimeout(() => onRemove(toast.id), 300);
+  }, [onRemove, toast.id]);
+
   useEffect(() => {
-    if (toast.persistent) return; // 持久化 toast 不自动关闭
+    // 持久化 toast 或带操作按钮的 toast 不自动关闭，确保用户能看到操作入口
+    if (toast.persistent || toast.action) return;
 
     const timer = setTimeout(() => {
-      setIsExiting(true);
-      setTimeout(() => onRemove(toast.id), 300);
+      dismiss();
     }, 3000);
     return () => clearTimeout(timer);
-  }, [toast.id, toast.persistent, onRemove]);
+  }, [toast.id, toast.persistent, toast.action, dismiss]);
 
   const bgColor = toast.type === "error" ? "#fef2f2" : toast.type === "success" ? "#f0fdf4" : "#eff6ff";
   const borderColor = toast.type === "error" ? "#fecaca" : toast.type === "success" ? "#bbf7d0" : "#bfdbfe";
@@ -60,11 +71,30 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
         </svg>
       )}
       <span style={{ flex: 1 }}>{toast.message}</span>
+      {toast.action && (
+        <button
+          type="button"
+          onClick={() => {
+            toast.action?.onClick();
+            dismiss();
+          }}
+          style={{
+            background: "transparent",
+            border: `1px solid ${textColor}`,
+            borderRadius: "6px",
+            cursor: "pointer",
+            padding: "3px 10px",
+            color: textColor,
+            fontSize: "12px",
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+        >
+          {toast.action.label}
+        </button>
+      )}
       <button
-        onClick={() => {
-          setIsExiting(true);
-          setTimeout(() => onRemove(toast.id), 300);
-        }}
+        onClick={dismiss}
         style={{
           background: "transparent",
           border: "none",
@@ -113,17 +143,34 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
 export function useToast() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((message: string, type: Toast["type"] = "error", persistent: boolean = false) => {
+  const addToast = useCallback((
+    message: string,
+    type: Toast["type"] = "error",
+    persistent: boolean = false,
+    action?: ToastAction,
+  ) => {
     const id = Date.now().toString();
-    setToasts((prev) => [...prev, { id, message, type, persistent }]);
+    setToasts((prev) => [...prev, { id, message, type, persistent, action }]);
     return id; // 返回 id 以便后续更新
   }, []);
 
-  const updateToast = useCallback((id: string, message: string, type?: Toast["type"], persistent?: boolean) => {
+  const updateToast = useCallback((
+    id: string,
+    message: string,
+    type?: Toast["type"],
+    persistent?: boolean,
+    action?: ToastAction | null,
+  ) => {
     setToasts((prev) =>
       prev.map((t) =>
         t.id === id
-          ? { ...t, message, type: type !== undefined ? type : t.type, persistent: persistent !== undefined ? persistent : t.persistent }
+          ? {
+              ...t,
+              message,
+              type: type !== undefined ? type : t.type,
+              persistent: persistent !== undefined ? persistent : t.persistent,
+              action: action === undefined ? t.action : action ?? undefined,
+            }
           : t
       )
     );

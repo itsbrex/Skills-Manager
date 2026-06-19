@@ -3,6 +3,15 @@
 
 export type SkillScope = "global" | "project";
 
+export interface SkillMarketplaceMeta {
+  marketplace_source_id?: string | null;
+  marketplace_skill_id?: string | null;
+  marketplace_skill_slug?: string | null;
+  repo_url?: string | null;
+  skill_path?: string | null;
+  remote_revision?: string | null;
+}
+
 export interface Skill {
   id: string;
   instance_id: string;
@@ -15,6 +24,7 @@ export interface Skill {
   source: "local" | "imported" | "marketplace" | "vault";
   enabled: Record<string, boolean>;
   package_meta?: SkillPackageMeta | null;
+  marketplace_meta?: SkillMarketplaceMeta | null;
   path: string;
 }
 

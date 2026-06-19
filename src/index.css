@@ -205,3 +205,25 @@
 .animate-slide-down {
   animation: slideDown 0.2s ease-out;
 }
+
+@keyframes marketplaceSkeletonShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.marketplace-skeleton-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--secondary) 0%,
+    var(--border) 50%,
+    var(--secondary) 100%
+  );
+  background-size: 200% 100%;
+  animation: marketplaceSkeletonShimmer 1.4s ease-in-out infinite;
+}

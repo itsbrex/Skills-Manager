@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { ToastContainer, useToast } from "@/components/ui/toast";
@@ -545,10 +545,13 @@ export function Skills() {
   const [refreshing, setRefreshing] = useState(false);
   const [expandedCardKeys, setExpandedCardKeys] = useState<Set<string>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
+  const [highlightKey, setHighlightKey] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toasts, addToast, updateToast, removeToast } = useToast();
   const skillMetadata = config?.skill_metadata;
   const listContainerRef = useRef<HTMLElement | null>(null);
   const hasRestoredScrollRef = useRef(false);
+  const highlightTargetRef = useRef<HTMLDivElement | null>(null);
 
   const handleOpenUnifiedItem = useCallback(async (item: UnifiedSkillListItem) => {
     if (!item.openPath) {
@@ -1207,6 +1210,37 @@ export function Skills() {
     () => sortUnifiedSkillItems(filteredUnifiedItems, searchQuery),
     [filteredUnifiedItems, searchQuery],
   );
+
+  useEffect(() => {
+    const highlight = searchParams.get("highlight");
+    if (!highlight || initialLoading) return;
+
+    const matched = sortedUnifiedItems.find(
+      (item) => item.skill?.marketplace_meta?.marketplace_skill_id === highlight,
+    );
+    if (!matched) return;
+
+    setHighlightKey(matched.key);
+    setSearchParams(
+      (prev) => {
+        prev.delete("highlight");
+        return prev;
+      },
+      { replace: true },
+    );
+  }, [searchParams, sortedUnifiedItems, initialLoading, setSearchParams]);
+
+  useEffect(() => {
+    if (!highlightKey) return;
+    const scrollTimer = window.setTimeout(() => {
+      highlightTargetRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+    const clearTimer = window.setTimeout(() => setHighlightKey(null), 4500);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [highlightKey]);
 
   const actionableToolIds = useMemo(
     () => getActionableToolIds(tools),
@@ -2639,10 +2673,12 @@ export function Skills() {
                 const isBatchSelected = selectedBatchItemKeys.has(item.key);
                 const isCardExpanded = expandedCardKeys.has(item.key);
                 const canToggleExpand = !isBatchManageMode;
+                const isHighlighted = highlightKey === item.key;
 
                 return (
                   <div
                     key={item.key}
+                    ref={isHighlighted ? highlightTargetRef : undefined}
                     onClick={isBatchManageMode
                       ? () => handleToggleBatchItemSelection(item.key)
                       : canToggleExpand
@@ -2654,11 +2690,14 @@ export function Skills() {
                       padding: "18px 20px",
                       backgroundColor: isBatchSelected ? "rgba(9, 105, 218, 0.08)" : "var(--secondary)",
                       borderRadius: "14px",
-                      border: isBatchSelected
-                        ? "1px solid rgba(9, 105, 218, 0.4)"
-                        : isCardExpanded
-                          ? "1px solid var(--ring)"
-                          : "1px solid var(--border)",
+                      border: isHighlighted
+                        ? "2px solid var(--primary)"
+                        : isBatchSelected
+                          ? "1px solid rgba(9, 105, 218, 0.4)"
+                          : isCardExpanded
+                            ? "1px solid var(--ring)"
+                            : "1px solid var(--border)",
+                      boxShadow: isHighlighted ? "0 0 0 4px rgba(9, 105, 218, 0.15)" : undefined,
                       transition: canToggleExpand ? "border-color 0.2s, box-shadow 0.2s" : undefined,
                       cursor: canToggleExpand ? "pointer" : isBatchManageMode ? "pointer" : "default",
                     }}

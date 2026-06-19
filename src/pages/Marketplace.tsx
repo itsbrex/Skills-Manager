@@ -5,10 +5,13 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type MouseEvent,
+  type UIEvent,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { useNavigate } from "react-router-dom";
 import { ExternalLink, Link2 } from "lucide-react";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -21,6 +24,7 @@ import {
   MarketplaceSkillsResponse,
   MarketplaceSource,
   MarketplaceSyncResult,
+  Skill,
 } from "@/types";
 import { useTranslation } from "@/i18n";
 import { useSkillTranslation, makeTranslationKey } from "@/hooks/useSkillTranslation";
@@ -35,6 +39,63 @@ import { MODAL_LAYER_Z_INDEX, MODAL_OVERLAY_COLOR } from "@/constants/modal";
 const DESCRIPTION_BATCH_SIZE = 12;
 const DIRECT_GITHUB_INSTALL_ID = "__github_direct_install__";
 const marketplaceDescriptionCache = new Map<string, string | null>();
+const MARKETPLACE_SORT_STORAGE_KEY = "marketplace.sortMode";
+const MARKETPLACE_SORT_MODES = ["default", "newest", "popular", "name"] as const;
+type MarketplaceSortMode = typeof MARKETPLACE_SORT_MODES[number];
+
+// 模块级内存缓存：保存上次成功加载的市场列表首屏数据，
+// 让再次进入市场页时能立即渲染，避免每次都显示全屏 loader。
+// 同时持久化到 localStorage，应用重启后也能快速恢复。
+interface MarketplaceSnapshot {
+  skills: MarketplaceSkill[];
+  hasMore: boolean;
+  fetchedAt: number;
+}
+const MARKETPLACE_SNAPSHOT_STORAGE_KEY = "marketplace.snapshot";
+const MARKETPLACE_SNAPSHOT_TTL_MS = 24 * 60 * 60 * 1000; // 24 小时
+
+function loadSnapshotFromStorage(): MarketplaceSnapshot | null {
+  try {
+    const raw = window.localStorage.getItem(MARKETPLACE_SNAPSHOT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as MarketplaceSnapshot;
+    if (!parsed || !Array.isArray(parsed.skills)) return null;
+    if (Date.now() - parsed.fetchedAt > MARKETPLACE_SNAPSHOT_TTL_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function persistSnapshotToStorage(snapshot: MarketplaceSnapshot): void {
+  try {
+    window.localStorage.setItem(MARKETPLACE_SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // ignore quota / serialization errors
+  }
+}
+
+let marketplaceSnapshot: MarketplaceSnapshot | null = loadSnapshotFromStorage();
+
+function loadSortModeFromStorage(): MarketplaceSortMode {
+  try {
+    const stored = window.localStorage.getItem(MARKETPLACE_SORT_STORAGE_KEY);
+    if (stored && (MARKETPLACE_SORT_MODES as readonly string[]).includes(stored)) {
+      return stored as MarketplaceSortMode;
+    }
+  } catch {
+    // ignore storage errors (private mode, quota, etc.)
+  }
+  return "default";
+}
+
+function persistSortMode(mode: MarketplaceSortMode) {
+  try {
+    window.localStorage.setItem(MARKETPLACE_SORT_STORAGE_KEY, mode);
+  } catch {
+    // ignore storage errors
+  }
+}
 
 interface MarketplaceDescriptionRequest {
   id: string;
@@ -75,13 +136,24 @@ function withCachedDescription(skill: MarketplaceSkill): MarketplaceSkill {
   return { ...skill, description: cached };
 }
 
+function skeletonBarStyle(widthFraction: number): CSSProperties {
+  return {
+    width: `${Math.round(widthFraction * 100)}%`,
+    height: '8px',
+    borderRadius: '4px',
+  };
+}
+
 export function Marketplace() {
   const { t, language } = useTranslation();
   const translation = useSkillTranslation();
+  const navigate = useNavigate();
   const [translatingMarketIds, setTranslatingMarketIds] = useState<Set<string>>(new Set());
   const { toasts, addToast, removeToast } = useToast();
-  const [skills, setSkills] = useState<MarketplaceSkill[]>([]);
-  const [hasMore, setHasMore] = useState(false);
+  const [skills, setSkills] = useState<MarketplaceSkill[]>(
+    () => marketplaceSnapshot?.skills ?? [],
+  );
+  const [hasMore, setHasMore] = useState(() => marketplaceSnapshot?.hasMore ?? false);
   const [currentPage, setCurrentPage] = useState(1);
   const [availableSources, setAvailableSources] = useState<MarketplaceSource[]>([]);
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
@@ -92,12 +164,17 @@ export function Marketplace() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<MarketplaceSkill | null>(null);
   const [installingSkill, setInstallingSkill] = useState<string | null>(null);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [uninstallConfirmSkill, setUninstallConfirmSkill] = useState<MarketplaceSkill | null>(null);
+  const [uninstallingSkillId, setUninstallingSkillId] = useState<string | null>(null);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(() => marketplaceSnapshot === null);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingAll, setUpdatingAll] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [searching, setSearching] = useState(false);
   const [descriptionHydrationTick, setDescriptionHydrationTick] = useState(0);
+  const [sortMode, setSortMode] = useState<MarketplaceSortMode>(() => loadSortModeFromStorage());
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const listRequestSeqRef = useRef(0);
   const remoteLoadSeqRef = useRef(0);
@@ -105,6 +182,7 @@ export function Marketplace() {
   const descriptionFetchedRef = useRef<Set<string>>(new Set());
   const descriptionRequestSeqRef = useRef(0);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const mainScrollRef = useRef<HTMLElement | null>(null);
   const normalizedRemoteQuery = useMemo(
     () => deferredSearchQuery.trim(),
     [deferredSearchQuery],
@@ -166,6 +244,16 @@ export function Marketplace() {
       });
       setHasMore(result.has_more);
       setCurrentPage(page);
+      // 首屏默认视图（无搜索词、无 source 过滤）成功加载时更新内存快照，
+      // 下次进入市场页可立即渲染这份缓存，跳过全屏 loader。
+      if (page === 1 && !append && !normalizedQuery && (!sourceIds || sourceIds.length === 0)) {
+        marketplaceSnapshot = {
+          skills: sortMarketplaceSkillsByInstallStatus(incoming),
+          hasMore: result.has_more,
+          fetchedAt: Date.now(),
+        };
+        persistSnapshotToStorage(marketplaceSnapshot);
+      }
     } catch (err) {
       if (isStaleRequest()) {
         return;
@@ -308,7 +396,9 @@ export function Marketplace() {
 
         continueHydration = true;
       } catch (_err) {
-        // ignore hydration errors and keep list responsive
+        // ignore hydration errors and keep list responsive;
+        // mark as fetched so skeleton placeholder can be replaced with empty state
+        continueHydration = true;
       } finally {
         candidates.forEach((skill) => {
           descriptionInFlightRef.current.delete(skill.id);
@@ -440,13 +530,6 @@ export function Marketplace() {
     try {
       const result = await invoke<InstallResult>("install_marketplace_skill", { skillId: skill.id });
       if (result.success) {
-        addToast(
-          t(isUpdateAction ? "marketplace.updateSuccess" : "marketplace.installSuccess").replace(
-            "{name}",
-            skill.name,
-          ),
-          "success",
-        );
         setSelectedSkill((current) => (
           current && current.id === skill.id
             ? { ...current, install_status: "installed" }
@@ -458,6 +541,18 @@ export function Marketplace() {
           query: normalizedRemoteQuery,
           sourceIds: selectedSourceIds,
         });
+        const successMessage = t(isUpdateAction ? "marketplace.updateSuccess" : "marketplace.installSuccess").replace(
+          "{name}",
+          skill.name,
+        );
+        if (isUpdateAction) {
+          addToast(successMessage, "success");
+        } else {
+          addToast(successMessage, "success", false, {
+            label: t("marketplace.viewAction"),
+            onClick: () => navigate(`/?highlight=${encodeURIComponent(skill.id)}`),
+          });
+        }
       } else {
         addToast(
           t(isUpdateAction ? "marketplace.updateFailed" : "marketplace.installFailed"),
@@ -472,7 +567,46 @@ export function Marketplace() {
     } finally {
       setInstallingSkill(null);
     }
-  }, [addToast, loadSkills, normalizedRemoteQuery, selectedSourceIds, showMarketplaceError, t]);
+  }, [addToast, loadSkills, navigate, normalizedRemoteQuery, selectedSourceIds, showMarketplaceError, t]);
+
+  const handleUninstallConfirm = useCallback(async (skill: MarketplaceSkill) => {
+    if (uninstallingSkillId) return;
+    setUninstallingSkillId(skill.id);
+    try {
+      const localSkills = await invoke<Skill[]>("list_skills");
+      const targets = localSkills.filter(
+        (s) => s.source === "marketplace"
+          && s.marketplace_meta?.marketplace_skill_id === skill.id,
+      );
+      if (targets.length === 0) {
+        addToast(t("marketplace.uninstallFailed"), "error");
+        return;
+      }
+      for (const target of targets) {
+        await invoke("delete_skill", { instanceId: target.instance_id });
+      }
+      addToast(
+        t("marketplace.uninstallSuccess").replace("{name}", skill.name),
+        "success",
+      );
+      setSelectedSkill((current) => (
+        current && current.id === skill.id
+          ? { ...current, install_status: "not_installed" }
+          : current
+      ));
+      setUninstallConfirmSkill(null);
+      await loadSkills({
+        forceRefresh: true,
+        page: 1,
+        query: normalizedRemoteQuery,
+        sourceIds: selectedSourceIds,
+      });
+    } catch (err) {
+      showMarketplaceError(err, t("marketplace.uninstallFailed"));
+    } finally {
+      setUninstallingSkillId(null);
+    }
+  }, [addToast, loadSkills, normalizedRemoteQuery, selectedSourceIds, showMarketplaceError, t, uninstallingSkillId]);
 
   const handleGithubInstall = useCallback(async () => {
     const directUrl = githubInstallUrl.trim();
@@ -602,6 +736,16 @@ export function Marketplace() {
     }
   }, [showMarketplaceError, t]);
 
+  const handleMainScroll = useCallback((event: UIEvent<HTMLElement>) => {
+    const el = event.currentTarget;
+    const shouldShow = el.scrollTop > el.clientHeight;
+    setShowBackToTop((prev) => (prev !== shouldShow ? shouldShow : prev));
+  }, []);
+
+  const handleBackToTop = useCallback(() => {
+    mainScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
   useEffect(() => {
     if (!hasMore || initialLoading || refreshing) {
       return;
@@ -633,12 +777,35 @@ export function Marketplace() {
   }, [skills]);
 
   const filteredSkills = useMemo(() => {
-    return skills.filter((skill) => {
+    const filtered = skills.filter((skill) => {
       const matchesTags = selectedTags.length === 0
         || selectedTags.some((tag) => skill.tags.includes(tag));
       return matchesTags;
     });
-  }, [selectedTags, skills]);
+    if (sortMode === "default") {
+      return filtered;
+    }
+    const sorted = [...filtered];
+    if (sortMode === "name") {
+      sorted.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    } else if (sortMode === "newest") {
+      sorted.sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
+    } else if (sortMode === "popular") {
+      sorted.sort((a, b) => (b.install_count ?? 0) - (a.install_count ?? 0));
+    }
+    return sorted;
+  }, [selectedTags, skills, sortMode]);
+
+  useEffect(() => {
+    persistSortMode(sortMode);
+  }, [sortMode]);
+
+  const sortLabelMap: Record<MarketplaceSortMode, string> = {
+    default: t("marketplace.sortDefault"),
+    newest: t("marketplace.sortNewest"),
+    popular: t("marketplace.sortPopular"),
+    name: t("marketplace.sortName"),
+  };
 
   const showSourceFilter = availableSources.length > 1;
   const sourceNameMap = useMemo(() => {
@@ -942,13 +1109,18 @@ export function Marketplace() {
         }
       />
 
-      <main style={{ flex: 1, overflow: 'auto', padding: '12px 20px' }}>
+      <main
+        ref={mainScrollRef}
+        onScroll={handleMainScroll}
+        style={{ flex: 1, overflow: 'auto', padding: '12px 20px' }}
+      >
         <div style={{ maxWidth: '1200px' }}>
-          {availableTags.length > 0 && (
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
-              {availableTags.map((tag) => {
-                const isSelected = selectedTags.includes(tag);
-                return (
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
+            {availableTags.length > 0 && (
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {availableTags.map((tag) => {
+                  const isSelected = selectedTags.includes(tag);
+                  return (
                     <button
                       key={tag}
                       onClick={() => {
@@ -967,12 +1139,88 @@ export function Marketplace() {
                         cursor: 'pointer',
                       }}
                     >
-                    {tag}
-                  </button>
-                );
-              })}
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div style={{ marginLeft: 'auto', position: 'relative' }}>
+              <button
+                onClick={() => setSortDropdownOpen((v) => !v)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 10px',
+                  fontSize: '11px',
+                  color: 'var(--foreground)',
+                  backgroundColor: sortDropdownOpen ? 'var(--secondary)' : 'var(--background)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '999px',
+                  cursor: 'pointer',
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 6h18M6 12h12M10 18h4"/>
+                </svg>
+                <span>{t("marketplace.sortLabel")}: {sortLabelMap[sortMode]}</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </button>
+              {sortDropdownOpen && (
+                <>
+                  <div
+                    style={{ position: 'fixed', inset: 0, zIndex: 10 }}
+                    onClick={() => setSortDropdownOpen(false)}
+                  />
+                  <div style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    right: 0,
+                    minWidth: '160px',
+                    backgroundColor: 'var(--background)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '10px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                    zIndex: 20,
+                    padding: '6px',
+                  }}>
+                    {MARKETPLACE_SORT_MODES.map((mode) => {
+                      const active = mode === sortMode;
+                      return (
+                        <button
+                          key={mode}
+                          onClick={() => {
+                            setSortMode(mode);
+                            setSortDropdownOpen(false);
+                          }}
+                          style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '7px 10px',
+                            fontSize: '12px',
+                            border: 'none',
+                            borderRadius: '8px',
+                            backgroundColor: active ? 'var(--secondary)' : 'transparent',
+                            color: 'var(--foreground)',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                          }}
+                        >
+                          <span>{sortLabelMap[mode]}</span>
+                          {active && <span>✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
-          )}
+          </div>
 
           {filteredSkills.length === 0 ? (
             <div style={{
@@ -1000,7 +1248,8 @@ export function Marketplace() {
                 const isInstalled = skill.install_status === "installed";
                 const isUpdateAvailable = skill.install_status === "update_available";
                 const isInstalling = installingSkill === skill.id;
-                const actionBusy = isInstalling || updatingAll;
+                const isUninstalling = uninstallingSkillId === skill.id;
+                const actionBusy = isInstalling || updatingAll || isUninstalling;
                 const externalUrl = skill.external_url || skill.repo_url;
                 const installCountLabel = formatInstallCountLabel(skill.install_count);
                 const metaChipStyle = getMarketplaceMetaChipStyle("compact");
@@ -1015,6 +1264,9 @@ export function Marketplace() {
                   ? cachedTranslation.description
                   : skill.description;
                 const isTranslating = translatingMarketIds.has(skill.id);
+                const isDescriptionLoading = !showingTranslation
+                  && !skill.description
+                  && !descriptionFetchedRef.current.has(skill.id);
                 const metaItems = buildMarketplaceMetaItems(
                   t("marketplace.source").replace("{source}", skill.source_name),
                   skill.author ? t("marketplace.author").replace("{author}", skill.author) : null,
@@ -1110,18 +1362,35 @@ export function Marketplace() {
                               />
                             </div>
                           </div>
-                          <p style={{
-                            fontSize: '12px',
-                            color: 'var(--muted-foreground)',
-                            margin: 0,
-                            lineHeight: 1.4,
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                          }}>
-                            {displayedDescription || t("skills.noDescription")}
-                          </p>
+                          {isDescriptionLoading ? (
+                            <div
+                              style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '6px',
+                                minHeight: '34px',
+                                justifyContent: 'center',
+                              }}
+                              aria-busy="true"
+                            >
+                              <div className="marketplace-skeleton-bar" style={skeletonBarStyle(0.9)} />
+                              <div className="marketplace-skeleton-bar" style={skeletonBarStyle(0.6)} />
+                            </div>
+                          ) : (
+                            <p style={{
+                              fontSize: '12px',
+                              color: 'var(--muted-foreground)',
+                              margin: 0,
+                              lineHeight: 1.4,
+                              minHeight: '34px',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                            }}>
+                              {displayedDescription || t("skills.noDescription")}
+                            </p>
+                          )}
                         </div>
                         <div style={{
                           display: 'flex',
@@ -1129,24 +1398,54 @@ export function Marketplace() {
                           flexShrink: 0,
                         }}>
                           {isInstalled ? (
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '10px',
-                              fontWeight: 500,
-                              color: 'var(--color-success)',
-                              backgroundColor: 'var(--color-success-bg)',
-                              padding: '4px 8px',
-                              borderRadius: '6px',
-                              border: '1px solid var(--color-success-border)',
-                              flexShrink: 0,
-                            }}>
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <polyline points="20 6 9 17 4 12"/>
-                              </svg>
-                              {t("marketplace.installed")}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '10px',
+                                fontWeight: 500,
+                                color: 'var(--color-success)',
+                                backgroundColor: 'var(--color-success-bg)',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                border: '1px solid var(--color-success-border)',
+                                flexShrink: 0,
+                              }}>
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                {t("marketplace.installed")}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setUninstallConfirmSkill(skill);
+                                }}
+                                disabled={actionBusy}
+                                title={t("marketplace.uninstall")}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  padding: '4px 8px',
+                                  fontSize: '10px',
+                                  fontWeight: 500,
+                                  color: 'var(--color-error)',
+                                  backgroundColor: 'var(--color-error-bg)',
+                                  border: '1px solid var(--color-error-border)',
+                                  borderRadius: '6px',
+                                  cursor: actionBusy ? 'wait' : 'pointer',
+                                  opacity: actionBusy ? 0.7 : 1,
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {isUninstalling
+                                  ? t("marketplace.uninstalling")
+                                  : t("marketplace.uninstall")}
+                              </button>
+                            </div>
                           ) : (
                             <button
                               type="button"
@@ -1242,6 +1541,45 @@ export function Marketplace() {
         </div>
       </main>
 
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={handleBackToTop}
+          aria-label={t("marketplace.backToTop")}
+          title={t("marketplace.backToTop")}
+          style={{
+            position: 'fixed',
+            bottom: '28px',
+            right: '32px',
+            width: '40px',
+            height: '40px',
+            borderRadius: '50%',
+            border: '1px solid var(--border)',
+            backgroundColor: 'var(--background)',
+            color: 'var(--foreground)',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+            transition: 'transform 0.15s, box-shadow 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.15)';
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 19V5M5 12l7-7 7 7"/>
+          </svg>
+        </button>
+      )}
+
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {selectedSkill && (
@@ -1261,6 +1599,157 @@ export function Marketplace() {
         onClose={() => setGithubInstallDialogOpen(false)}
         onSubmit={() => void handleGithubInstall()}
       />
+
+      <UninstallConfirmDialog
+        skill={uninstallConfirmSkill}
+        uninstalling={uninstallingSkillId !== null}
+        onCancel={() => setUninstallConfirmSkill(null)}
+        onConfirm={() => {
+          if (uninstallConfirmSkill) {
+            void handleUninstallConfirm(uninstallConfirmSkill);
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+function UninstallConfirmDialog({
+  skill,
+  uninstalling,
+  onCancel,
+  onConfirm,
+}: {
+  skill: MarketplaceSkill | null;
+  uninstalling: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    if (!skill) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !uninstalling) {
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [skill, uninstalling, onCancel]);
+
+  if (!skill) return null;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: MODAL_OVERLAY_COLOR,
+        zIndex: MODAL_LAYER_Z_INDEX,
+        padding: "24px",
+      }}
+      onClick={() => {
+        if (!uninstalling) onCancel();
+      }}
+    >
+      <div
+        style={{
+          width: "min(440px, calc(100vw - 48px))",
+          backgroundColor: "var(--background)",
+          borderRadius: "18px",
+          border: "1px solid var(--border)",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.24)",
+          padding: "22px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "16px",
+        }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              fontSize: "16px",
+              fontWeight: 700,
+              color: "var(--foreground)",
+            }}
+          >
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "28px",
+                height: "28px",
+                borderRadius: "10px",
+                background: "var(--color-error-bg)",
+                color: "var(--color-error)",
+              }}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </span>
+            {t("marketplace.uninstallConfirmTitle")}
+          </div>
+          <p
+            style={{
+              margin: 0,
+              fontSize: "13px",
+              lineHeight: 1.6,
+              color: "var(--muted-foreground)",
+            }}
+          >
+            {t("marketplace.uninstallConfirmDesc").replace("{name}", skill.name)}
+          </p>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={uninstalling}
+            style={{
+              padding: "9px 14px",
+              borderRadius: "10px",
+              border: "1px solid var(--border)",
+              backgroundColor: "var(--secondary)",
+              color: "var(--foreground)",
+              fontSize: "13px",
+              fontWeight: 600,
+              cursor: uninstalling ? "wait" : "pointer",
+              opacity: uninstalling ? 0.7 : 1,
+            }}
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={uninstalling}
+            style={{
+              padding: "9px 16px",
+              borderRadius: "10px",
+              border: "1px solid var(--color-error)",
+              backgroundColor: "var(--color-error)",
+              color: "white",
+              fontSize: "13px",
+              fontWeight: 700,
+              cursor: uninstalling ? "wait" : "pointer",
+              opacity: uninstalling ? 0.7 : 1,
+            }}
+          >
+            {uninstalling ? t("marketplace.uninstalling") : t("marketplace.uninstall")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
