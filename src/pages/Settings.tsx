@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import {
   AppConfig,
   UserPreferences,
@@ -36,9 +37,11 @@ export function Settings() {
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [editorDropdownOpen, setEditorDropdownOpen] = useState(false);
+  const [showGithubToken, setShowGithubToken] = useState(false);
   const [availableEditors, setAvailableEditors] = useState<DetectedEditor[]>([]);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [resetting, setResetting] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
 
   const tRef = useRef(t);
@@ -235,6 +238,38 @@ export function Settings() {
       addToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
       setCheckingUpdate(false);
+    }
+  };
+
+  const handleResetSettings = async () => {
+    if (!config) return;
+    const confirmed = await confirm(t("settings.resetSettingsConfirm"), {
+      title: t("settings.resetSettingsConfirmTitle"),
+      kind: "warning",
+    });
+    if (!confirmed) return;
+
+    setResetting(true);
+    try {
+      // Reset preferences to defaults and clear LLM provider
+      const newConfig: AppConfig = {
+        ...config,
+        preferences: { ...defaultPreferences },
+        llm_provider: null,
+      };
+      await invoke("save_config", { config: newConfig });
+      setConfig(newConfig);
+
+      // Apply default theme, language, font immediately
+      setTheme(defaultPreferences.theme);
+      setLanguage(defaultPreferences.language);
+      setFontFamily(normalizeFontFamilyPreset(defaultPreferences.font_family));
+
+      addToast(t("settings.resetSettingsSuccess"), "success");
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : t("settings.saveFailed"), "error");
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -490,22 +525,40 @@ export function Settings() {
               isLast={marketplaceRows.length === 0}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input
-                  type="password"
-                  value={prefs.github_token || ""}
-                  onChange={(e) => updatePreference("github_token", e.target.value)}
-                  placeholder={t("settings.githubTokenPlaceholder")}
-                  style={{
-                    width: '220px',
-                    padding: '8px 10px',
-                    fontSize: '12px',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    backgroundColor: 'var(--background)',
-                    color: 'var(--foreground)',
-                    outline: 'none',
-                  }}
-                />
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input
+                    type={showGithubToken ? "text" : "password"}
+                    value={prefs.github_token || ""}
+                    onChange={(e) => updatePreference("github_token", e.target.value)}
+                    placeholder={t("settings.githubTokenPlaceholder")}
+                    style={{
+                      width: '220px',
+                      padding: '8px 10px',
+                      fontSize: '12px',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--background)',
+                      color: 'var(--foreground)',
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowGithubToken((v) => !v)}
+                    style={{
+                      padding: '0 12px',
+                      fontSize: '12px',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      background: 'transparent',
+                      color: 'var(--foreground)',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {showGithubToken ? t("settings.llmHideKey") : t("settings.llmShowKey")}
+                  </button>
+                </div>
                 <span style={{
                   fontSize: '12px',
                   color: (prefs.github_token || "").trim() ? 'var(--color-success)' : 'var(--muted-foreground)',
@@ -611,10 +664,38 @@ export function Settings() {
             <SettingsRow
               label={t("settings.accountStatus")}
               description={t("settings.accountDesc")}
-              isLast={true}
+              isLast={false}
             >
               <AuthButton variant="inline" />
             </SettingsRow>
+            <div style={{
+              padding: '14px 0 18px 0',
+              fontSize: '12px',
+              color: 'var(--muted-foreground)',
+              lineHeight: 1.6,
+            }}>
+              <div style={{
+                marginBottom: '8px',
+                fontSize: '12px',
+                fontWeight: 500,
+                color: 'var(--foreground)',
+              }}>
+                {t("settings.accountFeaturesTitle")}
+              </div>
+              <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                <li>{t("settings.accountFeature1")}</li>
+                <li>{t("settings.accountFeature2")}</li>
+                <li>{t("settings.accountFeature3")}</li>
+              </ul>
+              <div style={{
+                marginTop: '8px',
+                fontSize: '11px',
+                color: 'var(--muted-foreground)',
+                fontStyle: 'italic',
+              }}>
+                {t("settings.accountComingSoon")}
+              </div>
+            </div>
           </SettingsCard>
 
           {/* Keyboard shortcuts */}
@@ -635,6 +716,44 @@ export function Settings() {
               description={t("shortcuts.saveFile")}
               isLast={true}
             />
+          </SettingsCard>
+
+          {/* Advanced Section */}
+          <SectionTitle>{t("settings.advanced")}</SectionTitle>
+          <SettingsCard>
+            <SettingsRow
+              label={t("settings.resetSettings")}
+              description={t("settings.resetSettingsDesc")}
+              isLast={true}
+            >
+              <button
+                type="button"
+                onClick={handleResetSettings}
+                disabled={resetting}
+                style={{
+                  padding: '8px 14px',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  color: 'var(--foreground)',
+                  backgroundColor: 'var(--background)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  cursor: resetting ? 'not-allowed' : 'pointer',
+                  opacity: resetting ? 0.6 : 1,
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  if (!resetting) {
+                    e.currentTarget.style.backgroundColor = 'var(--muted)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--background)';
+                }}
+              >
+                {resetting ? t("common.checking") : t("settings.resetSettings")}
+              </button>
+            </SettingsRow>
           </SettingsCard>
 
           {/* About Section */}
