@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useTranslation, TranslationPath } from "@/i18n";
 
 interface ScopeSearchFieldProps {
@@ -22,16 +22,11 @@ const PAGES: PageEntry[] = [
 export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const location = useLocation();
   const [query, setQuery] = useState("");
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
-
-  // Determine the current page from the pathname
-  const currentPath = PAGES.find((p) => p.path === location.pathname)?.path ?? "/";
-  const currentPage = PAGES.find((p) => p.path === currentPath)!;
 
   const filteredPages = PAGES.filter((p) =>
     t(p.labelKey).toLowerCase().includes(query.replace(/^\//, "").toLowerCase()),
@@ -87,10 +82,12 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
         return;
       }
     }
-    // "/" opens the switcher
-    if (e.key === "/" && !switcherOpen) {
+    // "/" opens the switcher (first press) and is always prevented from
+    // being typed into the field, so it can never appear as a literal char
+    // alongside the decorative "/" indicator (no double-slash).
+    if (e.key === "/") {
       e.preventDefault();
-      setSwitcherOpen(true);
+      if (!switcherOpen) setSwitcherOpen(true);
     }
   }
 
@@ -108,38 +105,12 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
           padding: "0 12px",
           background: "var(--secondary)",
           border: `1px solid ${switcherOpen ? "var(--ring)" : "var(--border)"}`,
-          borderRadius: "var(--radius-lg)",
+          borderRadius: 9999,
           transition: "border-color 0.15s",
         }}
       >
-        {switcherOpen ? (
+        {switcherOpen && (
           <span style={{ color: "var(--muted-foreground)", fontSize: 13 }}>/</span>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setSwitcherOpen(true);
-              inputRef.current?.focus();
-            }}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 5,
-              background: "var(--muted)",
-              border: "none",
-              borderRadius: "var(--radius-sm)",
-              padding: "2px 8px",
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
-            title={t("scope.switchTo")}
-          >
-            <span style={{ color: "var(--ember)", fontSize: 11 }}>✦</span>
-            <span style={{ color: "var(--foreground)", fontSize: 12, fontWeight: 500 }}>
-              {t(currentPage.labelKey)}
-            </span>
-            <span style={{ color: "var(--muted-foreground)", fontSize: 10 }}>▾</span>
-          </button>
         )}
         <input
           ref={inputRef}
@@ -152,9 +123,6 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
             setQuery(next);
           }}
           onKeyDown={handleKeyDown}
-          onFocus={() => {
-            if (!switcherOpen && query.startsWith("/")) setSwitcherOpen(true);
-          }}
           placeholder={switcherOpen ? t("scope.typeToFilter") : t("topbar.search")}
           style={{
             flex: 1,
@@ -166,6 +134,29 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
             color: "var(--foreground)",
           }}
         />
+        {!switcherOpen && (
+          <button
+            type="button"
+            onClick={() => {
+              setSwitcherOpen(true);
+              inputRef.current?.focus();
+            }}
+            title={t("scope.switchTo")}
+            style={{
+              fontSize: 10,
+              fontFamily: "var(--font-mono)",
+              color: "var(--muted-foreground)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              padding: "1px 5px",
+              background: "transparent",
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            /
+          </button>
+        )}
         <button
           type="button"
           onClick={onOpenPalette}
