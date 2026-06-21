@@ -28,3 +28,6 @@ dist-ssr
 .superpowers/
 docs/
 temp.md
+
+# Design assets (local only)
+design/

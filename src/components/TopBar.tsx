@@ -40,6 +40,7 @@ export function TopBar({ onOpenPalette }: TopBarProps) {
 
   return (
     <header
+      className="glass"
       style={{
         height: 52,
         minHeight: 52,
@@ -47,8 +48,8 @@ export function TopBar({ onOpenPalette }: TopBarProps) {
         alignItems: "center",
         padding: "0 16px",
         gap: 16,
-        background: "var(--card)",
-        borderBottom: "1px solid var(--border)",
+        border: "none",
+        borderBottom: "1px solid var(--glass-border)",
         position: "relative",
         zIndex: 50,
       }}

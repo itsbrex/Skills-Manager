@@ -62,7 +62,13 @@ export function Layout({ onOpenPalette }: LayoutProps) {
   return (
     <div className="flex flex-col h-screen relative overflow-hidden">
       <TopBar onOpenPalette={onOpenPalette} />
-      <main className="flex-1 min-h-0 overflow-hidden bg-background relative">
+      <main
+        className="flex-1 min-h-0 overflow-hidden bg-background relative"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 50% 0%, var(--glow-ember) 0%, transparent 35%)",
+        }}
+      >
         {showBanner && (
           <div
             style={{

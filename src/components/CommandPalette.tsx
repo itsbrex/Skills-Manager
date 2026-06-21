@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "@/i18n";
 import { Skill, MarketplaceSkill, MarketplaceSkillsResponse } from "@/types";
-import { MODAL_LAYER_Z_INDEX, MODAL_OVERLAY_COLOR } from "@/constants/modal";
+import { MODAL_LAYER_Z_INDEX } from "@/constants/modal";
 
 interface CommandItem {
   id: string;
@@ -298,23 +298,23 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         alignItems: "flex-start",
         justifyContent: "center",
         paddingTop: "12vh",
-        backgroundColor: MODAL_OVERLAY_COLOR,
+        backgroundColor: "rgba(0, 0, 0, 0.55)",
+        backgroundImage:
+          "radial-gradient(circle at 50% 0%, rgba(255, 99, 99, 0.10) 0%, transparent 45%)",
         zIndex: MODAL_LAYER_Z_INDEX + 10,
       }}
       onClick={onClose}
     >
       <div
-        className="animate-modal"
+        className="animate-modal glass"
         style={{
           width: "min(640px, calc(100vw - 48px))",
           maxHeight: "70vh",
-          backgroundColor: "var(--background)",
-          borderRadius: "var(--radius)",
-          border: "1px solid var(--border)",
-          boxShadow: "var(--shadow-xl)",
+          borderRadius: "var(--radius-xl)",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
+          position: "relative",
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -324,8 +324,10 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             display: "flex",
             alignItems: "center",
             gap: "10px",
-            padding: "14px 18px",
-            borderBottom: "1px solid var(--border)",
+            padding: "16px 18px",
+            borderBottom: "1px solid var(--glass-border)",
+            background:
+              "linear-gradient(to bottom, rgba(255, 255, 255, 0.04), transparent)",
           }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--muted-foreground)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -352,12 +354,13 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             style={{
               fontSize: "10px",
               color: "var(--muted-foreground)",
-              backgroundColor: "var(--muted)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius)",
+              backgroundColor: "rgba(255, 255, 255, 0.06)",
+              border: "1px solid var(--glass-border)",
+              borderRadius: "var(--radius-sm)",
               padding: "1px 6px",
               fontFamily: "var(--font-mono)",
               letterSpacing: "0.02em",
+              boxShadow: "rgba(255, 255, 255, 0.05) 0px 1px 0px 0px inset",
             }}
           >
             ESC
@@ -410,6 +413,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                       type="button"
                       onClick={() => item.action()}
                       onMouseEnter={() => setActiveIndex(idx)}
+                      className={`glass-row ${isActive ? "glass-row-active" : ""}`}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -418,10 +422,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                         padding: "9px 10px",
                         borderRadius: "8px",
                         border: "none",
-                        background: isActive ? "var(--sidebar-accent)" : "transparent",
                         cursor: "pointer",
                         textAlign: "left",
-                        transition: "background-color 0.1s ease",
                       }}
                     >
                       <span style={{ display: "flex", alignItems: "center", color: "var(--muted-foreground)", flexShrink: 0 }}>
@@ -485,8 +487,10 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            padding: "8px 14px",
-            borderTop: "1px solid var(--border)",
+            padding: "9px 14px",
+            borderTop: "1px solid var(--glass-border)",
+            background:
+              "linear-gradient(to top, rgba(255, 255, 255, 0.03), transparent)",
             fontSize: "11px",
             color: "var(--muted-foreground)",
           }}
@@ -514,12 +518,13 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
 
 const kbdStyle: React.CSSProperties = {
   fontSize: "10px",
-  backgroundColor: "var(--muted)",
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius)",
+  backgroundColor: "rgba(255, 255, 255, 0.06)",
+  border: "1px solid var(--glass-border)",
+  borderRadius: "var(--radius-sm)",
   padding: "1px 5px",
   fontFamily: "var(--font-mono)",
-  color: "var(--foreground)",
+  color: "var(--muted-foreground)",
+  boxShadow: "rgba(255, 255, 255, 0.05) 0px 1px 0px 0px inset",
 };
 
 function renderIcon(icon: CommandItem["icon"]) {
