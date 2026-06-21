@@ -398,15 +398,8 @@ export function Settings() {
         </nav>
 
         {/* Right panel — only the active section */}
-        <div className="page-main" style={{ flex: 1, minHeight: 0, overflow: 'auto', position: 'relative' }}>
-          <div style={{
-            position: 'absolute',
-            top: 0, left: 0, right: 0, height: '280px',
-            background: 'var(--gradient-nebula)',
-            pointerEvents: 'none',
-            zIndex: 0,
-          }} />
-          <div className="animate-page-enter page-container" style={{ maxWidth: '680px', position: 'relative', zIndex: 1 }}>
+        <div className="page-main" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+          <div className="animate-page-enter page-container" style={{ maxWidth: '680px' }}>
           {activeSection === "settings-general" && (<>
           {/* General Section */}
           <SectionTitle id="settings-general">{t("settings.general")}</SectionTitle>

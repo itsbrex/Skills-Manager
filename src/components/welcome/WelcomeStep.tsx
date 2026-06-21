@@ -8,15 +8,7 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
   const { t } = useTranslation();
 
   return (
-    <div style={{ position: 'relative' }}>
-      <div style={{
-        position: 'absolute',
-        top: 0, left: 0, right: 0, height: '320px',
-        background: 'var(--gradient-violet)',
-        pointerEvents: 'none',
-        zIndex: 0,
-      }} />
-      <div style={{ position: 'relative', zIndex: 1 }}>
+    <div>
       {/* Description */}
       <p
         style={{
@@ -57,7 +49,6 @@ export function WelcomeStep({ onNext }: WelcomeStepProps) {
       >
         {t("welcome.startSetup")}
       </button>
-      </div>
     </div>
   );
 }
