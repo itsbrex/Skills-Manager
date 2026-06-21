@@ -2,20 +2,26 @@
 
 @plugin "tailwindcss-animate";
 
+@import "@fontsource-variable/inter/index.css";
+@import "@fontsource/geist-mono/300.css";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
+
 @custom-variant dark (&:is(.dark *));
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
+  /* Radius scale (Raycast: 6 / 8 / 11 / 16) */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 11px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+  --radius-4xl: 28px;
+
+  /* Color tokens → raw variables defined in :root / .dark */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -47,44 +53,57 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Font families */
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans", Helvetica, Arial, sans-serif;
+  --font-mono: 'GeistMono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: #ffffff;
+  /* Light theme — warm paper neutrals (Raycast light variant) */
+  --radius: 11px;
+
+  --background: #fbfbfa;
   --foreground: #1a1a1a;
   --card: #ffffff;
   --card-foreground: #1a1a1a;
   --popover: #ffffff;
   --popover-foreground: #1a1a1a;
-  --primary: #0969da;
+  --primary: #1a1a1a;
   --primary-foreground: #ffffff;
-  --secondary: #f6f8fa;
+  --secondary: #f4f4f2;
   --secondary-foreground: #1a1a1a;
-  --muted: #f6f8fa;
-  --muted-foreground: #656d76;
-  --accent: #f6f8fa;
+  --muted: #f4f4f2;
+  --muted-foreground: #6a6b6c;
+  --accent: #f4f4f2;
   --accent-foreground: #1a1a1a;
   --destructive: #d32f2f;
-  --border: #d1d9e0;
-  --input: #d1d9e0;
-  --ring: #0969da;
-  --chart-1: #0969da;
-  --chart-2: #2da44e;
-  --chart-3: #bf8700;
-  --chart-4: #8250df;
-  --chart-5: #cf222e;
-  --sidebar: #f6f8fa;
+  --border: #e4e4e0;
+  --input: #e4e4e0;
+  --ring: #363739;
+  --chart-1: #ff6363;
+  --chart-2: #59d499;
+  --chart-3: #56c2ff;
+  --chart-4: #a371f7;
+  --chart-5: #d29922;
+  --sidebar: #f4f4f2;
   --sidebar-foreground: #1a1a1a;
-  --sidebar-primary: #0969da;
+  --sidebar-primary: #1a1a1a;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: rgba(0, 0, 0, 0.06);
+  --sidebar-accent: rgba(0, 0, 0, 0.05);
   --sidebar-accent-foreground: #1a1a1a;
-  --sidebar-border: #d1d9e0;
-  --sidebar-ring: #0969da;
+  --sidebar-border: #e4e4e0;
+  --sidebar-ring: #363739;
+
+  /* Raycast brand + signal colors */
+  --ember: #ff6363;
+  --ember-dark: #452324;
+  --mint: #59d499;
+  --sky: #56c2ff;
+  --ash: #e6e6e6;
 
   /* Semantic colors */
-  --color-error: #dc2626;
+  --color-error: #d32f2f;
   --color-error-bg: #fef2f2;
   --color-error-border: #fecaca;
 
@@ -96,52 +115,88 @@
   --color-warning-bg: #fefce8;
   --color-warning-border: #fef08a;
 
-  --color-primary-action: #3b82f6;
-  --color-primary-action-hover: #2563eb;
+  --color-info: #2563eb;
+  --color-info-bg: #eff6ff;
+  --color-info-border: #bfdbfe;
+
+  /* Shadows — monochrome only (no color tints) */
+  --shadow-subtle: rgba(0, 0, 0, 0.04) 0px 1px 2px 0px, rgba(0, 0, 0, 0.06) 0px 1px 0px 0px inset;
+  --shadow-sm: rgba(0, 0, 0, 0.08) 0px 2px 4px 0px;
+  --shadow-lg: rgba(0, 0, 0, 0.1) 0px 4px 16px 0px;
+  --shadow-xl: rgba(0, 0, 0, 0.12) 0px 8px 40px 8px, rgba(0, 0, 0, 0.08) 0px 0px 0px 0.5px;
+  --shadow-ring: rgba(0, 0, 0, 0.15) 0px 0px 0px 1px;
+  --shadow-highlight: rgba(0, 0, 0, 0.04) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.35) 0px 0px 0px 1px, rgba(0, 0, 0, 0.06) 0px -1px 0px 0px inset;
+
+  /* Atmosphere gradients (hero / settings only) */
+  --gradient-nebula: radial-gradient(84.6% 73.49% at 50% 26.51%, rgba(4, 63, 150, 0.12), rgba(6, 18, 37, 0.04));
+  --gradient-violet: radial-gradient(86.88% 75.47% at 50% 24.53%, rgba(82, 48, 145, 0.12), rgba(26, 11, 51, 0.03));
 }
 
 .dark {
-  --background: #0d1117;
-  --foreground: #e6edf3;
-  --card: #161b22;
-  --card-foreground: #e6edf3;
-  --popover: #161b22;
-  --popover-foreground: #e6edf3;
-  --primary: #58a6ff;
-  --primary-foreground: #0d1117;
-  --secondary: #21262d;
-  --secondary-foreground: #e6edf3;
-  --muted: #21262d;
-  --muted-foreground: #8b949e;
-  --accent: #21262d;
-  --accent-foreground: #e6edf3;
-  --destructive: #f85149;
-  --border: #30363d;
-  --input: #30363d;
-  --ring: #58a6ff;
-  --chart-1: #58a6ff;
-  --chart-2: #3fb950;
-  --chart-3: #d29922;
+  /* Dark theme — Raycast void black + graphite stack */
+  --background: #040506;
+  --foreground: #ffffff;
+  --card: #07080a;
+  --card-foreground: #ffffff;
+  --popover: #07080a;
+  --popover-foreground: #ffffff;
+  --primary: #e6e6e6;
+  --primary-foreground: #2f3031;
+  --secondary: #111214;
+  --secondary-foreground: #ffffff;
+  --muted: #111214;
+  --muted-foreground: #9c9c9d;
+  --accent: #111214;
+  --accent-foreground: #ffffff;
+  --destructive: #ff6363;
+  --border: #363739;
+  --input: #363739;
+  --ring: #454647;
+  --chart-1: #ff6363;
+  --chart-2: #59d499;
+  --chart-3: #56c2ff;
   --chart-4: #a371f7;
-  --chart-5: #f85149;
-  --sidebar: #161b22;
-  --sidebar-foreground: #e6edf3;
-  --sidebar-primary: #58a6ff;
-  --sidebar-primary-foreground: #0d1117;
+  --chart-5: #d29922;
+  --sidebar: #07080a;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #e6e6e6;
+  --sidebar-primary-foreground: #2f3031;
   --sidebar-accent: rgba(255, 255, 255, 0.06);
-  --sidebar-accent-foreground: #e6edf3;
-  --sidebar-border: #30363d;
-  --sidebar-ring: #58a6ff;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #363739;
+  --sidebar-ring: #454647;
 
-  /* Semantic colors - dark mode overrides */
-  --color-error-bg: #450a0a;
-  --color-error-border: #7f1d1d;
+  /* Raycast brand + signal colors */
+  --ember: #ff6363;
+  --ember-dark: #452324;
+  --mint: #59d499;
+  --sky: #56c2ff;
+  --ash: #e6e6e6;
 
-  --color-success-bg: #052e16;
-  --color-success-border: #14532d;
+  /* Semantic colors — dark mode overrides */
+  --color-error-bg: #452324;
+  --color-error-border: #7a2d2e;
 
-  --color-warning-bg: #422006;
-  --color-warning-border: #713f12;
+  --color-success-bg: #0f2e1f;
+  --color-success-border: #1f5135;
+
+  --color-warning-bg: #3a2f06;
+  --color-warning-border: #5c4810;
+
+  --color-info-bg: #0d213f;
+  --color-info-border: #1f3a66;
+
+  /* Shadows — monochrome (black drops, white inset highlights) */
+  --shadow-subtle: rgba(255, 255, 255, 0.04) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.25) 0px 1px 2px 0px;
+  --shadow-sm: rgba(0, 0, 0, 0.25) 0px 4px 4px 0px;
+  --shadow-lg: rgba(0, 0, 0, 0.4) 0px 4px 20px 0px;
+  --shadow-xl: rgba(0, 0, 0, 0.4) 0px 4px 40px 8px, rgba(0, 0, 0, 0.8) 0px 0px 0px 0.5px, rgba(255, 255, 255, 0.3) 0px 0.5px 0px 0px inset;
+  --shadow-ring: rgba(255, 255, 255, 0.08) 0px 0px 0px 1px, rgba(0, 0, 0, 0.4) 0px 0px 0px 1px inset;
+  --shadow-highlight: rgba(255, 255, 255, 0.05) 0px 1px 0px 0px inset, rgba(255, 255, 255, 0.25) 0px 0px 0px 1px, rgba(0, 0, 0, 0.2) 0px -1px 0px 0px inset;
+
+  /* Atmosphere gradients — stronger in dark */
+  --gradient-nebula: radial-gradient(84.6% 73.49% at 50% 26.51%, rgba(4, 63, 150, 0.7), rgba(6, 18, 37, 0.25));
+  --gradient-violet: radial-gradient(86.88% 75.47% at 50% 24.53%, rgba(82, 48, 145, 0.7), rgba(26, 11, 51, 0.14));
 }
 
 @layer base {
@@ -156,17 +211,23 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--app-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans", Helvetica, Arial, sans-serif);
+    font-family: var(--app-font-family, var(--font-sans));
     font-size: 14px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "calt", "kern", "liga";
+  }
+  code, pre, kbd, .font-mono {
+    font-family: var(--font-mono);
+    font-feature-settings: "calt", "kern", "liga";
   }
 }
 
+/* Theme-aware scrollbar (replaces hardcoded black-alpha) */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 11px;
+  height: 11px;
 }
 
 ::-webkit-scrollbar-track {
@@ -174,32 +235,26 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 4px;
+  background: var(--border);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--muted-foreground);
+  border: 3px solid transparent;
+  background-clip: padding-box;
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 @keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-slide-down {
@@ -207,12 +262,8 @@
 }
 
 @keyframes marketplaceSkeletonShimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 .marketplace-skeleton-bar {

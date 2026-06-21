@@ -36,9 +36,10 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
     return () => clearTimeout(timer);
   }, [toast.id, toast.persistent, toast.action, dismiss]);
 
-  const bgColor = toast.type === "error" ? "#fef2f2" : toast.type === "success" ? "#f0fdf4" : "#eff6ff";
-  const borderColor = toast.type === "error" ? "#fecaca" : toast.type === "success" ? "#bbf7d0" : "#bfdbfe";
-  const textColor = toast.type === "error" ? "#dc2626" : toast.type === "success" ? "#16a34a" : "#2563eb";
+  const tokenKey = toast.type; // "error" | "success" | "info"
+  const bgColor = `var(--color-${tokenKey}-bg)`;
+  const borderColor = `var(--color-${tokenKey}-border)`;
+  const textColor = `var(--color-${tokenKey})`;
 
   return (
     <div
@@ -49,7 +50,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
         borderRadius: "10px",
         color: textColor,
         fontSize: "14px",
-        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+        boxShadow: "var(--shadow-lg)",
         opacity: isExiting ? 0 : 1,
         transform: isExiting ? "translateX(100%)" : "translateX(0)",
         transition: "opacity 0.3s, transform 0.3s",

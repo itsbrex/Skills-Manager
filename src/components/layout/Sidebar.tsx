@@ -163,7 +163,7 @@ export function Sidebar() {
                 })}
                 onMouseEnter={(e) => {
                   if (!e.currentTarget.classList.contains('active')) {
-                    e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.04)';
+                    e.currentTarget.style.backgroundColor = 'var(--sidebar-accent)';
                   }
                 }}
                 onMouseLeave={(e) => {
