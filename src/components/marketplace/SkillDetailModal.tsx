@@ -566,10 +566,10 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
                       fontSize: "11px",
                       fontWeight: 500,
                       color: "var(--primary)",
-                      backgroundColor: "rgba(9, 105, 218, 0.12)",
+                      backgroundColor: "var(--primary-tint)",
                       padding: "3px 8px",
                       borderRadius: "999px",
-                      border: "1px solid rgba(9, 105, 218, 0.35)",
+                      border: "1px solid var(--primary-tint-border)",
                     }}
                   >
                     {tag}
