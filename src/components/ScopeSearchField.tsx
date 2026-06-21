@@ -55,7 +55,12 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
   }, [switcherOpen]);
 
   function selectPage(path: string) {
+    console.log("[ScopeSearchField] selectPage called with path:", path, "current:", location.pathname);
     navigate(path);
+    // Verify on next tick whether the URL actually changed
+    setTimeout(() => {
+      console.log("[ScopeSearchField] after navigate, pathname:", window.location.pathname);
+    }, 0);
     setSwitcherOpen(false);
     setQuery("");
     inputRef.current?.blur();
@@ -109,7 +114,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
           padding: "0 12px",
           background: "var(--secondary)",
           border: `1px solid ${switcherOpen ? "var(--ring)" : "var(--border)"}`,
-          borderRadius: "var(--radius-md)",
+          borderRadius: "var(--radius)",
           transition: "border-color 0.15s",
         }}
       >
@@ -129,7 +134,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
               gap: 5,
               background: "var(--muted)",
               border: "none",
-              borderRadius: "var(--radius-sm)",
+              borderRadius: "var(--radius)",
               padding: "2px 8px",
               cursor: "pointer",
               flexShrink: 0,
@@ -172,7 +177,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
             fontFamily: "var(--font-mono)",
             color: "var(--muted-foreground)",
             border: "1px solid var(--border)",
-            borderRadius: "var(--radius-sm)",
+            borderRadius: "var(--radius)",
             padding: "1px 5px",
             background: "transparent",
             cursor: "pointer",
@@ -192,7 +197,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
             right: 0,
             background: "var(--card)",
             border: "1px solid var(--border)",
-            borderRadius: "var(--radius-md)",
+            borderRadius: "var(--radius)",
             boxShadow: "var(--shadow-lg)",
             zIndex: 200,
             padding: 4,
@@ -224,6 +229,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
                   e.preventDefault();
                 }}
                 onClick={(e) => {
+                  console.log("[ScopeSearchField] dropdown item clicked:", page.path);
                   e.stopPropagation();
                   selectPage(page.path);
                 }}
@@ -233,7 +239,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
                   gap: 8,
                   width: "100%",
                   padding: "7px 10px",
-                  borderRadius: "var(--radius-sm)",
+                  borderRadius: "var(--radius)",
                   border: "none",
                   background: isActive ? "var(--sidebar-accent)" : "transparent",
                   cursor: "pointer",
