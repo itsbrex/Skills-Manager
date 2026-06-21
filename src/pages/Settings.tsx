@@ -623,6 +623,7 @@ export function Settings() {
                 value={normalizeFontFamilyPreset(prefs.font_family)}
                 onChange={(v) => updatePreference("font_family", normalizeFontFamilyPreset(v))}
                 options={[
+                  { value: "raycast", label: t("settings.fontFamilyRaycast") },
                   { value: "system", label: t("settings.fontFamilySystem") },
                   { value: "rounded", label: t("settings.fontFamilyRounded") },
                   { value: "serif", label: t("settings.fontFamilySerif") },

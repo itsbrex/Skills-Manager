@@ -83,7 +83,7 @@ export type TelemetryConsent = "unknown" | "granted" | "denied";
 export interface UserPreferences {
   // Appearance
   theme: "light" | "dark" | "system";
-  font_family: "system" | "rounded" | "serif";
+  font_family: "raycast" | "system" | "rounded" | "serif";
   language: "zh" | "en";
 
   // Sync behavior

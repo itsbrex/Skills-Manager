@@ -2,7 +2,7 @@ import { UserPreferences } from "@/types";
 
 export const defaultPreferences: UserPreferences = {
   theme: "system",
-  font_family: "system",
+  font_family: "raycast",
   language: "en",
   auto_sync: true,
   sync_on_save: true,

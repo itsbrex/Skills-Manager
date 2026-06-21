@@ -1,6 +1,23 @@
-export const FONT_FAMILY_PRESETS = ["system", "rounded", "serif"] as const;
+export const FONT_FAMILY_PRESETS = ["raycast", "system", "rounded", "serif"] as const;
 
 export type FontFamilyPreset = (typeof FONT_FAMILY_PRESETS)[number];
+
+const RAYCAST_FONT_STACK = [
+  "\"Inter Variable\"",
+  "\"Inter\"",
+  "ui-sans-serif",
+  "system-ui",
+  "-apple-system",
+  "BlinkMacSystemFont",
+  "\"Segoe UI\"",
+  "\"PingFang SC\"",
+  "\"Hiragino Sans GB\"",
+  "\"Microsoft YaHei\"",
+  "\"Noto Sans\"",
+  "Helvetica",
+  "Arial",
+  "sans-serif",
+].join(", ");
 
 const SYSTEM_FONT_STACK = [
   "-apple-system",
@@ -39,21 +56,23 @@ const SERIF_FONT_STACK = [
 ].join(", ");
 
 export function normalizeFontFamilyPreset(preset: string | null | undefined): FontFamilyPreset {
-  if (preset === "rounded" || preset === "serif") {
+  if (preset === "system" || preset === "rounded" || preset === "serif") {
     return preset;
   }
 
-  return "system";
+  return "raycast";
 }
 
 export function getFontFamilyStack(preset: string | null | undefined): string {
   switch (normalizeFontFamilyPreset(preset)) {
+    case "system":
+      return SYSTEM_FONT_STACK;
     case "rounded":
       return ROUNDED_FONT_STACK;
     case "serif":
       return SERIF_FONT_STACK;
-    case "system":
+    case "raycast":
     default:
-      return SYSTEM_FONT_STACK;
+      return RAYCAST_FONT_STACK;
   }
 }
