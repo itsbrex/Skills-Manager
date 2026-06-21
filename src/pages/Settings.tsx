@@ -406,7 +406,7 @@ export function Settings() {
             pointerEvents: 'none',
             zIndex: 0,
           }} />
-          <div style={{ maxWidth: '680px', position: 'relative', zIndex: 1 }}>
+          <div className="animate-page-enter" style={{ maxWidth: '680px', position: 'relative', zIndex: 1 }}>
           {activeSection === "settings-general" && (<>
           {/* General Section */}
           <SectionTitle id="settings-general">{t("settings.general")}</SectionTitle>

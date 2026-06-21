@@ -1205,7 +1205,7 @@ export function Tools() {
         overflow: 'auto',
         padding: '24px 32px',
       }}>
-        <div style={{ maxWidth: '1200px' }}>
+        <div className="animate-page-enter" style={{ maxWidth: '1200px' }}>
           {/* Error */}
           {error && (
             <div className="mb-6">

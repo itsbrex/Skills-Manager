@@ -1114,7 +1114,7 @@ export function Marketplace() {
         onScroll={handleMainScroll}
         style={{ flex: 1, overflow: 'auto', padding: '12px 20px' }}
       >
-        <div style={{ maxWidth: '1200px' }}>
+        <div className="animate-page-enter" style={{ maxWidth: '1200px' }}>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
             {availableTags.length > 0 && (
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>

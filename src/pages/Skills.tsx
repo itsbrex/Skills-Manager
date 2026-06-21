@@ -2519,7 +2519,7 @@ export function Skills() {
           padding: "24px 32px",
         }}
       >
-        <div style={{ maxWidth: "1200px" }}>
+        <div className="animate-page-enter" style={{ maxWidth: "1200px" }}>
           {isBatchManageMode && (
             <div
               style={{
