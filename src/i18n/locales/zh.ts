@@ -36,6 +36,17 @@ export const zh = {
     settings: "设 置",
     privacyPolicy: "隐私政策",
   },
+  topbar: {
+    brand: "Skills Manager",
+    search: "搜索技能、工具、操作…",
+    searchHint: "⌘K",
+  },
+  scope: {
+    switchTo: "切换到",
+    typeToFilter: "输入以筛选",
+    navigate: "↑↓ 导航",
+    select: "↵ 选择",
+  },
   welcome: {
     description:
       "一份 Skills，多工具共享\n统一管理 Claude Code、Codex、CodeBuddy 的技能库",

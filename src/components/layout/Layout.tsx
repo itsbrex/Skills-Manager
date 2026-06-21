@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { Sidebar } from "./Sidebar";
+import { TopBar } from "@/components/TopBar";
 import { SyncReport, LinkReport } from "@/types";
 import { useTranslation } from "@/i18n";
 
-export function Layout() {
+interface LayoutProps {
+  onOpenPalette: () => void;
+}
+
+export function Layout({ onOpenPalette }: LayoutProps) {
   const { t } = useTranslation();
   const [remainingIssues, setRemainingIssues] = useState<number>(0);
   const [autoFixedCount, setAutoFixedCount] = useState<number>(0);
@@ -23,14 +27,11 @@ export function Layout() {
       if (report.issues_count === 0) {
         return;
       }
-
       const result = await invoke<LinkReport>("fix_sync_issues");
       const failed = result.failed.length;
-
       if (failed === 0) {
         return;
       }
-
       setAutoFixedCount(result.success.length);
       setRemainingIssues(failed);
       setShowBanner(true);
@@ -45,7 +46,6 @@ export function Layout() {
       const result = await invoke<LinkReport>("fix_sync_issues");
       const success = result.success.length;
       const failed = result.failed.length;
-
       if (failed === 0) {
         setShowBanner(false);
       } else {
@@ -60,24 +60,8 @@ export function Layout() {
   }
 
   return (
-    <div className="flex h-screen relative">
-      {/* Global draggable titlebar region - uses CSS app-region for native drag */}
-      <div
-        data-tauri-drag-region
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: '52px',
-          zIndex: 50,
-          pointerEvents: 'none',
-          cursor: 'grab',
-          // @ts-ignore - WebKit specific property for native window dragging
-          WebkitAppRegion: 'drag',
-        } as React.CSSProperties}
-      />
-      <Sidebar />
+    <div className="flex flex-col h-screen relative">
+      <TopBar onOpenPalette={onOpenPalette} />
       <main className="flex-1 overflow-auto bg-background relative">
         {showBanner && (
           <div

@@ -9,6 +9,7 @@ interface CommandItem {
   id: string;
   label: string;
   description?: string;
+  meta?: string;
   section: string;
   icon?: "skill" | "market" | "settings" | "nav";
   action: () => void;
@@ -168,11 +169,11 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
 
     // Navigation items (always present, filtered by query)
     const navItems: CommandItem[] = [
-      { id: "nav-skills", label: t("commandPalette.navSkills"), section: t("commandPalette.sectionNavigation"), icon: "nav", action: goToSkills },
-      { id: "nav-tools", label: t("commandPalette.navTools"), section: t("commandPalette.sectionNavigation"), icon: "nav", action: goToTools },
-      { id: "nav-marketplace", label: t("commandPalette.navMarketplace"), section: t("commandPalette.sectionNavigation"), icon: "nav", action: goToMarketplace },
-      { id: "nav-settings", label: t("commandPalette.navSettings"), section: t("commandPalette.sectionNavigation"), icon: "nav", action: goToSettings },
-      { id: "nav-feedback", label: t("commandPalette.navFeedback"), section: t("commandPalette.sectionNavigation"), icon: "nav", action: goToFeedback },
+      { id: "nav-skills", label: t("commandPalette.navSkills"), meta: "NAV", section: t("commandPalette.sectionNavigation"), icon: "nav", action: goToSkills },
+      { id: "nav-tools", label: t("commandPalette.navTools"), meta: "NAV", section: t("commandPalette.sectionNavigation"), icon: "nav", action: goToTools },
+      { id: "nav-marketplace", label: t("commandPalette.navMarketplace"), meta: "NAV", section: t("commandPalette.sectionNavigation"), icon: "nav", action: goToMarketplace },
+      { id: "nav-settings", label: t("commandPalette.navSettings"), meta: "NAV", section: t("commandPalette.sectionNavigation"), icon: "nav", action: goToSettings },
+      { id: "nav-feedback", label: t("commandPalette.navFeedback"), meta: "NAV", section: t("commandPalette.sectionNavigation"), icon: "nav", action: goToFeedback },
     ];
     const filteredNav = trimmed
       ? navItems.filter((item) => item.label.toLowerCase().includes(trimmed))
@@ -181,12 +182,12 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
 
     // Settings items
     const settingsItems: CommandItem[] = [
-      { id: "set-general", label: t("commandPalette.settingGeneral"), section: t("commandPalette.sectionSettings"), icon: "settings", action: () => goToSettingsSection("settings-general") },
-      { id: "set-appearance", label: t("commandPalette.settingAppearance"), section: t("commandPalette.sectionSettings"), icon: "settings", action: () => goToSettingsSection("settings-appearance") },
-      { id: "set-marketplace", label: t("commandPalette.settingMarketplace"), section: t("commandPalette.sectionSettings"), icon: "settings", action: () => goToSettingsSection("settings-marketplace") },
-      { id: "set-llm", label: t("commandPalette.settingLlm"), section: t("commandPalette.sectionSettings"), icon: "settings", action: () => goToSettingsSection("settings-llm") },
-      { id: "set-account", label: t("commandPalette.settingAccount"), section: t("commandPalette.sectionSettings"), icon: "settings", action: () => goToSettingsSection("settings-account") },
-      { id: "set-about", label: t("commandPalette.settingAbout"), section: t("commandPalette.sectionSettings"), icon: "settings", action: () => goToSettingsSection("settings-about") },
+      { id: "set-general", label: t("commandPalette.settingGeneral"), meta: "SETTING", section: t("commandPalette.sectionSettings"), icon: "settings", action: () => goToSettingsSection("settings-general") },
+      { id: "set-appearance", label: t("commandPalette.settingAppearance"), meta: "SETTING", section: t("commandPalette.sectionSettings"), icon: "settings", action: () => goToSettingsSection("settings-appearance") },
+      { id: "set-marketplace", label: t("commandPalette.settingMarketplace"), meta: "SETTING", section: t("commandPalette.sectionSettings"), icon: "settings", action: () => goToSettingsSection("settings-marketplace") },
+      { id: "set-llm", label: t("commandPalette.settingLlm"), meta: "SETTING", section: t("commandPalette.sectionSettings"), icon: "settings", action: () => goToSettingsSection("settings-llm") },
+      { id: "set-account", label: t("commandPalette.settingAccount"), meta: "SETTING", section: t("commandPalette.sectionSettings"), icon: "settings", action: () => goToSettingsSection("settings-account") },
+      { id: "set-about", label: t("commandPalette.settingAbout"), meta: "SETTING", section: t("commandPalette.sectionSettings"), icon: "settings", action: () => goToSettingsSection("settings-about") },
     ];
     const filteredSettings = trimmed
       ? settingsItems.filter((item) => item.label.toLowerCase().includes(trimmed))
@@ -207,6 +208,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         id: `local-${skill.instance_id}`,
         label: skill.name,
         description: skill.description ?? undefined,
+        meta: "SKILL",
         section: t("commandPalette.sectionLocal"),
         icon: "skill" as const,
         action: () => openLocalSkill(skill),
@@ -219,6 +221,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         id: `market-${skill.id}`,
         label: skill.name,
         description: skill.description ?? skill.author ?? undefined,
+        meta: "SKILL",
         section: t("commandPalette.sectionMarketplace"),
         icon: "market" as const,
         action: () => goToMarketplaceSkill(skill),
@@ -305,9 +308,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
           width: "min(640px, calc(100vw - 48px))",
           maxHeight: "70vh",
           backgroundColor: "var(--background)",
-          borderRadius: "14px",
+          borderRadius: "var(--radius)",
           border: "1px solid var(--border)",
-          boxShadow: "0 24px 64px rgba(0,0,0,0.32)",
+          boxShadow: "var(--shadow-xl)",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
@@ -346,13 +349,14 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
           />
           <kbd
             style={{
-              fontSize: "11px",
+              fontSize: "10px",
               color: "var(--muted-foreground)",
-              backgroundColor: "var(--secondary)",
+              backgroundColor: "var(--muted)",
               border: "1px solid var(--border)",
-              borderRadius: "6px",
-              padding: "2px 8px",
-              fontFamily: "ui-monospace, monospace",
+              borderRadius: "var(--radius)",
+              padding: "1px 6px",
+              fontFamily: "var(--font-mono)",
+              letterSpacing: "0.02em",
             }}
           >
             ESC
@@ -384,12 +388,12 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
               <div key={group.section} style={{ marginBottom: "4px" }}>
                 <div
                   style={{
-                    fontSize: "11px",
+                    fontSize: "10px",
                     fontWeight: 600,
                     color: "var(--muted-foreground)",
                     padding: "8px 10px 4px",
                     textTransform: "uppercase",
-                    letterSpacing: "0.05em",
+                    letterSpacing: "0.06em",
                   }}
                 >
                   {group.section}
@@ -449,6 +453,23 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                           </span>
                         )}
                       </span>
+                      {item.meta && (
+                        <span
+                          style={{
+                            fontSize: "9px",
+                            fontFamily: "var(--font-mono)",
+                            letterSpacing: "0.02em",
+                            color: "var(--muted-foreground)",
+                            background: "var(--secondary)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "var(--radius)",
+                            padding: "1px 5px",
+                            flexShrink: 0,
+                          }}
+                        >
+                          {item.meta}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -470,11 +491,18 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
           }}
         >
           <span>{t("commandPalette.hint")}</span>
-          <div style={{ display: "flex", gap: "10px" }}>
+          <div style={{ display: "flex", gap: "14px", fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--muted-foreground)" }}>
             <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
               <kbd style={kbdStyle}>↑</kbd>
               <kbd style={kbdStyle}>↓</kbd>
               {t("commandPalette.navigate")}
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <kbd style={kbdStyle}>↵</kbd>
+              {t("scope.select")}
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <kbd style={kbdStyle}>esc</kbd>
             </span>
           </div>
         </div>
@@ -485,11 +513,11 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
 
 const kbdStyle: React.CSSProperties = {
   fontSize: "10px",
-  backgroundColor: "var(--secondary)",
+  backgroundColor: "var(--muted)",
   border: "1px solid var(--border)",
-  borderRadius: "4px",
+  borderRadius: "var(--radius)",
   padding: "1px 5px",
-  fontFamily: "ui-monospace, monospace",
+  fontFamily: "var(--font-mono)",
   color: "var(--foreground)",
 };
 

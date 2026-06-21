@@ -35,6 +35,17 @@ export const en = {
     settings: "Settings",
     privacyPolicy: "Privacy Policy",
   },
+  topbar: {
+    brand: "Skills Manager",
+    search: "Search skills, tools, actions…",
+    searchHint: "⌘K",
+  },
+  scope: {
+    switchTo: "Switch to",
+    typeToFilter: "type to filter",
+    navigate: "↑↓ navigate",
+    select: "↵ select",
+  },
   welcome: {
     description: "One Skills, shared across tools.\nUnified management for Claude Code, Codex, CodeBuddy skills.",
     step1Title: "Detect Tools",

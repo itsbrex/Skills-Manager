@@ -18,6 +18,7 @@ import { FontFamilyPreset, normalizeFontFamilyPreset } from "@/lib/fontFamily";
 import { AppConfig, MarketplaceUpdateCheckResult } from "@/types";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { CommandPalette } from "@/components/CommandPalette";
+import { PageHeaderProvider } from "@/components/PageHeaderContext";
 
 type Theme = "light" | "dark" | "system";
 
@@ -140,21 +141,23 @@ function App() {
       <I18nProvider language={language} onLanguageChange={handleLanguageChange}>
         <AuthProvider>
           <BrowserRouter>
-            <SkillTranslationProvider>
-              <GlobalShortcuts onOpenPalette={() => setPaletteOpen(true)} />
-              <Routes>
-                <Route path="/" element={<Layout />}>
-                  <Route index element={<Skills />} />
-                  <Route path="tools" element={<Tools />} />
-                  <Route path="marketplace" element={<Marketplace />} />
-                  <Route path="settings" element={<Settings />} />
-                  <Route path="feedback" element={<Feedback />} />
-                </Route>
-                <Route path="/editor" element={<EditorPage />} />
-              </Routes>
-              <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
-              <ToastContainer toasts={toasts} onRemove={removeToast} />
-            </SkillTranslationProvider>
+            <PageHeaderProvider>
+              <SkillTranslationProvider>
+                <GlobalShortcuts onOpenPalette={() => setPaletteOpen(true)} />
+                <Routes>
+                  <Route path="/" element={<Layout onOpenPalette={() => setPaletteOpen(true)} />}>
+                    <Route index element={<Skills />} />
+                    <Route path="tools" element={<Tools />} />
+                    <Route path="marketplace" element={<Marketplace />} />
+                    <Route path="settings" element={<Settings />} />
+                    <Route path="feedback" element={<Feedback />} />
+                  </Route>
+                  <Route path="/editor" element={<EditorPage />} />
+                </Routes>
+                <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+                <ToastContainer toasts={toasts} onRemove={removeToast} />
+              </SkillTranslationProvider>
+            </PageHeaderProvider>
           </BrowserRouter>
         </AuthProvider>
       </I18nProvider>
