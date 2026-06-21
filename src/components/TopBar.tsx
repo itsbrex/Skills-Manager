@@ -57,14 +57,7 @@ export function TopBar({ onOpenPalette }: TopBarProps) {
       <div
         onMouseDown={() => getCurrentWindow().startDragging()}
         data-tauri-drag-region
-        style={{
-          width: 72,
-          height: "100%",
-          flexShrink: 0,
-          cursor: "grab",
-          // @ts-ignore - WebKit specific property for native window dragging
-          WebkitAppRegion: "drag",
-        } as React.CSSProperties}
+        style={{ width: 72, height: "100%", flexShrink: 0, cursor: "grab" }}
       />
 
       {/* Brand: ember ✦ + wordmark */}

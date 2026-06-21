@@ -1913,9 +1913,9 @@ function GithubInstallDialog({
             style={{
               padding: "9px 16px",
               borderRadius: "10px",
-              border: "1px solid var(--color-primary)",
-              backgroundColor: "var(--color-primary)",
-              color: "white",
+              border: "1px solid var(--primary)",
+              backgroundColor: "var(--primary)",
+              color: "var(--primary-foreground)",
               fontSize: "13px",
               fontWeight: 700,
               cursor: installing ? "wait" : "pointer",

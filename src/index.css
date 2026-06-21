@@ -132,10 +132,6 @@
 
   /* Surface hover — raised-fill hover state for cards/rows. */
   --surface-hover: rgba(0, 0, 0, 0.04);
-
-  /* Atmosphere gradients (hero / settings only) */
-  --gradient-nebula: radial-gradient(84.6% 73.49% at 50% 26.51%, rgba(4, 63, 150, 0.12), rgba(6, 18, 37, 0.04));
-  --gradient-violet: radial-gradient(86.88% 75.47% at 50% 24.53%, rgba(82, 48, 145, 0.12), rgba(26, 11, 51, 0.03));
 }
 
 .dark {
@@ -192,6 +188,12 @@
   --color-info-bg: #0d213f;
   --color-info-border: #1f3a66;
 
+  /* Semantic base colors — lift luminance for dark backgrounds */
+  --color-error: #f87171;
+  --color-success: #4ade80;
+  --color-warning: #eab308;
+  --color-info: #60a5fa;
+
   /* Shadows — monochrome (black drops, white inset highlights) */
   --shadow-subtle: rgba(255, 255, 255, 0.04) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.25) 0px 1px 2px 0px;
   --shadow-sm: rgba(0, 0, 0, 0.25) 0px 4px 4px 0px;
@@ -206,10 +208,6 @@
 
   /* Surface hover — dark mode: white-alpha lift. */
   --surface-hover: rgba(255, 255, 255, 0.04);
-
-  /* Atmosphere gradients — stronger in dark */
-  --gradient-nebula: radial-gradient(84.6% 73.49% at 50% 26.51%, rgba(4, 63, 150, 0.7), rgba(6, 18, 37, 0.25));
-  --gradient-violet: radial-gradient(86.88% 75.47% at 50% 24.53%, rgba(82, 48, 145, 0.7), rgba(26, 11, 51, 0.14));
 }
 
 @layer base {

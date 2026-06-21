@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from "react";
 
 interface PageHeaderContextValue {
   title: string;
@@ -26,23 +26,23 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
   // actions into it via a React portal. Keeping it as an external subscription
   // (not React state) means action updates never re-render the provider or the
   // subscribed pages — eliminating the render loop entirely.
-  let actionsTarget: HTMLElement | null = null;
-  const actionsListeners = new Set<(node: HTMLElement | null) => void>();
+  const actionsTargetRef = useRef<HTMLElement | null>(null);
+  const listenersRef = useRef(new Set<(node: HTMLElement | null) => void>());
 
   const setHeader = useCallback((nextTitle: string) => {
     setTitle((prev) => (prev === nextTitle ? prev : nextTitle));
   }, []);
 
   const registerActionsTarget = useCallback((node: HTMLElement | null) => {
-    actionsTarget = node;
-    actionsListeners.forEach((cb) => cb(node));
+    actionsTargetRef.current = node;
+    listenersRef.current.forEach((cb) => cb(node));
   }, []);
 
   const subscribeActionsTarget = useCallback((cb: (node: HTMLElement | null) => void) => {
-    actionsListeners.add(cb);
-    cb(actionsTarget);
+    listenersRef.current.add(cb);
+    cb(actionsTargetRef.current);
     return () => {
-      actionsListeners.delete(cb);
+      listenersRef.current.delete(cb);
     };
   }, []);
 
