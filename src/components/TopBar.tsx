@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "@/i18n";
 import { checkUpdate } from "@/services/updater";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { ScopeSearchField } from "@/components/ScopeSearchField";
-import { usePageHeaderState } from "@/components/PageHeaderContext";
+import { useActionsTarget } from "@/components/PageHeaderContext";
 import { UpdateInfo } from "@/types";
 
 interface TopBarProps {
@@ -14,8 +14,15 @@ interface TopBarProps {
 
 export function TopBar({ onOpenPalette }: TopBarProps) {
   const { t } = useTranslation();
-  const { actions } = usePageHeaderState();
+  const actionsSlotRef = useRef<HTMLDivElement | null>(null);
+  const { registerActionsTarget } = useActionsTarget();
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+
+  // Register the actions slot as the portal target for PageHeader actions.
+  useEffect(() => {
+    registerActionsTarget?.(actionsSlotRef.current);
+    return () => registerActionsTarget?.(null);
+  }, [registerActionsTarget]);
 
   useEffect(() => {
     checkUpdate()
@@ -103,12 +110,11 @@ export function TopBar({ onOpenPalette }: TopBarProps) {
       {/* Center scope search — the field shows the current page as a chip */}
       <ScopeSearchField onOpenPalette={onOpenPalette} />
 
-      {/* Page actions (from context) */}
-      {actions && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          {actions}
-        </div>
-      )}
+      {/* Page actions — portalled here by the active page's <PageHeader/> */}
+      <div
+        ref={actionsSlotRef}
+        style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, minHeight: 28 }}
+      />
 
       {/* Right: auth */}
       <div style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>

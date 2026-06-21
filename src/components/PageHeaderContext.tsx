@@ -1,30 +1,47 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
 
-interface PageHeaderState {
+interface PageHeaderContextValue {
   title: string;
-  actions?: ReactNode;
-}
-
-interface PageHeaderContextValue extends PageHeaderState {
-  setHeader: (state: PageHeaderState) => void;
+  setHeader: (title: string) => void;
+  /** Register a portal target node for page actions. Called by the TopBar. */
+  registerActionsTarget: (node: HTMLElement | null) => void;
+  /** Subscribe to the current actions target node. Returns an unsubscribe fn. */
+  subscribeActionsTarget: (cb: (node: HTMLElement | null) => void) => () => void;
 }
 
 const PageHeaderContext = createContext<PageHeaderContextValue | null>(null);
 
 export function PageHeaderProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<PageHeaderState>({ title: "" });
+  const [title, setTitle] = useState("");
 
-  // setHeader only updates when the title changes. The actions are fresh JSX
-  // on every page render (new element reference), so including them in an
-  // equality check would re-trigger setState forever. We intentionally key
-  // the update on title only — actions are carried along when the title
-  // changes, and a page's actions are otherwise stable across its lifetime.
-  const setHeader = useCallback((next: PageHeaderState) => {
-    setState((prev) => (prev.title === next.title ? prev : next));
+  // The actions target is a DOM node owned by the TopBar. Pages render their
+  // actions into it via a React portal. Keeping it as an external subscription
+  // (not React state) means action updates never re-render the provider or the
+  // subscribed pages — eliminating the render loop entirely.
+  let actionsTarget: HTMLElement | null = null;
+  const actionsListeners = new Set<(node: HTMLElement | null) => void>();
+
+  const setHeader = useCallback((nextTitle: string) => {
+    setTitle((prev) => (prev === nextTitle ? prev : nextTitle));
+  }, []);
+
+  const registerActionsTarget = useCallback((node: HTMLElement | null) => {
+    actionsTarget = node;
+    actionsListeners.forEach((cb) => cb(node));
+  }, []);
+
+  const subscribeActionsTarget = useCallback((cb: (node: HTMLElement | null) => void) => {
+    actionsListeners.add(cb);
+    cb(actionsTarget);
+    return () => {
+      actionsListeners.delete(cb);
+    };
   }, []);
 
   return (
-    <PageHeaderContext.Provider value={{ ...state, setHeader }}>
+    <PageHeaderContext.Provider
+      value={{ title, setHeader, registerActionsTarget, subscribeActionsTarget }}
+    >
       {children}
     </PageHeaderContext.Provider>
   );
@@ -36,14 +53,30 @@ export function usePageHeaderState() {
   return ctx;
 }
 
-// Pages call this hook to push their title + actions into the TopBar.
-// The effect depends on [title] only — a stable string — so it runs on
-// mount and on title change, NOT on every render. This breaks the loop
-// that fresh-JSX actions would otherwise cause.
-export function useRegisterPageHeader(title: string, actions?: ReactNode) {
+// TopBar uses this to register the DOM node that receives portalled actions.
+export function useActionsTarget() {
   const ctx = useContext(PageHeaderContext);
+  const [target, setTarget] = useState<HTMLElement | null>(null);
   useEffect(() => {
-    ctx?.setHeader({ title, actions });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!ctx) return;
+    return ctx.subscribeActionsTarget(setTarget);
+  }, [ctx]);
+  return { target, registerActionsTarget: ctx?.registerActionsTarget };
+}
+
+// Pages call this to push their title (string) into context and receive the
+// portal target so they can render actions into it. Title goes through context
+// (loop-safe). Actions are rendered into the TopBar's portal target, so they
+// update naturally on every render without any loop.
+export function useRegisterPageHeader(title: string) {
+  const ctx = useContext(PageHeaderContext);
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!ctx) return;
+    ctx.setHeader(title);
+    return ctx.subscribeActionsTarget(setTarget);
   }, [ctx, title]);
+
+  return target;
 }
