@@ -143,7 +143,7 @@ function App() {
             <SkillTranslationProvider>
               <GlobalShortcuts onOpenPalette={() => setPaletteOpen(true)} />
               <Routes>
-                <Route path="/" element={<Layout />}>
+                <Route path="/" element={<Layout onOpenPalette={() => setPaletteOpen(true)} />}>
                   <Route index element={<Skills />} />
                   <Route path="tools" element={<Tools />} />
                   <Route path="marketplace" element={<Marketplace />} />
