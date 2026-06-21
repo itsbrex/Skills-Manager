@@ -1138,62 +1138,77 @@ export function Tools() {
         title={t("tools.title")}
         actions={
           <>
-            <RefreshButton onClick={handleRefresh} loading={refreshing} />
+            <RefreshButton onClick={handleRefresh} loading={refreshing} iconOnly />
             <button
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '8px 12px',
-                fontSize: '13px',
-                fontWeight: 500,
-                color: 'var(--foreground)',
-                backgroundColor: 'var(--secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
+                justifyContent: 'center',
+                width: 32,
+                height: 32,
+                padding: 0,
+                color: bulkToggling || refreshing || bulkToggleTargets.length === 0
+                  ? 'var(--muted-foreground)'
+                  : 'var(--muted-foreground)',
+                backgroundColor: 'transparent',
+                border: '1px solid transparent',
+                borderRadius: '6px',
                 cursor: bulkToggling || refreshing || bulkToggleTargets.length === 0 ? 'not-allowed' : 'pointer',
-                opacity: bulkToggling || refreshing || bulkToggleTargets.length === 0 ? 0.6 : 1,
-                transition: 'background-color 0.15s, border-color 0.15s',
+                opacity: bulkToggling || refreshing || bulkToggleTargets.length === 0 ? 0.5 : 1,
+                transition: 'color 0.15s, background-color 0.15s',
               }}
               onMouseEnter={(e) => {
                 if (bulkToggling || refreshing || bulkToggleTargets.length === 0) {
                   return;
                 }
-                e.currentTarget.style.backgroundColor = 'var(--muted)';
-                e.currentTarget.style.borderColor = 'var(--ring)';
+                e.currentTarget.style.color = 'var(--foreground)';
+                e.currentTarget.style.backgroundColor = 'var(--secondary)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--secondary)';
-                e.currentTarget.style.borderColor = 'var(--border)';
+                e.currentTarget.style.color = 'var(--muted-foreground)';
+                e.currentTarget.style.backgroundColor = 'transparent';
               }}
               onClick={handleBulkToggleTools}
               disabled={bulkToggling || refreshing || bulkToggleTargets.length === 0}
-              title={bulkToggleTargets.length === 0 ? t("tools.bulkNoTarget") : undefined}
+              title={bulkToggleTargets.length === 0 ? t("tools.bulkNoTarget") : bulkToggleLabel}
+              aria-label={bulkToggleTargets.length === 0 ? t("tools.bulkNoTarget") : bulkToggleLabel}
             >
-              <Power style={{ width: '14px', height: '14px' }} />
-              {bulkToggleLabel}
+              <Power
+                style={{
+                  width: '14px',
+                  height: '14px',
+                  animation: bulkToggling ? 'spin 1s linear infinite' : 'none',
+                }}
+              />
             </button>
             <button
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '8px 16px',
-                fontSize: '13px',
-                fontWeight: 500,
-                color: 'var(--primary-foreground)',
-                backgroundColor: 'var(--foreground)',
-                border: 'none',
-                borderRadius: '8px',
+                justifyContent: 'center',
+                width: 32,
+                height: 32,
+                padding: 0,
+                color: 'var(--muted-foreground)',
+                backgroundColor: 'transparent',
+                border: '1px solid transparent',
+                borderRadius: '6px',
                 cursor: 'pointer',
-                transition: 'opacity 0.15s',
+                transition: 'color 0.15s, background-color 0.15s',
               }}
-              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = 'var(--foreground)';
+                e.currentTarget.style.backgroundColor = 'var(--secondary)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'var(--muted-foreground)';
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
               onClick={startCreateCustomTool}
+              title={t("tools.customAdd")}
+              aria-label={t("tools.customAdd")}
             >
               <Plus style={{ width: '14px', height: '14px' }} />
-              {t("tools.customAdd")}
             </button>
           </>
         }

@@ -5,6 +5,7 @@ import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
+import { usePageSearch } from "@/components/PageHeaderContext";
 import { PageLoader } from "@/components/ui/loading";
 import { Toggle } from "@/components/ui/toggle";
 import {
@@ -187,25 +188,37 @@ function SkillsHeaderMoreMenu({
       <button
         type="button"
         aria-label={label}
+        title={label}
         onClick={() => setOpen((current) => !current)}
         style={{
           display: "inline-flex",
           alignItems: "center",
-          gap: "6px",
-          padding: "8px 12px",
-          fontSize: "13px",
-          fontWeight: 500,
-          color: "var(--foreground)",
-          backgroundColor: "var(--background)",
-          border: "1px solid var(--border)",
-          borderRadius: "8px",
+          justifyContent: "center",
+          width: 32,
+          height: 32,
+          padding: 0,
+          color: open ? "var(--foreground)" : "var(--muted-foreground)",
+          backgroundColor: open ? "var(--secondary)" : "transparent",
+          border: "1px solid transparent",
+          borderRadius: "6px",
           cursor: "pointer",
-          whiteSpace: "nowrap",
+          transition: "color 0.15s, background-color 0.15s",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = "var(--foreground)";
+          e.currentTarget.style.backgroundColor = "var(--secondary)";
+        }}
+        onMouseLeave={(e) => {
+          if (!open) {
+            e.currentTarget.style.color = "var(--muted-foreground)";
+            e.currentTarget.style.backgroundColor = "transparent";
+          }
         }}
       >
-        {label}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d={open ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"} />
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <circle cx="5" cy="12" r="1" />
+          <circle cx="12" cy="12" r="1" />
+          <circle cx="19" cy="12" r="1" />
         </svg>
       </button>
 
@@ -511,7 +524,9 @@ export function Skills() {
   const [skillPackages, setSkillPackages] = useState<InstalledSkillPackage[]>([]);
   const [tools, setTools] = useState<Tool[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  // Page-level search query is shared with the TopBar scope field via context,
+  // so the Skills page no longer renders its own search input.
+  const { query: searchQuery } = usePageSearch(t("skills.searchPlaceholder"));
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [untaggedOnly, setUntaggedOnly] = useState(false);
   const [scopeFilter, setScopeFilter] = useState<"all" | "global" | "project">("all");
@@ -1172,26 +1187,13 @@ export function Skills() {
     return projects.find((project) => project.id === activeId)?.name ?? null;
   }, [config?.active_project_id, config?.projects]);
 
-  const tagFilterButtonLabel = useMemo(() => {
-    if (scopeFilter !== "all") {
-      if (scopeFilter === "global") {
-        return t("skills.scopeGlobal");
-      }
-      return activeProjectName ?? t("skills.scopeProject");
-    }
-    switch (tagFilterSelection.kind) {
-      case "untagged":
-        return t("skills.untagged");
-      case "single":
-        return `#${tagFilterSelection.tag}`;
-      case "multiple":
-        return t("skills.selectedTagsCountCompact").replace("{count}", String(tagFilterSelection.count));
-      default:
-        return t("skills.tagFilterButton");
-    }
-  }, [activeProjectName, scopeFilter, tagFilterSelection, t]);
-
   const hasActiveSkillFilters = Boolean(searchQuery.trim()) || selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all";
+
+  // Active tag-filter conditions shown as a numeric badge on the filter icon.
+  const tagFilterActiveCount =
+    (scopeFilter !== "all" ? 1 : 0) +
+    (untaggedOnly ? 1 : 0) +
+    selectedTags.length;
 
   const scopeFilterCounts = useMemo(() => {
     const globalCount = unifiedItems.filter((item) => item.scopeLabel === "global").length;
@@ -1402,32 +1404,41 @@ export function Skills() {
           <button
             key={actionId}
             style={{
-              display: "flex",
+              display: "inline-flex",
               alignItems: "center",
-              gap: "6px",
-              padding: "8px 16px",
-              fontSize: "13px",
-              fontWeight: 500,
-              color: "var(--primary-foreground)",
-              backgroundColor: "var(--foreground)",
-              border: "none",
-              borderRadius: "8px",
+              justifyContent: "center",
+              width: 32,
+              height: 32,
+              padding: 0,
+              color: "var(--muted-foreground)",
+              backgroundColor: "transparent",
+              border: "1px solid transparent",
+              borderRadius: "6px",
               cursor: isBatchManageMode ? "not-allowed" : "pointer",
-              transition: "opacity 0.15s",
+              transition: "color 0.15s, background-color 0.15s",
               opacity: isBatchManageMode ? 0.5 : 1,
             }}
-            onMouseEnter={(e) => { if (!isBatchManageMode) e.currentTarget.style.opacity = "0.9"; }}
-            onMouseLeave={(e) => { if (!isBatchManageMode) e.currentTarget.style.opacity = "1"; }}
+            onMouseEnter={(e) => {
+              if (!isBatchManageMode) {
+                e.currentTarget.style.color = "var(--foreground)";
+                e.currentTarget.style.backgroundColor = "var(--secondary)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = "var(--muted-foreground)";
+              e.currentTarget.style.backgroundColor = "transparent";
+            }}
             onClick={() => {
               if (!isBatchManageMode) {
                 setShowCreateDialog(true);
               }
             }}
+            title={t("skills.newSkill")}
+            aria-label={t("skills.newSkill")}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5v14M5 12h14" />
             </svg>
-            {t("skills.newSkill")}
           </button>
         );
     }
@@ -2224,41 +2235,69 @@ export function Skills() {
         title={t("skills.title")}
         actions={
           <>
-            <RefreshButton onClick={handleRefresh} loading={refreshing} />
+            <RefreshButton onClick={handleRefresh} loading={refreshing} iconOnly />
 
             {showTagFilterControl && (
               <div style={{ position: "relative" }}>
                 <button
                   type="button"
                   onClick={() => setShowTagFilterMenu((current) => !current)}
+                  title={t("skills.tagFilterButton")}
+                  aria-label={t("skills.tagFilterButton")}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: "8px",
-                    padding: "8px 12px",
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all" ? "var(--primary)" : "var(--foreground)",
-                    backgroundColor: "var(--background)",
-                    border: selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all" ? "1px solid var(--primary-tint-border)" : "1px solid var(--border)",
-                    borderRadius: "8px",
+                    justifyContent: "center",
+                    width: 32,
+                    height: 32,
+                    padding: 0,
+                    color: tagFilterActiveCount > 0 ? "var(--primary)" : "var(--muted-foreground)",
+                    backgroundColor: tagFilterActiveCount > 0 ? "var(--primary-tint)" : "transparent",
+                    border: tagFilterActiveCount > 0 ? "1px solid var(--primary-tint-border)" : "1px solid transparent",
+                    borderRadius: "6px",
                     cursor: "pointer",
-                    minWidth: "124px",
-                    justifyContent: "space-between",
-                    boxShadow: selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all" ? "0 0 0 3px var(--primary-tint)" : "none",
+                    transition: "color 0.15s, background-color 0.15s, border-color 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (tagFilterActiveCount === 0) {
+                      e.currentTarget.style.color = "var(--foreground)";
+                      e.currentTarget.style.backgroundColor = "var(--secondary)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (tagFilterActiveCount === 0) {
+                      e.currentTarget.style.color = "var(--muted-foreground)";
+                      e.currentTarget.style.backgroundColor = "transparent";
+                    }
                   }}
                 >
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M3 6h18M6 12h12M10 18h4" />
-                    </svg>
-                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {tagFilterButtonLabel}
-                    </span>
-                  </span>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d={showTagFilterMenu ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"} />
+                    <path d="M3 6h18M6 12h12M10 18h4" />
                   </svg>
+                  {tagFilterActiveCount > 0 && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: -4,
+                        right: -4,
+                        minWidth: 16,
+                        height: 16,
+                        padding: "0 4px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: "var(--primary-foreground)",
+                        backgroundColor: "var(--primary)",
+                        borderRadius: 9999,
+                        border: "1.5px solid var(--card)",
+                        lineHeight: 1,
+                      }}
+                    >
+                      {tagFilterActiveCount}
+                    </span>
+                  )}
                 </button>
 
                 {showTagFilterMenu && (
@@ -2420,53 +2459,6 @@ export function Skills() {
                 )}
               </div>
             )}
-
-            <div style={{ position: "relative" }}>
-              <svg
-                style={{
-                  position: "absolute",
-                  left: "12px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  color: "var(--muted-foreground)",
-                  pointerEvents: "none",
-                }}
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.3-4.3" />
-              </svg>
-              <input
-                type="text"
-                placeholder={t("skills.searchPlaceholder")}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="skills-search-input"
-                style={{
-                  padding: "8px 12px 8px 36px",
-                  fontSize: "13px",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  backgroundColor: "var(--background)",
-                  color: "var(--foreground)",
-                  outline: "none",
-                  transition: "border-color 0.15s, box-shadow 0.15s",
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = "var(--ring)";
-                  e.currentTarget.style.boxShadow = "0 0 0 3px var(--primary-tint)";
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = "var(--border)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              />
-            </div>
 
             {headerActionLayout.primaryActionIds.length > 0 && (
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>

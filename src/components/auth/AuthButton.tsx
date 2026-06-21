@@ -20,24 +20,24 @@ export function AuthButton({ variant = "sidebar" }: AuthButtonProps) {
         <button
           type="button"
           onClick={() => setIsModalOpen(true)}
+          title={displayName}
+          aria-label={displayName}
           style={{
-            width: "100%",
-            display: "flex",
+            display: "inline-flex",
             alignItems: "center",
-            gap: "10px",
-            padding: "8px 10px",
-            justifyContent: "flex-start",
-            borderRadius: "8px",
-            fontSize: "13px",
+            justifyContent: "center",
+            width: 32,
+            height: 32,
+            padding: 0,
             color: "var(--muted-foreground)",
             background: "transparent",
-            border: "none",
-            textAlign: "left",
+            border: "1px solid transparent",
+            borderRadius: "6px",
             cursor: "pointer",
             transition: "background-color 0.15s",
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = "var(--sidebar-accent)";
+            e.currentTarget.style.backgroundColor = "var(--secondary)";
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.backgroundColor = "transparent";
@@ -45,8 +45,8 @@ export function AuthButton({ variant = "sidebar" }: AuthButtonProps) {
         >
           <div
             style={{
-              width: "28px",
-              height: "28px",
+              width: "24px",
+              height: "24px",
               borderRadius: "50%",
               backgroundColor: "var(--muted)",
               display: "flex",
@@ -69,7 +69,6 @@ export function AuthButton({ variant = "sidebar" }: AuthButtonProps) {
               </svg>
             )}
           </div>
-          <span style={{ color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</span>
         </button>
 
         <AuthModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />

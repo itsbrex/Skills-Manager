@@ -15,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { ExternalLink, Link2 } from "lucide-react";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
+import { usePageSearch } from "@/components/PageHeaderContext";
 import { PageLoader } from "@/components/ui/loading";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { InstallCountBadge } from "@/components/marketplace/InstallCountBadge";
@@ -159,7 +160,9 @@ export function Marketplace() {
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
   const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
   const [githubInstallDialogOpen, setGithubInstallDialogOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  // Page-level search query is shared with the TopBar scope field via context,
+  // so the Marketplace page no longer renders its own search input.
+  const { query: searchQuery } = usePageSearch(t("marketplace.searchPlaceholder"));
   const [githubInstallUrl, setGithubInstallUrl] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<MarketplaceSkill | null>(null);
@@ -808,23 +811,6 @@ export function Marketplace() {
   };
 
   const showSourceFilter = availableSources.length > 1;
-  const sourceNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    availableSources.forEach((source) => {
-      map.set(source.id, source.name);
-    });
-    return map;
-  }, [availableSources]);
-
-  const sourceFilterLabel = useMemo(() => {
-    if (selectedSourceIds.length === 0) {
-      return t("marketplace.sourceAll");
-    }
-    if (selectedSourceIds.length === 1) {
-      return sourceNameMap.get(selectedSourceIds[0]) || selectedSourceIds[0];
-    }
-    return t("marketplace.sourceSelectedCount").replace("{count}", String(selectedSourceIds.length));
-  }, [selectedSourceIds, sourceNameMap, t]);
 
   const toggleSourceSelection = useCallback((sourceId: string) => {
     setSelectedSourceIds((prev) => {
@@ -901,53 +887,97 @@ export function Marketplace() {
               type="button"
               onClick={() => setGithubInstallDialogOpen(true)}
               disabled={installingSkill !== null || updatingAll}
+              title={t("marketplace.githubInstallOpen")}
+              aria-label={t("marketplace.githubInstallOpen")}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '7px 12px',
-                borderRadius: '8px',
-                fontSize: '12px',
-                fontWeight: 600,
-                border: '1px solid var(--primary-tint-border)',
-                color: 'var(--foreground)',
-                backgroundColor: 'var(--background)',
+                justifyContent: 'center',
+                width: 32,
+                height: 32,
+                padding: 0,
+                color: installingSkill !== null || updatingAll ? 'var(--muted-foreground)' : 'var(--muted-foreground)',
+                backgroundColor: 'transparent',
+                border: '1px solid transparent',
+                borderRadius: '6px',
                 cursor: installingSkill !== null || updatingAll ? 'not-allowed' : 'pointer',
-                opacity: installingSkill !== null || updatingAll ? 0.7 : 1,
+                opacity: installingSkill !== null || updatingAll ? 0.5 : 1,
+                transition: 'color 0.15s, background-color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                if (installingSkill === null && !updatingAll) {
+                  e.currentTarget.style.color = 'var(--foreground)';
+                  e.currentTarget.style.backgroundColor = 'var(--secondary)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = 'var(--muted-foreground)';
+                e.currentTarget.style.backgroundColor = 'transparent';
               }}
             >
               <Link2 size={14} />
-              {t("marketplace.githubInstallOpen")}
             </button>
-            <RefreshButton onClick={handleRefresh} loading={refreshing || updatingAll} />
+            <RefreshButton onClick={handleRefresh} loading={refreshing || updatingAll} iconOnly />
             {showSourceFilter && (
               <div style={{ position: 'relative' }}>
                 <button
                   onClick={() => setSourceDropdownOpen((v) => !v)}
+                  title={t("marketplace.sourceFilter")}
+                  aria-label={t("marketplace.sourceFilter")}
                   style={{
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    padding: '8px 10px',
-                    fontSize: '12px',
-                    color: 'var(--foreground)',
-                    backgroundColor: sourceDropdownOpen ? 'var(--secondary)' : 'var(--background)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
+                    justifyContent: 'center',
+                    width: 32,
+                    height: 32,
+                    padding: 0,
+                    color: selectedSourceIds.length > 0 ? 'var(--primary)' : (sourceDropdownOpen ? 'var(--foreground)' : 'var(--muted-foreground)'),
+                    backgroundColor: selectedSourceIds.length > 0 ? 'var(--primary-tint)' : (sourceDropdownOpen ? 'var(--secondary)' : 'transparent'),
+                    border: selectedSourceIds.length > 0 ? '1px solid var(--primary-tint-border)' : '1px solid transparent',
+                    borderRadius: '6px',
                     cursor: 'pointer',
-                    maxWidth: '220px',
+                    transition: 'color 0.15s, background-color 0.15s, border-color 0.15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (selectedSourceIds.length === 0 && !sourceDropdownOpen) {
+                      e.currentTarget.style.color = 'var(--foreground)';
+                      e.currentTarget.style.backgroundColor = 'var(--secondary)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (selectedSourceIds.length === 0 && !sourceDropdownOpen) {
+                      e.currentTarget.style.color = 'var(--muted-foreground)';
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }
                   }}
                 >
-                  <span style={{
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}>
-                    {t("marketplace.sourceFilter")}: {sourceFilterLabel}
-                  </span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M6 9l6 6 6-6"/>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 6h18M6 12h12M10 18h4" />
                   </svg>
+                  {selectedSourceIds.length > 0 && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -4,
+                        minWidth: 16,
+                        height: 16,
+                        padding: '0 4px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: 'var(--primary-foreground)',
+                        backgroundColor: 'var(--primary)',
+                        borderRadius: 9999,
+                        border: '1.5px solid var(--card)',
+                        lineHeight: 1,
+                      }}
+                    >
+                      {selectedSourceIds.length}
+                    </span>
+                  )}
                 </button>
 
                 {sourceDropdownOpen && (
@@ -1024,65 +1054,20 @@ export function Marketplace() {
                 )}
               </div>
             )}
-            <div style={{ position: 'relative' }}>
-              <svg
+            {searching && !initialLoading && (
+              <span
+                aria-label={t("loading.default")}
+                title={t("loading.default")}
                 style={{
-                  position: 'absolute',
-                  left: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'var(--muted-foreground)',
-                  pointerEvents: 'none',
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 32,
+                  height: 32,
+                  color: "var(--muted-foreground)",
                 }}
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
               >
-                <circle cx="11" cy="11" r="8"/>
-                <path d="m21 21-4.3-4.3"/>
-              </svg>
-              <input
-                type="text"
-                placeholder={t("marketplace.searchPlaceholder")}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{
-                  width: '240px',
-                  padding: '8px 34px 8px 36px',
-                  fontSize: '13px',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  backgroundColor: 'var(--background)',
-                  color: 'var(--foreground)',
-                  outline: 'none',
-                  transition: 'border-color 0.15s, box-shadow 0.15s',
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--ring)';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px var(--primary-tint)';
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--border)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              />
-              {searching && !initialLoading && (
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    color: 'var(--muted-foreground)',
-                    pointerEvents: 'none',
-                  }}
-                >
+                <svg width="14" height="14" viewBox="0 0 24 24">
                   <circle
                     cx="12"
                     cy="12"
@@ -1103,8 +1088,8 @@ export function Marketplace() {
                     />
                   </circle>
                 </svg>
-              )}
-            </div>
+              </span>
+            )}
           </>
         }
       />

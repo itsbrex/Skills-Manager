@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation, TranslationPath } from "@/i18n";
+import { usePageHeaderState } from "@/components/PageHeaderContext";
 
 interface ScopeSearchFieldProps {
   onOpenPalette: () => void;
@@ -23,7 +24,10 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const [query, setQuery] = useState("");
+  const { pageSearchQuery, setPageSearchQuery, pageSearchPlaceholder } = usePageHeaderState();
+  // switcherQuery only filters the page-switcher dropdown (State B). The
+  // page-level search query lives in context so the active page can read it.
+  const [switcherQuery, setSwitcherQuery] = useState("");
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -33,13 +37,13 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
   const currentPage = PAGES.find((p) => p.path === location.pathname) ?? PAGES[0];
 
   const filteredPages = PAGES.filter((p) =>
-    t(p.labelKey).toLowerCase().includes(query.replace(/^\//, "").toLowerCase()),
+    t(p.labelKey).toLowerCase().includes(switcherQuery.replace(/^\//, "").toLowerCase()),
   );
 
   // Reset active index when filter changes
   useEffect(() => {
     setActiveIdx(0);
-  }, [query]);
+  }, [switcherQuery]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -47,17 +51,23 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setSwitcherOpen(false);
-        setQuery("");
+        setSwitcherQuery("");
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [switcherOpen]);
 
+  // Clear the shared page search query whenever the route changes so a stale
+  // filter from the previous page doesn't bleed into the next one.
+  useEffect(() => {
+    setPageSearchQuery("");
+  }, [location.pathname, setPageSearchQuery]);
+
   function selectPage(path: string) {
     navigate(path);
     setSwitcherOpen(false);
-    setQuery("");
+    setSwitcherQuery("");
     inputRef.current?.blur();
   }
 
@@ -66,7 +76,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
       if (e.key === "Escape") {
         e.preventDefault();
         setSwitcherOpen(false);
-        setQuery("");
+        setSwitcherQuery("");
         return;
       }
       if (e.key === "ArrowDown") {
@@ -92,6 +102,22 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
     if (e.key === "/") {
       e.preventDefault();
       if (!switcherOpen) setSwitcherOpen(true);
+    }
+  }
+
+  // In State A the input's value is the shared page search query. In State B
+  // (page switcher open) the input filters the page list instead.
+  const inputValue = switcherOpen ? switcherQuery : pageSearchQuery;
+  const placeholder = switcherOpen
+    ? t("scope.typeToFilter")
+    : pageSearchPlaceholder || t("topbar.search");
+
+  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const next = e.target.value.replace(/\//g, "");
+    if (switcherOpen) {
+      setSwitcherQuery(next);
+    } else {
+      setPageSearchQuery(next);
     }
   }
 
@@ -146,14 +172,10 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
         <input
           ref={inputRef}
           type="text"
-          value={query}
-          onChange={(e) => {
-            // "/" is reserved as the switcher trigger; never let it appear
-            // as typed text (guards against paste / IME edge cases).
-            setQuery(e.target.value.replace(/\//g, ""));
-          }}
+          value={inputValue}
+          onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          placeholder={switcherOpen ? t("scope.typeToFilter") : t("topbar.search")}
+          placeholder={placeholder}
           style={{
             flex: 1,
             minWidth: 0,
@@ -164,6 +186,40 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
             color: "var(--foreground)",
           }}
         />
+        {(switcherOpen ? switcherQuery : pageSearchQuery).length > 0 && (
+          <button
+            type="button"
+            aria-label={t("common.reset")}
+            onClick={() => {
+              if (switcherOpen) {
+                setSwitcherQuery("");
+              } else {
+                setPageSearchQuery("");
+              }
+              inputRef.current?.focus();
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 18,
+              height: 18,
+              color: "var(--muted-foreground)",
+              background: "transparent",
+              border: "none",
+              borderRadius: "var(--radius)",
+              cursor: "pointer",
+              flexShrink: 0,
+              padding: 0,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--foreground)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted-foreground)")}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        )}
         <button
           type="button"
           onClick={onOpenPalette}

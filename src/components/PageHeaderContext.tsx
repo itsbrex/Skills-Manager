@@ -7,12 +7,20 @@ interface PageHeaderContextValue {
   registerActionsTarget: (node: HTMLElement | null) => void;
   /** Subscribe to the current actions target node. Returns an unsubscribe fn. */
   subscribeActionsTarget: (cb: (node: HTMLElement | null) => void) => () => void;
+  /** Shared page-level search query (driven by the TopBar scope field). */
+  pageSearchQuery: string;
+  setPageSearchQuery: (q: string) => void;
+  /** Placeholder the active page advertises to the scope search field. */
+  pageSearchPlaceholder: string;
+  setPageSearchPlaceholder: (p: string) => void;
 }
 
 const PageHeaderContext = createContext<PageHeaderContextValue | null>(null);
 
 export function PageHeaderProvider({ children }: { children: ReactNode }) {
   const [title, setTitle] = useState("");
+  const [pageSearchQuery, setPageSearchQuery] = useState("");
+  const [pageSearchPlaceholder, setPageSearchPlaceholder] = useState("");
 
   // The actions target is a DOM node owned by the TopBar. Pages render their
   // actions into it via a React portal. Keeping it as an external subscription
@@ -40,7 +48,16 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
 
   return (
     <PageHeaderContext.Provider
-      value={{ title, setHeader, registerActionsTarget, subscribeActionsTarget }}
+      value={{
+        title,
+        setHeader,
+        registerActionsTarget,
+        subscribeActionsTarget,
+        pageSearchQuery,
+        setPageSearchQuery,
+        pageSearchPlaceholder,
+        setPageSearchPlaceholder,
+      }}
     >
       {children}
     </PageHeaderContext.Provider>
@@ -79,4 +96,19 @@ export function useRegisterPageHeader(title: string) {
   }, [ctx, title]);
 
   return target;
+}
+
+// Pages call this to advertise a search placeholder and read the shared query
+// that the TopBar scope field writes back. The placeholder is cleared on unmount
+// so a page without an in-page search falls back to the default scope hint.
+export function usePageSearch(placeholder: string) {
+  const ctx = useContext(PageHeaderContext);
+  useEffect(() => {
+    ctx?.setPageSearchPlaceholder(placeholder);
+    return () => ctx?.setPageSearchPlaceholder("");
+  }, [ctx, placeholder]);
+  return {
+    query: ctx?.pageSearchQuery ?? "",
+    setQuery: ctx?.setPageSearchQuery ?? (() => {}),
+  };
 }
