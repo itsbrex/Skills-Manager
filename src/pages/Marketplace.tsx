@@ -1224,18 +1224,22 @@ export function Marketplace() {
 
           {filteredSkills.length === 0 ? (
             <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '64px 24px',
               textAlign: 'center',
-              padding: '32px 20px',
-              color: 'var(--muted-foreground)',
-              backgroundColor: 'var(--secondary)',
-              borderRadius: '10px',
-              border: '1px solid var(--border)',
+              gap: 12,
             }}>
-              {searching
-                ? t("loading.default")
-                : skills.length === 0
-                  ? t("marketplace.noSkills")
-                  : t("marketplace.noMatch")}
+              <div style={{ fontSize: 32, color: 'var(--ember)', opacity: 0.5 }}>✦</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--foreground)' }}>
+                {searching
+                  ? t("loading.default")
+                  : skills.length === 0
+                    ? t("marketplace.noSkills")
+                    : t("marketplace.noMatch")}
+              </div>
             </div>
           ) : (
             <div style={{
