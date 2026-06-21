@@ -44,6 +44,20 @@ export function Settings() {
   const [resetting, setResetting] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
 
+  const SETTINGS_SECTIONS = [
+    { id: "settings-general", label: t("settings.general") },
+    { id: "settings-marketplace", label: t("settings.marketplace") },
+    { id: "settings-appearance", label: t("settings.appearance") },
+    { id: "settings-llm", label: t("settings.llmTitle") },
+    { id: "settings-account", label: t("settings.account") },
+    { id: "settings-shortcuts", label: t("shortcuts.title") },
+    { id: "settings-advanced", label: t("settings.advanced") },
+    { id: "settings-about", label: t("settings.about") },
+    { id: "settings-support", label: t("settings.support") },
+  ] as const;
+
+  const [activeSection, setActiveSection] = useState<string>("settings-general");
+
   const tRef = useRef(t);
   const addToastRef = useRef(addToast);
   useEffect(() => {
@@ -51,15 +65,14 @@ export function Settings() {
     addToastRef.current = addToast;
   });
 
-  // Scroll to the section requested via location hash (e.g. "#settings-llm")
+  // Switch to the section requested via location hash (e.g. "#settings-llm")
   // so the command palette can deep-link to a specific settings section.
   useEffect(() => {
     if (!config) return;
     const hash = window.location.hash.replace(/^#/, "");
     if (!hash) return;
-    const el = document.getElementById(hash);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (SETTINGS_SECTIONS.some((s) => s.id === hash)) {
+      setActiveSection(hash);
     }
   }, [config, location]);
 
@@ -317,7 +330,7 @@ export function Settings() {
               alignItems: 'center',
               gap: '6px',
               padding: '6px 12px',
-              backgroundColor: saveStatus === 'saved' ? 'rgba(34, 197, 94, 0.1)' : 'var(--muted)',
+              backgroundColor: saveStatus === 'saved' ? 'var(--color-success-bg)' : 'var(--muted)',
               borderRadius: '6px',
               transition: 'all 0.2s ease',
             }}>
@@ -342,12 +355,52 @@ export function Settings() {
       />
 
       {/* Content */}
-      <main style={{
-        flex: 1,
-        overflow: 'auto',
-        padding: '32px',
-      }}>
-        <div style={{ maxWidth: '680px' }}>
+      <main style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+        {/* Left sub-nav */}
+        <nav style={{
+          width: 200,
+          minWidth: 200,
+          borderRight: '1px solid var(--border)',
+          background: 'var(--background)',
+          padding: '16px 8px',
+          overflow: 'auto',
+        }}>
+          {SETTINGS_SECTIONS.map((section) => {
+            const isActive = activeSection === section.id;
+            return (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => {
+                  setActiveSection(section.id);
+                  window.location.hash = section.id;
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '8px 12px',
+                  marginBottom: 2,
+                  borderRadius: 'var(--radius)',
+                  border: 'none',
+                  background: isActive ? 'var(--sidebar-accent)' : 'transparent',
+                  color: isActive ? 'var(--foreground)' : 'var(--muted-foreground)',
+                  fontSize: 13,
+                  fontWeight: isActive ? 500 : 400,
+                  cursor: 'pointer',
+                  transition: 'background-color 0.15s, color 0.15s',
+                }}
+              >
+                {section.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Right panel — only the active section */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '32px' }}>
+          <div style={{ maxWidth: '680px' }}>
+          {activeSection === "settings-general" && (<>
           {/* General Section */}
           <SectionTitle id="settings-general">{t("settings.general")}</SectionTitle>
           <SettingsCard>
@@ -514,7 +567,9 @@ export function Settings() {
               />
             </SettingsRow>
           </SettingsCard>
+          </>)}
 
+          {activeSection === "settings-marketplace" && (<>
           {/* Marketplace Section */}
           <SectionTitle id="settings-marketplace">{t("settings.marketplace")}</SectionTitle>
           <SettingsCard>
@@ -599,7 +654,9 @@ export function Settings() {
               })
             )}
           </SettingsCard>
+          </>)}
 
+          {activeSection === "settings-appearance" && (<>
           {/* Appearance Section */}
           <SectionTitle id="settings-appearance">{t("settings.appearance")}</SectionTitle>
           <SettingsCard>
@@ -646,7 +703,9 @@ export function Settings() {
               />
             </SettingsRow>
           </SettingsCard>
+          </>)}
 
+          {activeSection === "settings-llm" && (<>
           {/* AI Translation */}
           <SectionTitle id="settings-llm">{t("settings.llmTitle")}</SectionTitle>
           <SettingsCard>
@@ -657,7 +716,9 @@ export function Settings() {
               t={t}
             />
           </SettingsCard>
+          </>)}
 
+          {activeSection === "settings-account" && (<>
           {/* Account & Cloud Sync */}
           <SectionTitle id="settings-account">{t("settings.account")}</SectionTitle>
           <SettingsCard>
@@ -697,9 +758,11 @@ export function Settings() {
               </div>
             </div>
           </SettingsCard>
+          </>)}
 
+          {activeSection === "settings-shortcuts" && (<>
           {/* Keyboard shortcuts */}
-          <SectionTitle>{t("shortcuts.title")}</SectionTitle>
+          <SectionTitle id="settings-shortcuts">{t("shortcuts.title")}</SectionTitle>
           <SettingsCard>
             <ShortcutRow
               keys={detectModKey() + "K"}
@@ -717,9 +780,11 @@ export function Settings() {
               isLast={true}
             />
           </SettingsCard>
+          </>)}
 
+          {activeSection === "settings-advanced" && (<>
           {/* Advanced Section */}
-          <SectionTitle>{t("settings.advanced")}</SectionTitle>
+          <SectionTitle id="settings-advanced">{t("settings.advanced")}</SectionTitle>
           <SettingsCard>
             <SettingsRow
               label={t("settings.resetSettings")}
@@ -755,7 +820,9 @@ export function Settings() {
               </button>
             </SettingsRow>
           </SettingsCard>
+          </>)}
 
+          {activeSection === "settings-about" && (<>
           {/* About Section */}
           <SectionTitle id="settings-about">{t("settings.about")}</SectionTitle>
           <SettingsCard>
@@ -811,7 +878,7 @@ export function Settings() {
                       fontWeight: 500,
                       color: updateInfo ? 'var(--primary-foreground)' : 'var(--primary)',
                       backgroundColor: updateInfo ? 'var(--primary)' : 'var(--primary-tint)',
-                      border: updateInfo ? 'none' : '1px solid rgba(9, 105, 218, 0.2)',
+                      border: updateInfo ? 'none' : '1px solid var(--primary-tint-border)',
                       borderRadius: '4px',
                       cursor: checkingUpdate ? 'wait' : 'pointer',
                       opacity: checkingUpdate ? 0.7 : 1,
@@ -893,8 +960,10 @@ export function Settings() {
               </div>
             </div>
           </SettingsCard>
+          </>)}
 
-          <SectionTitle>{t("settings.support")}</SectionTitle>
+          {activeSection === "settings-support" && (<>
+          <SectionTitle id="settings-support">{t("settings.support")}</SectionTitle>
           <SettingsCard>
             <div style={{ padding: '20px 0' }}>
               <div style={{
@@ -945,6 +1014,8 @@ export function Settings() {
               </div>
             </div>
           </SettingsCard>
+          </>)}
+          </div>
         </div>
       </main>
       <ToastContainer toasts={toasts} onRemove={removeToast} />

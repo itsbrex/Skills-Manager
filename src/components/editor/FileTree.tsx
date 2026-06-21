@@ -707,18 +707,18 @@ function InlineActionBtn({ title, onClick, children, danger }: InlineActionBtnPr
         border: "none",
         borderRadius: 4,
         backgroundColor: "transparent",
-        color: danger ? "#dc2626" : "var(--muted-foreground)",
+        color: danger ? "var(--destructive)" : "var(--muted-foreground)",
         cursor: "pointer",
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.backgroundColor = danger
-          ? "rgba(220, 38, 38, 0.12)"
+          ? "var(--color-error-bg)"
           : "color-mix(in srgb, var(--primary) 15%, transparent)";
-        e.currentTarget.style.color = danger ? "#dc2626" : "var(--foreground)";
+        e.currentTarget.style.color = danger ? "var(--destructive)" : "var(--foreground)";
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.backgroundColor = "transparent";
-        e.currentTarget.style.color = danger ? "#dc2626" : "var(--muted-foreground)";
+        e.currentTarget.style.color = danger ? "var(--destructive)" : "var(--muted-foreground)";
       }}
     >
       {children}
@@ -880,10 +880,10 @@ function ContextMenuItem({ icon, label, onClick, danger }: ContextMenuItemProps)
         fontSize: 13,
         cursor: "pointer",
         borderRadius: 4,
-        color: danger ? "#dc2626" : "var(--foreground)",
+        color: danger ? "var(--destructive)" : "var(--foreground)",
         backgroundColor: hover
           ? danger
-            ? "rgba(220, 38, 38, 0.1)"
+            ? "var(--color-error-bg)"
             : "var(--secondary)"
           : "transparent",
       }}

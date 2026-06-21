@@ -885,9 +885,9 @@ export function Marketplace() {
                   borderRadius: '8px',
                   fontSize: '12px',
                   fontWeight: 600,
-                  border: '1px solid rgba(9, 105, 218, 0.35)',
+                  border: '1px solid var(--primary-tint-border)',
                   color: 'var(--primary)',
-                  backgroundColor: 'rgba(9, 105, 218, 0.10)',
+                  backgroundColor: 'var(--primary-tint)',
                   cursor: updatingAll || refreshing || installingSkill !== null ? 'not-allowed' : 'pointer',
                   opacity: updatingAll || refreshing || installingSkill !== null ? 0.7 : 1,
                 }}
@@ -909,7 +909,7 @@ export function Marketplace() {
                 borderRadius: '8px',
                 fontSize: '12px',
                 fontWeight: 600,
-                border: '1px solid rgba(9, 105, 218, 0.28)',
+                border: '1px solid var(--primary-tint-border)',
                 color: 'var(--foreground)',
                 backgroundColor: 'var(--background)',
                 cursor: installingSkill !== null || updatingAll ? 'not-allowed' : 'pointer',
@@ -964,7 +964,7 @@ export function Marketplace() {
                       backgroundColor: 'var(--background)',
                       border: '1px solid var(--border)',
                       borderRadius: '10px',
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                      boxShadow: 'var(--shadow-lg)',
                       zIndex: 20,
                       padding: '6px',
                     }}>
@@ -1062,7 +1062,7 @@ export function Marketplace() {
                 }}
                 onFocus={(e) => {
                   e.currentTarget.style.borderColor = 'var(--ring)';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(9, 105, 218, 0.1)';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px var(--primary-tint)';
                 }}
                 onBlur={(e) => {
                   e.currentTarget.style.borderColor = 'var(--border)';
@@ -1133,8 +1133,8 @@ export function Marketplace() {
                         padding: '4px 10px',
                         fontSize: '11px',
                         fontWeight: 500,
-                        border: isSelected ? '1px solid rgba(9, 105, 218, 0.4)' : '1px solid var(--border)',
-                        backgroundColor: isSelected ? 'rgba(9, 105, 218, 0.12)' : 'var(--secondary)',
+                        border: isSelected ? '1px solid var(--primary-tint-border)' : '1px solid var(--border)',
+                        backgroundColor: isSelected ? 'var(--primary-tint)' : 'var(--secondary)',
                         color: isSelected ? 'var(--primary)' : 'var(--muted-foreground)',
                         cursor: 'pointer',
                       }}
@@ -1183,7 +1183,7 @@ export function Marketplace() {
                     backgroundColor: 'var(--background)',
                     border: '1px solid var(--border)',
                     borderRadius: '10px',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                    boxShadow: 'var(--shadow-lg)',
                     zIndex: 20,
                     padding: '6px',
                   }}>
@@ -1240,7 +1240,7 @@ export function Marketplace() {
           ) : (
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
               gap: '12px',
             }}>
               {filteredSkills.map((skill) => {
@@ -1281,14 +1281,14 @@ export function Marketplace() {
                         flexDirection: 'column',
                         padding: '12px 14px',
                         backgroundColor: 'var(--secondary)',
-                        borderRadius: '10px',
+                        borderRadius: 'var(--radius)',
                         border: '1px solid var(--border)',
                         transition: 'border-color 0.2s, box-shadow 0.2s, transform 0.2s',
                         cursor: 'pointer',
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.borderColor = 'var(--ring)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+                        e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
                         e.currentTarget.style.transform = 'translateY(-2px)';
                       }}
                       onMouseLeave={(e) => {
@@ -1307,7 +1307,7 @@ export function Marketplace() {
                           alignItems: 'center',
                           justifyContent: 'center',
                           flexShrink: 0,
-                          boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                          boxShadow: 'var(--shadow-sm)',
                         }}>
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={color.icon} strokeWidth="2">
                             <path d="M12 3L13.5 8.5L19 10L13.5 11.5L12 17L10.5 11.5L5 10L10.5 8.5L12 3Z"/>
@@ -1505,10 +1505,10 @@ export function Marketplace() {
                                   fontSize: '10px',
                                   fontWeight: 500,
                                   color: 'var(--primary)',
-                                  backgroundColor: 'rgba(9, 105, 218, 0.12)',
+                                  backgroundColor: 'var(--primary-tint)',
                                   padding: '2px 6px',
                                   borderRadius: '999px',
-                                  border: '1px solid rgba(9, 105, 218, 0.35)',
+                                  border: '1px solid var(--primary-tint-border)',
                                 }}
                               >
                                 {tag}
@@ -1557,7 +1557,7 @@ export function Marketplace() {
             border: '1px solid var(--border)',
             backgroundColor: 'var(--background)',
             color: 'var(--foreground)',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+            boxShadow: 'var(--shadow-lg)',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -1567,11 +1567,11 @@ export function Marketplace() {
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.2)';
+            e.currentTarget.style.boxShadow = 'var(--shadow-lg)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.15)';
+            e.currentTarget.style.boxShadow = 'var(--shadow-lg)';
           }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1662,7 +1662,7 @@ function UninstallConfirmDialog({
           backgroundColor: "var(--background)",
           borderRadius: "18px",
           border: "1px solid var(--border)",
-          boxShadow: "0 24px 80px rgba(0,0,0,0.24)",
+          boxShadow: "var(--shadow-xl)",
           padding: "22px",
           display: "flex",
           flexDirection: "column",
@@ -1814,7 +1814,7 @@ function GithubInstallDialog({
           backgroundColor: "var(--background)",
           borderRadius: "18px",
           border: "1px solid var(--border)",
-          boxShadow: "0 24px 80px rgba(0,0,0,0.24)",
+          boxShadow: "var(--shadow-xl)",
           padding: "22px",
           display: "flex",
           flexDirection: "column",
@@ -1841,7 +1841,7 @@ function GithubInstallDialog({
                 width: "28px",
                 height: "28px",
                 borderRadius: "10px",
-                background: "rgba(9, 105, 218, 0.1)",
+                background: "var(--primary-tint)",
                 color: "var(--primary)",
               }}
             >
@@ -1865,9 +1865,9 @@ function GithubInstallDialog({
           style={{
             padding: "12px 14px",
             borderRadius: "14px",
-            border: "1px solid rgba(9, 105, 218, 0.14)",
+            border: "1px solid var(--primary-tint-border)",
             background:
-              "linear-gradient(135deg, rgba(9, 105, 218, 0.08), rgba(9, 105, 218, 0.03))",
+              "linear-gradient(135deg, var(--primary-tint), transparent)",
             fontSize: "12px",
             color: "var(--muted-foreground)",
             lineHeight: 1.6,

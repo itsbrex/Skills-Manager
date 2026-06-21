@@ -516,8 +516,8 @@ function getContactFieldShellStyle(options: {
       ? "var(--secondary)"
       : "linear-gradient(180deg, var(--background) 0%, var(--secondary) 100%)",
     boxShadow: focused
-      ? "0 0 0 3px var(--primary-tint-border), 0 14px 28px rgba(15,23,42,0.08)"
-      : "inset 0 1px 0 rgba(255,255,255,0.55), 0 10px 24px rgba(15,23,42,0.04)",
+      ? "0 0 0 3px var(--primary-tint-border), var(--shadow-lg)"
+      : "inset 0 1px 0 rgba(255,255,255,0.55), var(--shadow-sm)",
     transition: "border-color 160ms ease, box-shadow 160ms ease",
     opacity: disabled ? 0.74 : 1,
   };

@@ -35,14 +35,14 @@ function getCardTone(summary: BatchToolStateSummary | undefined) {
 
   if (summary.state === "all") {
     return {
-      backgroundColor: "rgba(15, 118, 110, 0.06)",
-      border: "1px solid rgba(15, 118, 110, 0.22)",
+      backgroundColor: "var(--color-success-bg)",
+      border: "1px solid var(--color-success-border)",
     };
   }
 
   return {
-    backgroundColor: "rgba(9, 105, 218, 0.05)",
-    border: "1px solid rgba(9, 105, 218, 0.18)",
+    backgroundColor: "var(--primary-tint)",
+    border: "1px solid var(--primary-tint-border)",
   };
 }
 
@@ -275,9 +275,9 @@ export function BatchManageToolsDialog({
               padding: "8px 14px",
               fontSize: "12px",
               fontWeight: 600,
-              color: "#0f766e",
-              backgroundColor: "rgba(15, 118, 110, 0.08)",
-              border: "1px solid rgba(15, 118, 110, 0.20)",
+              color: "var(--color-success)",
+              backgroundColor: "var(--color-success-bg)",
+              border: "1px solid var(--color-success-border)",
               borderRadius: "8px",
               cursor: submitting || !hasSelection || actionableTools.length === 0 ? "not-allowed" : "pointer",
               opacity: submitting || !hasSelection || actionableTools.length === 0 ? 0.5 : 1,
@@ -293,9 +293,9 @@ export function BatchManageToolsDialog({
               padding: "8px 14px",
               fontSize: "12px",
               fontWeight: 600,
-              color: "#b91c1c",
-              backgroundColor: "rgba(220, 38, 38, 0.08)",
-              border: "1px solid rgba(220, 38, 38, 0.20)",
+              color: "var(--destructive)",
+              backgroundColor: "var(--color-error-bg)",
+              border: "1px solid var(--color-error-border)",
               borderRadius: "8px",
               cursor: submitting || !hasSelection || actionableTools.length === 0 ? "not-allowed" : "pointer",
               opacity: submitting || !hasSelection || actionableTools.length === 0 ? 0.5 : 1,

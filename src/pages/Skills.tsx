@@ -127,8 +127,8 @@ function buildTagFilterMenuItemStyle(active: boolean): CSSProperties {
     fontSize: "12px",
     fontWeight: 500,
     color: active ? "var(--primary)" : "var(--foreground)",
-    backgroundColor: active ? "rgba(9, 105, 218, 0.08)" : "var(--background)",
-    border: active ? "1px solid rgba(9, 105, 218, 0.28)" : "1px solid var(--border)",
+    backgroundColor: active ? "var(--primary-tint)" : "var(--background)",
+    border: active ? "1px solid var(--primary-tint-border)" : "1px solid var(--border)",
     borderRadius: "8px",
     cursor: "pointer",
     textAlign: "left",
@@ -238,7 +238,7 @@ function SkillsHeaderMoreMenu({
               backgroundColor: "var(--popover)",
               border: "1px solid var(--border)",
               borderRadius: "8px",
-              boxShadow: "0 8px 24px rgba(0, 0, 0, 0.25)",
+              boxShadow: "var(--shadow-lg)",
               backdropFilter: "blur(10px)",
               zIndex: MODAL_LAYER_Z_INDEX,
             }}
@@ -375,7 +375,7 @@ function SkillCardActionMenu({
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.color = "var(--foreground)";
-          e.currentTarget.style.backgroundColor = "rgba(15, 23, 42, 0.04)";
+          e.currentTarget.style.backgroundColor = "var(--surface-hover)";
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.color = "var(--muted-foreground)";
@@ -422,7 +422,7 @@ function SkillCardActionMenu({
               backgroundColor: "var(--popover)",
               border: "1px solid var(--border)",
               borderRadius: "8px",
-              boxShadow: "0 8px 24px rgba(0, 0, 0, 0.25)",
+              boxShadow: "var(--shadow-lg)",
               backdropFilter: "blur(10px)",
               zIndex: MODAL_LAYER_Z_INDEX,
             }}
@@ -473,7 +473,7 @@ function SkillCardActionMenu({
                 padding: "10px 12px",
                 fontSize: "13px",
                 fontWeight: 500,
-                color: "#dc2626",
+                color: "var(--destructive)",
                 backgroundColor: "transparent",
                 border: "none",
                 borderRadius: "6px",
@@ -483,12 +483,12 @@ function SkillCardActionMenu({
                 transition: "background-color 0.15s ease, color 0.15s ease",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(220, 38, 38, 0.08)";
-                e.currentTarget.style.color = "#b91c1c";
+                e.currentTarget.style.backgroundColor = "var(--color-error-bg)";
+                e.currentTarget.style.color = "var(--destructive)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "transparent";
-                e.currentTarget.style.color = "#dc2626";
+                e.currentTarget.style.color = "var(--destructive)";
               }}
             >
               {deleteLabel}
@@ -2196,8 +2196,8 @@ export function Skills() {
               padding: "8px 16px",
               fontSize: "14px",
               fontWeight: 500,
-              color: "#fff",
-              backgroundColor: "var(--primary, #2563eb)",
+              color: "var(--primary-foreground)",
+              backgroundColor: "var(--primary)",
               border: "none",
               borderRadius: "6px",
               cursor: "pointer",
@@ -2240,12 +2240,12 @@ export function Skills() {
                     fontWeight: 500,
                     color: selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all" ? "var(--primary)" : "var(--foreground)",
                     backgroundColor: "var(--background)",
-                    border: selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all" ? "1px solid rgba(9, 105, 218, 0.4)" : "1px solid var(--border)",
+                    border: selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all" ? "1px solid var(--primary-tint-border)" : "1px solid var(--border)",
                     borderRadius: "8px",
                     cursor: "pointer",
                     minWidth: "124px",
                     justifyContent: "space-between",
-                    boxShadow: selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all" ? "0 0 0 3px rgba(9, 105, 218, 0.08)" : "none",
+                    boxShadow: selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all" ? "0 0 0 3px var(--primary-tint)" : "none",
                   }}
                 >
                   <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
@@ -2283,7 +2283,7 @@ export function Skills() {
                         backgroundColor: "var(--background)",
                         border: "1px solid var(--border)",
                         borderRadius: "12px",
-                        boxShadow: "0 16px 40px rgba(0,0,0,0.16)",
+                        boxShadow: "var(--shadow-lg)",
                         zIndex: MODAL_LAYER_Z_INDEX,
                       }}
                     >
@@ -2354,7 +2354,7 @@ export function Skills() {
                                 border: "none",
                                 borderRadius: "6px",
                                 cursor: "pointer",
-                                boxShadow: isActive ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                                boxShadow: isActive ? "var(--shadow-sm)" : "none",
                                 transition: "background-color 0.15s, color 0.15s",
                                 minWidth: 0,
                                 textAlign: "left",
@@ -2459,7 +2459,7 @@ export function Skills() {
                 }}
                 onFocus={(e) => {
                   e.currentTarget.style.borderColor = "var(--ring)";
-                  e.currentTarget.style.boxShadow = "0 0 0 3px rgba(9, 105, 218, 0.1)";
+                  e.currentTarget.style.boxShadow = "0 0 0 3px var(--primary-tint)";
                 }}
                 onBlur={(e) => {
                   e.currentTarget.style.borderColor = "var(--border)";
@@ -2590,8 +2590,8 @@ export function Skills() {
                       fontSize: "12px",
                       fontWeight: 500,
                       color: "var(--primary)",
-                      backgroundColor: "rgba(9, 105, 218, 0.08)",
-                      border: "1px solid rgba(9, 105, 218, 0.25)",
+                      backgroundColor: "var(--primary-tint)",
+                      border: "1px solid var(--primary-tint-border)",
                       borderRadius: "8px",
                       cursor: batchDeleting || batchTranslating ? "not-allowed" : "pointer",
                       opacity: batchDeleting || batchTranslating ? 0.6 : 1,
@@ -2609,9 +2609,9 @@ export function Skills() {
                       padding: "7px 10px",
                       fontSize: "12px",
                       fontWeight: 500,
-                      color: "#b91c1c",
-                      backgroundColor: "rgba(220, 38, 38, 0.08)",
-                      border: "1px solid rgba(220, 38, 38, 0.25)",
+                      color: "var(--destructive)",
+                      backgroundColor: "var(--color-error-bg)",
+                      border: "1px solid var(--color-error-border)",
                       borderRadius: "8px",
                       cursor: batchDeleting || batchTranslating ? "not-allowed" : "pointer",
                       opacity: batchDeleting || batchTranslating ? 0.6 : 1,
@@ -2688,16 +2688,16 @@ export function Skills() {
                       display: "flex",
                       flexDirection: "column",
                       padding: "18px 20px",
-                      backgroundColor: isBatchSelected ? "rgba(9, 105, 218, 0.08)" : "var(--secondary)",
-                      borderRadius: "14px",
+                      backgroundColor: isBatchSelected ? "var(--primary-tint)" : "var(--secondary)",
+                      borderRadius: "var(--radius)",
                       border: isHighlighted
                         ? "2px solid var(--primary)"
                         : isBatchSelected
-                          ? "1px solid rgba(9, 105, 218, 0.4)"
+                          ? "1px solid var(--primary-tint-border)"
                           : isCardExpanded
                             ? "1px solid var(--ring)"
                             : "1px solid var(--border)",
-                      boxShadow: isHighlighted ? "0 0 0 4px rgba(9, 105, 218, 0.15)" : undefined,
+                      boxShadow: isHighlighted ? "0 0 0 4px var(--primary-tint)" : undefined,
                       transition: canToggleExpand ? "border-color 0.2s, box-shadow 0.2s" : undefined,
                       cursor: canToggleExpand ? "pointer" : isBatchManageMode ? "pointer" : "default",
                     }}
@@ -2706,14 +2706,14 @@ export function Skills() {
                         return;
                       }
                       e.currentTarget.style.borderColor = isCardExpanded ? "var(--ring)" : "var(--ring)";
-                      e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.06)";
+                      e.currentTarget.style.boxShadow = "var(--shadow-sm)";
                     }}
                     onMouseLeave={(e) => {
                       if (!canToggleExpand) {
                         return;
                       }
                       e.currentTarget.style.borderColor = isBatchSelected
-                        ? "rgba(9, 105, 218, 0.4)"
+                        ? "var(--primary-tint-border)"
                         : isCardExpanded
                           ? "var(--ring)"
                           : "var(--border)";
@@ -2752,7 +2752,7 @@ export function Skills() {
                         alignItems: "center",
                         justifyContent: "center",
                         flexShrink: 0,
-                        boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                        boxShadow: "var(--shadow-sm)",
                       }}>
                         {item.kind === "group" ? (
                           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color.icon} strokeWidth="2">
@@ -2789,10 +2789,10 @@ export function Skills() {
                               fontWeight: 600,
                               letterSpacing: "0.02em",
                               color: item.scopeLabel === "project"
-                                ? "var(--primary-foreground, #fff)"
+                                ? "var(--primary-foreground)"
                                 : "var(--muted-foreground)",
                               backgroundColor: item.scopeLabel === "project"
-                                ? "var(--primary, #6366f1)"
+                                ? "var(--primary)"
                                 : "var(--background)",
                               border: item.scopeLabel === "project"
                                 ? "none"
@@ -2909,7 +2909,7 @@ export function Skills() {
                               }}
                               onMouseEnter={(e) => {
                                 e.currentTarget.style.color = "var(--foreground)";
-                                e.currentTarget.style.backgroundColor = "rgba(15, 23, 42, 0.06)";
+                                e.currentTarget.style.backgroundColor = "var(--surface-hover)";
                               }}
                               onMouseLeave={(e) => {
                                 e.currentTarget.style.color = "var(--muted-foreground)";
@@ -2991,10 +2991,10 @@ export function Skills() {
                                 fontSize: "12px",
                                 fontWeight: 500,
                                 color: "var(--primary)",
-                                backgroundColor: "rgba(9, 105, 218, 0.12)",
+                                backgroundColor: "var(--primary-tint)",
                                 padding: "4px 8px",
                                 borderRadius: "6px",
-                                border: "1px solid rgba(9, 105, 218, 0.35)",
+                                border: "1px solid var(--primary-tint-border)",
                                 whiteSpace: "nowrap",
                               }}
                             >
@@ -3100,7 +3100,7 @@ export function Skills() {
                                           borderRadius: "6px",
                                           whiteSpace: "nowrap",
                                           border: isEnabled
-                                            ? "1px solid rgba(9, 105, 218, 0.35)"
+                                            ? "1px solid var(--primary-tint-border)"
                                             : "1px solid var(--border)",
                                           color: isEnabled
                                             ? "var(--primary)"
@@ -3108,7 +3108,7 @@ export function Skills() {
                                               ? "var(--muted-foreground)"
                                               : "var(--muted-foreground)",
                                           backgroundColor: isEnabled
-                                            ? "rgba(9, 105, 218, 0.12)"
+                                            ? "var(--primary-tint)"
                                             : "var(--background)",
                                           opacity: isDetected ? 1 : 0.6,
                                         }}
@@ -3438,7 +3438,7 @@ function SkillManageDialog({
           backgroundColor: "var(--background)",
           borderRadius: "14px",
           border: "1px solid var(--border)",
-          boxShadow: "0 20px 56px rgba(0,0,0,0.22)",
+          boxShadow: "var(--shadow-xl)",
           padding: "20px",
           display: "flex",
           flexDirection: "column",
@@ -3645,7 +3645,7 @@ function SkillManageDialog({
                           padding: "10px 12px",
                           borderRadius: "8px",
                           border: "1px solid var(--border)",
-                          backgroundColor: item.enabled ? "rgba(9, 105, 218, 0.08)" : "var(--background)",
+                          backgroundColor: item.enabled ? "var(--primary-tint)" : "var(--background)",
                           opacity: item.dimmed ? 0.6 : 1,
                         }}
                         title={item.tooltip}
@@ -3707,9 +3707,9 @@ function SkillManageDialog({
                       gap: "4px",
                       fontSize: "11px",
                       fontWeight: 500,
-                      color: "rgba(17, 24, 39, 0.72)",
-                      backgroundColor: "rgba(9, 105, 218, 0.04)",
-                      border: "1px solid rgba(9, 105, 218, 0.14)",
+                      color: "var(--muted-foreground)",
+                      backgroundColor: "var(--primary-tint)",
+                      border: "1px solid var(--primary-tint-border)",
                       borderRadius: "999px",
                       padding: "3px 5px 3px 8px",
                     }}
@@ -3918,7 +3918,7 @@ function CreateSkillDialog({
           backgroundColor: "var(--background)",
           borderRadius: "14px",
           border: "1px solid var(--border)",
-          boxShadow: "0 16px 48px rgba(0,0,0,0.2)",
+          boxShadow: "var(--shadow-xl)",
           padding: "24px",
         }}
         onClick={(e) => e.stopPropagation()}
@@ -4010,9 +4010,9 @@ function CreateSkillDialog({
                       padding: "6px 12px",
                       fontSize: "12px",
                       fontWeight: 500,
-                      color: isSelected ? "var(--primary-foreground, #fff)" : "var(--foreground)",
-                      backgroundColor: isSelected ? "var(--primary, #6366f1)" : "var(--background)",
-                      border: isSelected ? "1px solid var(--primary, #6366f1)" : "1px solid var(--border)",
+                      color: isSelected ? "var(--primary-foreground)" : "var(--foreground)",
+                      backgroundColor: isSelected ? "var(--primary)" : "var(--background)",
+                      border: isSelected ? "1px solid var(--primary)" : "1px solid var(--border)",
                       borderRadius: "8px",
                       cursor: creating ? "not-allowed" : "pointer",
                       transition: "background-color 0.15s, color 0.15s, border-color 0.15s",

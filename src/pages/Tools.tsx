@@ -771,7 +771,7 @@ export function Tools() {
           flexDirection: 'column',
           padding: '18px 20px',
           backgroundColor: 'var(--secondary)',
-          borderRadius: "12px",
+          borderRadius: "var(--radius)",
           border: '1px solid var(--border)',
           transition: 'border-color 0.2s, box-shadow 0.2s, transform 0.2s',
           cursor: 'pointer',
@@ -1243,7 +1243,7 @@ export function Tools() {
             ) : (
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
                 gap: '16px',
               }}>
                 {builtinTools.map(renderToolCard)}
@@ -1303,7 +1303,7 @@ export function Tools() {
             ) : (
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
                 gap: '16px',
               }}>
                 {customTools.map(renderToolCard)}

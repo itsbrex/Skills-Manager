@@ -617,9 +617,9 @@ export function EditorPage() {
                 alignItems: "center",
                 gap: 8,
                 padding: "8px 12px",
-                backgroundColor: "#fef2f2",
-                borderBottom: "1px solid #fecaca",
-                color: "#dc2626",
+                backgroundColor: "var(--color-error-bg)",
+                borderBottom: "1px solid var(--color-error-border)",
+                color: "var(--destructive)",
                 fontSize: 12,
                 flexShrink: 0,
               }}
@@ -639,7 +639,7 @@ export function EditorPage() {
                   border: "none",
                   cursor: "pointer",
                   padding: 2,
-                  color: "#dc2626",
+                  color: "var(--destructive)",
                   opacity: 0.7,
                   flexShrink: 0,
                 }}
@@ -661,9 +661,9 @@ export function EditorPage() {
                 alignItems: "flex-start",
                 gap: 10,
                 padding: "10px 14px",
-                backgroundColor: "#fffbeb",
-                borderBottom: "1px solid #fde68a",
-                color: "#92400e",
+                backgroundColor: "var(--color-warning-bg)",
+                borderBottom: "1px solid var(--color-warning-border)",
+                color: "var(--color-warning)",
                 fontSize: 12,
                 lineHeight: 1.5,
                 flexShrink: 0,
@@ -685,11 +685,11 @@ export function EditorPage() {
                 onClick={dismissLinuxNotice}
                 style={{
                   background: "transparent",
-                  border: "1px solid #fde68a",
+                  border: "1px solid var(--color-warning-border)",
                   borderRadius: 6,
                   cursor: "pointer",
                   padding: "3px 10px",
-                  color: "#92400e",
+                  color: "var(--color-warning)",
                   fontSize: 12,
                   fontWeight: 500,
                   flexShrink: 0,
@@ -765,7 +765,7 @@ export function EditorPage() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: "#dc2626",
+              color: "var(--destructive)",
             }}>
               {error}
             </div>

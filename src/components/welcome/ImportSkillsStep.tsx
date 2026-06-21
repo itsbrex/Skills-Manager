@@ -147,7 +147,7 @@ export function ImportSkillsStep({ onNext, onBack, onError }: ImportSkillsStepPr
                 width: '56px',
                 height: '56px',
                 borderRadius: "12px",
-                background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                background: 'var(--color-success)',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
