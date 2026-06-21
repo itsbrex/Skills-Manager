@@ -433,7 +433,6 @@ export function Settings() {
                       backgroundColor: 'var(--background)',
                       border: '1px solid var(--border)',
                       borderRadius: '10px',
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
                       zIndex: 20,
                       minWidth: '180px',
                       padding: '4px',
@@ -810,7 +809,7 @@ export function Settings() {
                       fontSize: '11px',
                       fontWeight: 500,
                       color: updateInfo ? 'var(--primary-foreground)' : 'var(--primary)',
-                      backgroundColor: updateInfo ? 'var(--primary)' : 'rgba(9, 105, 218, 0.1)',
+                      backgroundColor: updateInfo ? 'var(--primary)' : 'var(--primary-tint)',
                       border: updateInfo ? 'none' : '1px solid rgba(9, 105, 218, 0.2)',
                       borderRadius: '4px',
                       cursor: checkingUpdate ? 'wait' : 'pointer',
@@ -1011,7 +1010,7 @@ function RewardCodeCard({ title, imageSrc }: RewardCodeCardProps) {
           aspectRatio: '1 / 1',
           borderRadius: '6px',
           border: '1px solid var(--border)',
-          backgroundColor: '#ffffff',
+          backgroundColor: "var(--primary-foreground)",
           objectFit: 'cover',
         }}
       />
@@ -1534,7 +1533,6 @@ function ShortcutRow({
           border: "1px solid var(--border)",
           borderRadius: "6px",
           padding: "3px 8px",
-          boxShadow: "0 1px 0 var(--border)",
           whiteSpace: "nowrap",
         }}
       >

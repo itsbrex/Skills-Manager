@@ -65,7 +65,6 @@ export function Tools() {
     borderRadius: '8px',
     border: '1px solid var(--border)',
     padding: '0 12px',
-    boxShadow: 'none',
     color: 'var(--foreground)',
     caretColor: 'var(--foreground)',
     flex: 1,
@@ -772,14 +771,14 @@ export function Tools() {
           flexDirection: 'column',
           padding: '18px 20px',
           backgroundColor: 'var(--secondary)',
-          borderRadius: '14px',
+          borderRadius: "12px",
           border: '1px solid var(--border)',
           transition: 'border-color 0.2s, box-shadow 0.2s, transform 0.2s',
           cursor: 'pointer',
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.borderColor = 'var(--ring)';
-          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+          e.currentTarget.style.boxShadow = '0 4px 12px var(--surface-hover)';
           e.currentTarget.style.transform = 'translateY(-2px)';
         }}
         onMouseLeave={(e) => {
@@ -1368,7 +1367,6 @@ export function Tools() {
               background: 'var(--background)',
               border: '1px solid var(--border)',
               borderRadius: '16px',
-              boxShadow: '0 24px 64px -12px rgba(0, 0, 0, 0.25)',
             }}
             onClick={(event) => event.stopPropagation()}
           >

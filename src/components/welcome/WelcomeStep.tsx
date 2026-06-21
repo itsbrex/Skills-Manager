@@ -72,7 +72,7 @@ function StepItem({ number, title, desc }: { number: number; title: string; desc
           width: '28px',
           height: '28px',
           borderRadius: '8px',
-          backgroundColor: 'rgba(9, 105, 218, 0.1)',
+          backgroundColor: 'var(--primary-tint)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

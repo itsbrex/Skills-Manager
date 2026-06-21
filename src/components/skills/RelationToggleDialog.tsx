@@ -68,9 +68,8 @@ export function RelationToggleDialog({
           width: "min(640px, calc(100vw - 48px))",
           maxHeight: "calc(100vh - 72px)",
           backgroundColor: "var(--background)",
-          borderRadius: "14px",
+          borderRadius: "12px",
           border: "1px solid var(--border)",
-          boxShadow: "0 20px 56px rgba(0,0,0,0.22)",
           padding: "20px",
           display: "flex",
           flexDirection: "column",
@@ -234,7 +233,7 @@ export function RelationToggleDialog({
                       padding: "10px 12px",
                       borderRadius: "8px",
                       border: "1px solid var(--border)",
-                      backgroundColor: item.enabled ? "rgba(9, 105, 218, 0.08)" : "var(--background)",
+                      backgroundColor: item.enabled ? "var(--primary-tint)" : "var(--background)",
                       opacity: item.dimmed ? 0.6 : 1,
                     }}
                     title={item.tooltip}

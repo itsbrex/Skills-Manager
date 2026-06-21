@@ -5,9 +5,10 @@ mod services;
 mod test_support;
 
 use commands::{
-    batch_set_skill_tools, check_marketplace_updates_if_stale, check_sync_status, check_update,
-    clear_llm_provider, clear_translation_cache, create_custom_tool, create_directory,
-    create_file, create_skill, delete_custom_tool, delete_path, delete_skill,
+    batch_set_skill_tools, check_marketplace_updates_if_stale,
+    check_sync_status, check_update, clear_llm_provider, clear_translation_cache,
+    create_custom_tool, create_directory, create_file, create_skill,
+    delete_custom_tool, delete_path, delete_skill,
     detect_available_editors, detect_tools, disable_skill, enable_skill, exchange_github_auth,
     exchange_google_auth, fetch_marketplace_skill_descriptions, fetch_marketplace_skills,
     fetch_skill_file_content, fetch_skill_files, fix_sync_issues, get_auth_profile,
@@ -15,13 +16,14 @@ use commands::{
     get_cached_text_translation, get_config, get_llm_provider, get_marketplace_sources,
     get_tool_status, import_skills_to_hub, install_marketplace_skill,
     install_marketplace_skill_by_ref, install_skill_package_from_path, is_initialized,
-    list_skill_packages, list_skills, logout_auth, mark_initialized, open_in_editor,
-    read_directory_tree, read_file, refresh_editors, refresh_skills, refresh_tools,
-    remove_skill_package, rename_path, save_config, save_llm_provider, scan_existing_skills,
-    set_tool_enabled, start_github_auth, start_google_auth, submit_feedback,
-    sync_marketplace_installed_skills, test_llm_provider, toggle_marketplace_source,
-    translate_marketplace_skill, translate_skill, translate_skill_files, translate_skills_batch,
-    translate_text_content, update_custom_tool, update_tool_paths, write_file,
+    list_skill_packages, list_skills, logout_auth, mark_initialized,
+    open_in_editor, read_directory_tree, read_file, refresh_editors, refresh_skills,
+    refresh_tools, remove_skill_package, rename_path, save_config, save_llm_provider,
+    scan_existing_skills, set_tool_enabled, start_github_auth, start_google_auth,
+    submit_feedback, sync_marketplace_installed_skills, test_llm_provider,
+    toggle_marketplace_source, translate_marketplace_skill, translate_skill,
+    translate_skill_files, translate_skills_batch, translate_text_content, update_custom_tool,
+    update_tool_paths, write_file,
 };
 use services::{AppCache, MarketplaceCache};
 use tauri::{Emitter, Manager};

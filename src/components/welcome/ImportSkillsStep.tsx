@@ -127,7 +127,7 @@ export function ImportSkillsStep({ onNext, onBack, onError }: ImportSkillsStepPr
               style={{
                 width: '56px',
                 height: '56px',
-                borderRadius: '14px',
+                borderRadius: "12px",
                 backgroundColor: 'var(--secondary)',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -146,7 +146,7 @@ export function ImportSkillsStep({ onNext, onBack, onError }: ImportSkillsStepPr
               style={{
                 width: '56px',
                 height: '56px',
-                borderRadius: '14px',
+                borderRadius: "12px",
                 background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -154,7 +154,7 @@ export function ImportSkillsStep({ onNext, onBack, onError }: ImportSkillsStepPr
                 marginBottom: '16px',
               }}
             >
-              <CheckCircle2 style={{ width: '28px', height: '28px', color: '#fff' }} />
+              <CheckCircle2 style={{ width: '28px', height: '28px', color: "var(--primary-foreground)" }} />
             </div>
             <p style={{ fontSize: '14px', fontWeight: 500, color: 'var(--foreground)', marginBottom: '4px' }}>{t("welcome.importComplete")}</p>
             <p style={{ fontSize: '13px', color: 'var(--muted-foreground)' }}>

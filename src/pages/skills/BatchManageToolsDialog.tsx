@@ -30,7 +30,6 @@ function getCardTone(summary: BatchToolStateSummary | undefined) {
     return {
       backgroundColor: "var(--background)",
       border: "1px solid var(--border)",
-      boxShadow: "none",
     };
   }
 
@@ -38,14 +37,12 @@ function getCardTone(summary: BatchToolStateSummary | undefined) {
     return {
       backgroundColor: "rgba(15, 118, 110, 0.06)",
       border: "1px solid rgba(15, 118, 110, 0.22)",
-      boxShadow: "0 0 0 3px rgba(15, 118, 110, 0.08)",
     };
   }
 
   return {
     backgroundColor: "rgba(9, 105, 218, 0.05)",
     border: "1px solid rgba(9, 105, 218, 0.18)",
-    boxShadow: "0 0 0 3px rgba(9, 105, 218, 0.06)",
   };
 }
 
@@ -99,9 +96,8 @@ export function BatchManageToolsDialog({
           width: "min(720px, calc(100vw - 48px))",
           maxHeight: "calc(100vh - 72px)",
           backgroundColor: "var(--background)",
-          borderRadius: "14px",
+          borderRadius: "12px",
           border: "1px solid var(--border)",
-          boxShadow: "0 20px 56px rgba(0,0,0,0.22)",
           padding: "20px",
           display: "flex",
           flexDirection: "column",

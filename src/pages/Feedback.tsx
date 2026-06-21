@@ -265,7 +265,6 @@ export function Feedback() {
                         backgroundColor: "var(--secondary)",
                         color: "var(--muted-foreground)",
                         pointerEvents: "none",
-                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.6)",
                       }}
                     >
                       <ChevronDown size={14} strokeWidth={2.1} />
@@ -362,8 +361,6 @@ export function Feedback() {
                   outline: "none",
                   resize: "vertical",
                   minHeight: "132px",
-                  boxShadow:
-                    "inset 0 1px 0 rgba(255,255,255,0.55), 0 10px 24px rgba(15,23,42,0.04)",
                 }}
               />
 
@@ -519,7 +516,7 @@ function getContactFieldShellStyle(options: {
       ? "var(--secondary)"
       : "linear-gradient(180deg, var(--background) 0%, var(--secondary) 100%)",
     boxShadow: focused
-      ? "0 0 0 3px rgba(9,105,218,0.14), 0 14px 28px rgba(15,23,42,0.08)"
+      ? "0 0 0 3px var(--primary-tint-border), 0 14px 28px rgba(15,23,42,0.08)"
       : "inset 0 1px 0 rgba(255,255,255,0.55), 0 10px 24px rgba(15,23,42,0.04)",
     transition: "border-color 160ms ease, box-shadow 160ms ease",
     opacity: disabled ? 0.74 : 1,
@@ -594,7 +591,7 @@ function ContactQrCard({
           aspectRatio: "1 / 1",
           borderRadius: "8px",
           border: "1px solid var(--border)",
-          backgroundColor: "#ffffff",
+          backgroundColor: "var(--primary-foreground)",
           objectFit: "contain",
         }}
       />
