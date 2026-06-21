@@ -37,7 +37,7 @@ export const zh = {
     privacyPolicy: "隐私政策",
   },
   topbar: {
-    brand: "Skills",
+    brand: "Skills Manager",
     search: "搜索技能、工具、操作…",
     searchHint: "⌘K",
   },

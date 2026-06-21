@@ -108,7 +108,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
           padding: "0 12px",
           background: "var(--secondary)",
           border: `1px solid ${switcherOpen ? "var(--ring)" : "var(--border)"}`,
-          borderRadius: "var(--radius-md)",
+          borderRadius: "var(--radius-lg)",
           transition: "border-color 0.15s",
         }}
       >
@@ -145,7 +145,12 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
           ref={inputRef}
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            // When the switcher is open, the leading "/" is shown decoratively;
+            // strip "/" from typed input so it isn't doubled in the field.
+            const next = switcherOpen ? e.target.value.replace(/\//g, "") : e.target.value;
+            setQuery(next);
+          }}
           onKeyDown={handleKeyDown}
           onFocus={() => {
             if (!switcherOpen && query.startsWith("/")) setSwitcherOpen(true);

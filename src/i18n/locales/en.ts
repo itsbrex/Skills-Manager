@@ -36,7 +36,7 @@ export const en = {
     privacyPolicy: "Privacy Policy",
   },
   topbar: {
-    brand: "Skills",
+    brand: "Skills Manager",
     search: "Search skills, tools, actions…",
     searchHint: "⌘K",
   },

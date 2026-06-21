@@ -5,6 +5,7 @@ import { useTranslation } from "@/i18n";
 import { checkUpdate } from "@/services/updater";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { ScopeSearchField } from "@/components/ScopeSearchField";
+import { usePageHeaderState } from "@/components/PageHeaderContext";
 import { UpdateInfo } from "@/types";
 
 interface TopBarProps {
@@ -13,6 +14,7 @@ interface TopBarProps {
 
 export function TopBar({ onOpenPalette }: TopBarProps) {
   const { t } = useTranslation();
+  const { title, actions } = usePageHeaderState();
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
 
   useEffect(() => {
@@ -98,8 +100,36 @@ export function TopBar({ onOpenPalette }: TopBarProps) {
         )}
       </div>
 
+      {/* Page title (from context) — divider then title */}
+      {title && (
+        <>
+          <div style={{ width: 1, height: 18, background: "var(--border)", flexShrink: 0 }} />
+          <span
+            style={{
+              color: "var(--muted-foreground)",
+              fontSize: 13,
+              fontWeight: 500,
+              flexShrink: 0,
+              maxWidth: 200,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {title}
+          </span>
+        </>
+      )}
+
       {/* Center scope search */}
       <ScopeSearchField onOpenPalette={onOpenPalette} />
+
+      {/* Page actions (from context) */}
+      {actions && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {actions}
+        </div>
+      )}
 
       {/* Right: auth */}
       <div style={{ flexShrink: 0, display: "flex", alignItems: "center" }}>
