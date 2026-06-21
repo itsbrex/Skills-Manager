@@ -106,7 +106,7 @@ export function Feedback() {
           padding: "32px",
         }}
       >
-        <div style={{ maxWidth: "760px" }}>
+        <div className="animate-page-enter" style={{ maxWidth: "760px" }}>
           <p
             style={{
               margin: "0 0 20px 0",

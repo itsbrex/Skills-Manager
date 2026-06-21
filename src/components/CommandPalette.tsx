@@ -304,6 +304,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       onClick={onClose}
     >
       <div
+        className="animate-modal"
         style={{
           width: "min(640px, calc(100vw - 48px))",
           maxHeight: "70vh",

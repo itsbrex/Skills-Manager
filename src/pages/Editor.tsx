@@ -4,6 +4,11 @@ import { invoke } from "@tauri-apps/api/core";
 import MonacoEditor from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { FileTree } from "@/components/editor/FileTree";
+import {
+  defineRaycastMonacoThemes,
+  RAYCAST_MONACO_THEME_DARK,
+  RAYCAST_MONACO_THEME_LIGHT,
+} from "@/components/editor/raycastMonacoTheme";
 import { FileNode, Skill } from "@/types";
 import { useTranslation } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
@@ -809,6 +814,9 @@ export function EditorPage() {
                   setContent(next);
                 }}
                 onMount={(editor) => { editorRef.current = editor; }}
+                beforeMount={(monaco) => {
+                  defineRaycastMonacoThemes(monaco);
+                }}
                 options={{
                   minimap: { enabled: false },
                   fontSize: 14,
@@ -823,7 +831,7 @@ export function EditorPage() {
                   suggestOnTriggerCharacters: false,
                   parameterHints: { enabled: false },
                 }}
-                theme={theme === "dark" ? "vs-dark" : "light"}
+                theme={theme === "dark" ? RAYCAST_MONACO_THEME_DARK : RAYCAST_MONACO_THEME_LIGHT}
               />
             )
           )}

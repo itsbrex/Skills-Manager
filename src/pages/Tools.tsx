@@ -1205,7 +1205,7 @@ export function Tools() {
         overflow: 'auto',
         padding: '24px 32px',
       }}>
-        <div style={{ maxWidth: '1200px' }}>
+        <div className="animate-page-enter" style={{ maxWidth: '1200px' }}>
           {/* Error */}
           {error && (
             <div className="mb-6">
@@ -1228,17 +1228,19 @@ export function Tools() {
 
             {builtinTools.length === 0 ? (
               <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '64px 24px',
                 textAlign: 'center',
-                padding: '48px 24px',
-                color: 'var(--muted-foreground)',
-                backgroundColor: 'var(--secondary)',
-                borderRadius: '12px',
-                border: '1px solid var(--border)',
+                gap: 12,
               }}>
-                <p style={{ margin: '0 0 8px 0' }}>{t("tools.noTools")}</p>
-                <p style={{ margin: 0, fontSize: '13px' }}>
+                <div style={{ fontSize: 32, color: 'var(--ember)', opacity: 0.5 }}>✦</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--foreground)' }}>{t("tools.noTools")}</div>
+                <div style={{ fontSize: 13, color: 'var(--muted-foreground)', maxWidth: 360 }}>
                   {t("tools.noToolsDesc")}
-                </p>
+                </div>
               </div>
             ) : (
               <div style={{
@@ -1272,13 +1274,19 @@ export function Tools() {
 
             {customTools.length === 0 ? (
               <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '64px 24px',
                 textAlign: 'center',
-                padding: '40px 24px',
-                color: 'var(--muted-foreground)',
-                backgroundColor: 'var(--secondary)',
-                borderRadius: '12px',
-                border: '1px dashed var(--border)',
+                gap: 12,
               }}>
+                <div style={{ fontSize: 32, color: 'var(--ember)', opacity: 0.5 }}>✦</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--foreground)' }}>{t("tools.customEmpty")}</div>
+                <div style={{ fontSize: 13, color: 'var(--muted-foreground)', maxWidth: 360 }}>
+                  {t("tools.customEmptyDesc")}
+                </div>
                 <button
                   onClick={startCreateCustomTool}
                   style={{
@@ -1292,13 +1300,11 @@ export function Tools() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
-                    marginBottom: '10px',
+                    marginTop: 8,
                   }}
                 >
                   <Plus style={{ width: '18px', height: '18px' }} />
                 </button>
-                <p style={{ margin: '0 0 6px 0' }}>{t("tools.customEmpty")}</p>
-                <p style={{ margin: 0, fontSize: '12px' }}>{t("tools.customEmptyDesc")}</p>
               </div>
             ) : (
               <div style={{

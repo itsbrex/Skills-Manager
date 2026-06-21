@@ -2519,7 +2519,7 @@ export function Skills() {
           padding: "24px 32px",
         }}
       >
-        <div style={{ maxWidth: "1200px" }}>
+        <div className="animate-page-enter" style={{ maxWidth: "1200px" }}>
           {isBatchManageMode && (
             <div
               style={{
@@ -2625,14 +2625,18 @@ export function Skills() {
           )}
           {sortedUnifiedItems.length === 0 ? (
             <div style={{
-              textAlign: "center",
-              padding: "48px 24px",
-              color: "var(--muted-foreground)",
-              backgroundColor: "var(--secondary)",
-              borderRadius: "12px",
-              border: "1px solid var(--border)",
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '64px 24px',
+              textAlign: 'center',
+              gap: 12,
             }}>
-              {hasActiveSkillFilters ? t("skills.noMatch") : t("skills.noSkills")}
+              <div style={{ fontSize: 32, color: 'var(--ember)', opacity: 0.5 }}>✦</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--foreground)' }}>
+                {hasActiveSkillFilters ? t("skills.noMatch") : t("skills.noSkills")}
+              </div>
             </div>
           ) : (
             <div style={{

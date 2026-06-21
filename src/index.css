@@ -237,6 +237,13 @@
     font-family: var(--font-mono);
     font-feature-settings: "calt", "kern", "liga";
   }
+  /* Visible focus ring for keyboard navigation. Uses --ring token so it
+     adapts to both themes. Only applies to keyboard focus, not mouse clicks. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius);
+  }
 }
 
 /* Theme-aware scrollbar (replaces hardcoded black-alpha) */
@@ -265,6 +272,41 @@
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* ===== Raycast motion system =====
+   Entrances use outQuint (cubic-bezier(0.23, 1, 0.32, 1)): fast attack, long settle.
+   Micro-interactions (color/opacity/shadow) default to 200ms ease.
+   Nothing exceeds 700ms. */
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Page content entrance — applied to each page's main content wrapper. */
+.animate-page-enter {
+  animation: fadeInUp 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* Dropdown / popover entrance. */
+.animate-popover {
+  animation: scaleIn 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+/* Modal / dialog entrance. */
+.animate-modal {
+  animation: fadeInUp 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 @keyframes slideDown {
