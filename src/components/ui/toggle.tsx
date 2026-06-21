@@ -1,5 +1,3 @@
-import { useTheme } from "@/hooks/useTheme";
-
 interface ToggleProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
@@ -8,9 +6,6 @@ interface ToggleProps {
 }
 
 export function Toggle({ checked, onChange, disabled = false, title }: ToggleProps) {
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
-
   return (
     <button
       type="button"
@@ -22,8 +17,8 @@ export function Toggle({ checked, onChange, disabled = false, title }: TogglePro
       style={{
         width: 44,
         height: 24,
-        borderRadius: 12,
-        backgroundColor: checked ? "#3b82f6" : isDark ? "#4b5563" : "#d1d5db",
+        borderRadius: 9999,
+        backgroundColor: checked ? "var(--primary)" : "var(--input)",
         border: "none",
         cursor: disabled ? "not-allowed" : "pointer",
         position: "relative",
@@ -39,7 +34,7 @@ export function Toggle({ checked, onChange, disabled = false, title }: TogglePro
           width: 20,
           height: 20,
           borderRadius: "50%",
-          backgroundColor: "white",
+          backgroundColor: checked ? "var(--primary-foreground)" : "var(--muted-foreground)",
           transition: "left 0.2s",
           boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
         }}
