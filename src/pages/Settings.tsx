@@ -56,8 +56,6 @@ export function Settings() {
     { id: "settings-support", label: t("settings.support") },
   ] as const;
 
-  const [activeSection, setActiveSection] = useState<string>("settings-general");
-
   const tRef = useRef(t);
   const addToastRef = useRef(addToast);
   useEffect(() => {
@@ -65,14 +63,17 @@ export function Settings() {
     addToastRef.current = addToast;
   });
 
-  // Switch to the section requested via location hash (e.g. "#settings-llm")
+  // Scroll to the section requested via location hash (e.g. "#settings-llm")
   // so the command palette can deep-link to a specific settings section.
   useEffect(() => {
     if (!config) return;
     const hash = window.location.hash.replace(/^#/, "");
     if (!hash) return;
     if (SETTINGS_SECTIONS.some((s) => s.id === hash)) {
-      setActiveSection(hash);
+      const el = document.getElementById(hash);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     }
   }, [config, location]);
 
@@ -354,53 +355,9 @@ export function Settings() {
         }
       />
 
-      {/* Content */}
-      <main style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex' }}>
-        {/* Left sub-nav */}
-        <nav style={{
-          width: 200,
-          minWidth: 200,
-          borderRight: '1px solid var(--border)',
-          background: 'var(--background)',
-          padding: '16px 8px',
-          overflow: 'auto',
-        }}>
-          {SETTINGS_SECTIONS.map((section) => {
-            const isActive = activeSection === section.id;
-            return (
-              <button
-                key={section.id}
-                type="button"
-                onClick={() => {
-                  setActiveSection(section.id);
-                  window.location.hash = section.id;
-                }}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '8px 12px',
-                  marginBottom: 2,
-                  borderRadius: 'var(--radius)',
-                  border: 'none',
-                  background: isActive ? 'var(--sidebar-accent)' : 'transparent',
-                  color: isActive ? 'var(--foreground)' : 'var(--muted-foreground)',
-                  fontSize: 13,
-                  fontWeight: isActive ? 500 : 400,
-                  cursor: 'pointer',
-                  transition: 'background-color 0.15s, color 0.15s',
-                }}
-              >
-                {section.label}
-              </button>
-            );
-          })}
-        </nav>
+      <main className="page-main" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        <div className="animate-page-enter page-container" style={{ maxWidth: '760px' }}>
 
-        {/* Right panel — only the active section */}
-        <div className="page-main" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-          <div className="animate-page-enter page-container" style={{ maxWidth: '680px' }}>
-          {activeSection === "settings-general" && (<>
           {/* General Section */}
           <SectionTitle id="settings-general">{t("settings.general")}</SectionTitle>
           <SettingsCard>
@@ -413,17 +370,17 @@ export function Settings() {
                 <code
                   title={config.skills_dir}
                   style={{
-                  display: 'block',
-                  width: '100%',
-                  fontSize: '12px',
-                  color: 'var(--muted-foreground)',
-                  backgroundColor: 'var(--secondary)',
-                  padding: '6px 10px',
-                  borderRadius: '6px',
-                  whiteSpace: 'normal',
-                  overflowWrap: 'anywhere',
-                  lineHeight: 1.5,
-                }}
+                    display: 'block',
+                    width: '100%',
+                    fontSize: '12px',
+                    color: 'var(--muted-foreground)',
+                    backgroundColor: 'var(--secondary)',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    whiteSpace: 'normal',
+                    overflowWrap: 'anywhere',
+                    lineHeight: 1.5,
+                  }}
                 >
                   {config.skills_dir}
                 </code>
@@ -567,9 +524,7 @@ export function Settings() {
               />
             </SettingsRow>
           </SettingsCard>
-          </>)}
 
-          {activeSection === "settings-marketplace" && (<>
           {/* Marketplace Section */}
           <SectionTitle id="settings-marketplace">{t("settings.marketplace")}</SectionTitle>
           <SettingsCard>
@@ -654,9 +609,7 @@ export function Settings() {
               })
             )}
           </SettingsCard>
-          </>)}
 
-          {activeSection === "settings-appearance" && (<>
           {/* Appearance Section */}
           <SectionTitle id="settings-appearance">{t("settings.appearance")}</SectionTitle>
           <SettingsCard>
@@ -703,9 +656,7 @@ export function Settings() {
               />
             </SettingsRow>
           </SettingsCard>
-          </>)}
 
-          {activeSection === "settings-llm" && (<>
           {/* AI Translation */}
           <SectionTitle id="settings-llm">{t("settings.llmTitle")}</SectionTitle>
           <SettingsCard>
@@ -716,9 +667,7 @@ export function Settings() {
               t={t}
             />
           </SettingsCard>
-          </>)}
 
-          {activeSection === "settings-account" && (<>
           {/* Account & Cloud Sync */}
           <SectionTitle id="settings-account">{t("settings.account")}</SectionTitle>
           <SettingsCard>
@@ -758,9 +707,7 @@ export function Settings() {
               </div>
             </div>
           </SettingsCard>
-          </>)}
 
-          {activeSection === "settings-shortcuts" && (<>
           {/* Keyboard shortcuts */}
           <SectionTitle id="settings-shortcuts">{t("shortcuts.title")}</SectionTitle>
           <SettingsCard>
@@ -780,9 +727,7 @@ export function Settings() {
               isLast={true}
             />
           </SettingsCard>
-          </>)}
 
-          {activeSection === "settings-advanced" && (<>
           {/* Advanced Section */}
           <SectionTitle id="settings-advanced">{t("settings.advanced")}</SectionTitle>
           <SettingsCard>
@@ -820,9 +765,7 @@ export function Settings() {
               </button>
             </SettingsRow>
           </SettingsCard>
-          </>)}
 
-          {activeSection === "settings-about" && (<>
           {/* About Section */}
           <SectionTitle id="settings-about">{t("settings.about")}</SectionTitle>
           <SettingsCard>
@@ -960,9 +903,8 @@ export function Settings() {
               </div>
             </div>
           </SettingsCard>
-          </>)}
 
-          {activeSection === "settings-support" && (<>
+          {/* Support Section */}
           <SectionTitle id="settings-support">{t("settings.support")}</SectionTitle>
           <SettingsCard>
             <div style={{ padding: '20px 0' }}>
@@ -1014,8 +956,7 @@ export function Settings() {
               </div>
             </div>
           </SettingsCard>
-          </>)}
-          </div>
+
         </div>
       </main>
       <ToastContainer toasts={toasts} onRemove={removeToast} />
