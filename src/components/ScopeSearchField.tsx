@@ -109,7 +109,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
           padding: "0 12px",
           background: "var(--secondary)",
           border: `1px solid ${switcherOpen ? "var(--ring)" : "var(--border)"}`,
-          borderRadius: "var(--radius-sm)",
+          borderRadius: "var(--radius-md)",
           transition: "border-color 0.15s",
         }}
       >
@@ -217,7 +217,16 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
                 key={page.path}
                 type="button"
                 onMouseEnter={() => setActiveIdx(idx)}
-                onClick={() => selectPage(page.path)}
+                onMouseDown={(e) => {
+                  // Prevent the input from losing focus / the outside-click
+                  // mousedown handler from racing the click. The selection is
+                  // driven entirely by the click handler below.
+                  e.preventDefault();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  selectPage(page.path);
+                }}
                 style={{
                   display: "flex",
                   alignItems: "center",
