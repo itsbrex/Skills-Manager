@@ -37,7 +37,7 @@ export function AuthButton({ variant = "sidebar" }: AuthButtonProps) {
             transition: "background-color 0.15s",
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = "rgba(0, 0, 0, 0.04)";
+            e.currentTarget.style.backgroundColor = "var(--sidebar-accent)";
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.backgroundColor = "transparent";

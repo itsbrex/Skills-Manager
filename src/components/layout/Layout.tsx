@@ -87,8 +87,8 @@ export function Layout() {
               left: 0,
               right: 0,
               padding: "12px 24px",
-              backgroundColor: "#fefce8",
-              borderBottom: "1px solid #fef08a",
+              backgroundColor: "var(--color-warning-bg)",
+              borderBottom: "1px solid var(--color-warning-border)",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -96,12 +96,12 @@ export function Layout() {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ca8a04" strokeWidth="2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-warning)" strokeWidth="2">
                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                 <line x1="12" y1="9" x2="12" y2="13"/>
                 <line x1="12" y1="17" x2="12.01" y2="17"/>
               </svg>
-              <span style={{ fontSize: "14px", color: "#a16207" }}>
+              <span style={{ fontSize: "14px", color: "var(--color-warning)" }}>
                 {autoFixedCount > 0
                   ? t("sync.autoFixPartial")
                       .replace("{success}", String(autoFixedCount))
@@ -118,7 +118,7 @@ export function Layout() {
                   fontSize: "13px",
                   fontWeight: 500,
                   color: "#fff",
-                  backgroundColor: "#ca8a04",
+                  backgroundColor: "var(--color-warning)",
                   border: "none",
                   borderRadius: "6px",
                   cursor: fixing ? "wait" : "pointer",
@@ -134,7 +134,7 @@ export function Layout() {
                   background: "transparent",
                   border: "none",
                   cursor: "pointer",
-                  color: "#a16207",
+                  color: "var(--color-warning)",
                   opacity: 0.6,
                 }}
               >
