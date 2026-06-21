@@ -335,3 +335,135 @@
   background-size: 200% 100%;
   animation: marketplaceSkeletonShimmer 1.4s ease-in-out infinite;
 }
+
+/* ===== Responsive utilities for page layouts ===== */
+
+.page-main {
+  padding: 24px 32px;
+}
+
+@media (max-width: 1023px) {
+  .page-main {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 767px) {
+  .page-main {
+    padding: 16px;
+  }
+}
+
+.page-container {
+  margin: 0 auto;
+}
+
+.card-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1599px) {
+  .card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1279px) {
+  .card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.marketplace-main {
+  padding: 12px 20px;
+}
+
+@media (max-width: 1023px) {
+  .marketplace-main {
+    padding: 12px 16px;
+  }
+}
+
+@media (max-width: 767px) {
+  .marketplace-main {
+    padding: 12px;
+  }
+}
+
+.marketplace-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1599px) {
+  .marketplace-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1279px) {
+  .marketplace-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .marketplace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.compact-grid {
+  display: grid;
+  gap: 14px 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 639px) {
+  .compact-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tools-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 639px) {
+  .tools-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.skills-search-input {
+  width: 200px;
+}
+
+@media (max-width: 767px) {
+  .skills-search-input {
+    width: 150px;
+  }
+}
+
+@media (max-width: 767px) {
+  .scope-chip-text {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .scope-shortcut {
+    display: none;
+  }
+}

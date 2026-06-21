@@ -107,8 +107,16 @@ export function TopBar({ onOpenPalette }: TopBarProps) {
         )}
       </div>
 
+      {/* Left spacer — pairs with the right spacer to center the search
+          field regardless of how wide the page actions slot is. */}
+      <div style={{ flex: 1, minWidth: 0 }} />
+
       {/* Center scope search — the field shows the current page as a chip */}
       <ScopeSearchField onOpenPalette={onOpenPalette} />
+
+      {/* Right spacer — mirrors the left spacer so the search field stays
+          visually centered when actions width changes between pages. */}
+      <div style={{ flex: 1, minWidth: 0 }} />
 
       {/* Page actions — portalled here by the active page's <PageHeader/> */}
       <div

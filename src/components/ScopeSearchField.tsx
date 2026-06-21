@@ -98,7 +98,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
   return (
     <div
       ref={dropdownRef}
-      style={{ position: "relative", flex: 1, maxWidth: 520, margin: "0 auto" }}
+      style={{ position: "relative", flex: "0 1 520px", maxWidth: 520, minWidth: 0 }}
     >
       <div
         style={{
@@ -137,7 +137,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
             title={t("scope.switchTo")}
           >
             <span style={{ color: "var(--ember)", fontSize: 11 }}>✦</span>
-            <span style={{ color: "var(--foreground)", fontSize: 12, fontWeight: 500 }}>
+            <span className="scope-chip-text" style={{ color: "var(--foreground)", fontSize: 12, fontWeight: 500 }}>
               {t(currentPage.labelKey)}
             </span>
             <span style={{ color: "var(--muted-foreground)", fontSize: 10 }}>▾</span>
@@ -167,6 +167,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
         <button
           type="button"
           onClick={onOpenPalette}
+          className="scope-shortcut"
           style={{
             fontSize: 10,
             fontFamily: "var(--font-mono)",

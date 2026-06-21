@@ -60,9 +60,9 @@ export function Layout({ onOpenPalette }: LayoutProps) {
   }
 
   return (
-    <div className="flex flex-col h-screen relative">
+    <div className="flex flex-col h-screen relative overflow-hidden">
       <TopBar onOpenPalette={onOpenPalette} />
-      <main className="flex-1 overflow-auto bg-background relative">
+      <main className="flex-1 min-h-0 overflow-hidden bg-background relative">
         {showBanner && (
           <div
             style={{
@@ -76,6 +76,8 @@ export function Layout({ onOpenPalette }: LayoutProps) {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "8px",
               zIndex: 100,
             }}
           >

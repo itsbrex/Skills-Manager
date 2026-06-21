@@ -852,7 +852,7 @@ export function Marketplace() {
         backgroundColor: 'var(--background)',
       }}>
         <PageHeader title={t("marketplace.title")} />
-        <main style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
+        <main className="marketplace-main" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           <PageLoader />
         </main>
       </div>
@@ -1112,9 +1112,10 @@ export function Marketplace() {
       <main
         ref={mainScrollRef}
         onScroll={handleMainScroll}
-        style={{ flex: 1, overflow: 'auto', padding: '12px 20px' }}
+        className="marketplace-main"
+        style={{ flex: 1, minHeight: 0, overflow: 'auto' }}
       >
-        <div className="animate-page-enter" style={{ maxWidth: '1200px' }}>
+        <div className="animate-page-enter page-container" style={{ maxWidth: '1200px' }}>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
             {availableTags.length > 0 && (
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -1242,11 +1243,7 @@ export function Marketplace() {
               </div>
             </div>
           ) : (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-              gap: '12px',
-            }}>
+            <div className="marketplace-grid">
               {filteredSkills.map((skill) => {
                 const color = getSkillColor(skill.name);
                 const isInstalled = skill.install_status === "installed";

@@ -2157,7 +2157,7 @@ export function Skills() {
         backgroundColor: "var(--background)",
       }}>
         <PageHeader title={t("skills.title")} />
-        <main style={{ flex: 1, overflow: "auto", padding: "24px 32px" }}>
+        <main className="page-main" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
           <PageLoader />
         </main>
       </div>
@@ -2175,10 +2175,10 @@ export function Skills() {
         backgroundColor: "var(--background)",
       }}>
         <PageHeader title={t("skills.title")} />
-        <main style={{
+        <main className="page-main" style={{
           flex: 1,
+          minHeight: 0,
           overflow: "auto",
-          padding: "24px 32px",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -2446,8 +2446,8 @@ export function Skills() {
                 placeholder={t("skills.searchPlaceholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                className="skills-search-input"
                 style={{
-                  width: "200px",
                   padding: "8px 12px 8px 36px",
                   fontSize: "13px",
                   border: "1px solid var(--border)",
@@ -2513,13 +2513,14 @@ export function Skills() {
 
       <main
         ref={listContainerRef}
+        className="page-main"
         style={{
           flex: 1,
+          minHeight: 0,
           overflow: "auto",
-          padding: "24px 32px",
         }}
       >
-        <div className="animate-page-enter" style={{ maxWidth: "1200px" }}>
+        <div className="animate-page-enter" style={{ maxWidth: "1600px", margin: "0 auto" }}>
           {isBatchManageMode && (
             <div
               style={{
@@ -2639,11 +2640,7 @@ export function Skills() {
               </div>
             </div>
           ) : (
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-              gap: "16px",
-            }}>
+            <div className="card-grid">
               {sortedUnifiedItems.map((item) => {
                 const color = getSkillColor(item.title);
                 const canOpen = Boolean(item.openPath);
@@ -2840,7 +2837,7 @@ export function Skills() {
                       </div>
 
                       {!isBatchManageMode && item.kind === "skill" && item.skill && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, minWidth: 0 }}>
                           {fileProgressText && (
                             <div
                               role="status"
@@ -3630,13 +3627,7 @@ function SkillManageDialog({
                     {emptyLabel}
                   </div>
                 ) : (
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                      gap: "8px",
-                    }}
-                  >
+                  <div className="tools-grid">
                     {items.map((item) => (
                       <div
                         key={item.id}

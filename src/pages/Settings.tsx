@@ -288,7 +288,7 @@ export function Settings() {
 
   if (error) {
     return (
-      <div style={{ padding: '24px 32px' }}>
+      <div className="page-main">
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -298,7 +298,7 @@ export function Settings() {
 
   if (!config) {
     return (
-      <div style={{ padding: '24px 32px', color: 'var(--muted-foreground)' }}>
+      <div className="page-main" style={{ color: 'var(--muted-foreground)' }}>
         {t("common.loading")}
       </div>
     );
@@ -355,7 +355,7 @@ export function Settings() {
       />
 
       {/* Content */}
-      <main style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+      <main style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex' }}>
         {/* Left sub-nav */}
         <nav style={{
           width: 200,
@@ -398,7 +398,7 @@ export function Settings() {
         </nav>
 
         {/* Right panel — only the active section */}
-        <div style={{ flex: 1, overflow: 'auto', padding: '32px', position: 'relative' }}>
+        <div className="page-main" style={{ flex: 1, minHeight: 0, overflow: 'auto', position: 'relative' }}>
           <div style={{
             position: 'absolute',
             top: 0, left: 0, right: 0, height: '280px',
@@ -406,7 +406,7 @@ export function Settings() {
             pointerEvents: 'none',
             zIndex: 0,
           }} />
-          <div className="animate-page-enter" style={{ maxWidth: '680px', position: 'relative', zIndex: 1 }}>
+          <div className="animate-page-enter page-container" style={{ maxWidth: '680px', position: 'relative', zIndex: 1 }}>
           {activeSection === "settings-general" && (<>
           {/* General Section */}
           <SectionTitle id="settings-general">{t("settings.general")}</SectionTitle>

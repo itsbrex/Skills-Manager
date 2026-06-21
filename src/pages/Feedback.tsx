@@ -100,13 +100,14 @@ export function Feedback() {
     >
       <PageHeader title={t("feedback.title")} />
       <main
+        className="page-main"
         style={{
           flex: 1,
+          minHeight: 0,
           overflow: "auto",
-          padding: "32px",
         }}
       >
-        <div className="animate-page-enter" style={{ maxWidth: "760px" }}>
+        <div className="animate-page-enter page-container" style={{ maxWidth: "760px" }}>
           <p
             style={{
               margin: "0 0 20px 0",

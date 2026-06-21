@@ -204,7 +204,7 @@ export function BatchManageToolsDialog({
                 {t("skills.noToolsInFilter")}
               </div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px" }}>
+              <div className="tools-grid">
                 {filteredTools.map((tool) => {
                   const toolState = toolStates[tool.id];
                   const checked = isBatchToolChecked(toolState);

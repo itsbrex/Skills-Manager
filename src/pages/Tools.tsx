@@ -738,7 +738,7 @@ export function Tools() {
         backgroundColor: 'var(--background)',
       }}>
         <PageHeader title={t("tools.title")} />
-        <main style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
+        <main className="page-main" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
           <PageLoader />
         </main>
       </div>
@@ -1200,12 +1200,12 @@ export function Tools() {
       />
 
       {/* Content */}
-      <main style={{
+      <main className="page-main" style={{
         flex: 1,
+        minHeight: 0,
         overflow: 'auto',
-        padding: '24px 32px',
       }}>
-        <div className="animate-page-enter" style={{ maxWidth: '1200px' }}>
+        <div className="animate-page-enter page-container" style={{ maxWidth: '1200px' }}>
           {/* Error */}
           {error && (
             <div className="mb-6">
@@ -1243,11 +1243,7 @@ export function Tools() {
                 </div>
               </div>
             ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                gap: '16px',
-              }}>
+              <div className="card-grid">
                 {builtinTools.map(renderToolCard)}
               </div>
             )}
@@ -1307,11 +1303,7 @@ export function Tools() {
                 </button>
               </div>
             ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                gap: '16px',
-              }}>
+              <div className="card-grid">
                 {customTools.map(renderToolCard)}
               </div>
             )}
@@ -1419,11 +1411,7 @@ export function Tools() {
                 </div>
               )}
 
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                gap: '14px 16px',
-              }}>
+              <div className="compact-grid">
                 <div>
                   <label style={fieldLabelStyle}>{t("tools.customNameLabel")}</label>
                   <Input
