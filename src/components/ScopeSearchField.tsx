@@ -55,12 +55,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
   }, [switcherOpen]);
 
   function selectPage(path: string) {
-    console.log("[ScopeSearchField] selectPage called with path:", path, "current:", location.pathname);
     navigate(path);
-    // Verify on next tick whether the URL actually changed
-    setTimeout(() => {
-      console.log("[ScopeSearchField] after navigate, pathname:", window.location.pathname);
-    }, 0);
     setSwitcherOpen(false);
     setQuery("");
     inputRef.current?.blur();
@@ -229,7 +224,6 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
                   e.preventDefault();
                 }}
                 onClick={(e) => {
-                  console.log("[ScopeSearchField] dropdown item clicked:", page.path);
                   e.stopPropagation();
                   selectPage(page.path);
                 }}
