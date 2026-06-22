@@ -1100,7 +1100,7 @@ export function Marketplace() {
         className="marketplace-main"
         style={{ flex: 1, minHeight: 0, overflow: 'auto' }}
       >
-        <div className="animate-page-enter page-container" style={{ maxWidth: '1200px' }}>
+        <div className="page-container" style={{ maxWidth: '1200px' }}>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
             {availableTags.length > 0 && (
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>

@@ -107,7 +107,7 @@ export function Feedback() {
           overflow: "auto",
         }}
       >
-        <div className="animate-page-enter page-container" style={{ maxWidth: "760px" }}>
+        <div className="page-container" style={{ maxWidth: "760px" }}>
           <p
             style={{
               margin: "0 0 20px 0",

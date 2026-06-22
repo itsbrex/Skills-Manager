@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 
@@ -33,12 +33,21 @@ function getSkillDisplayName(skillIdentity: string, skills: Skill[]): string {
   return skill?.name ?? skillIdentity;
 }
 
+// Module-level cache: survives route changes so revisiting the Tools page
+// renders the last-known data immediately (no PageLoader flash) while a
+// silent background refresh runs. Same pattern Marketplace uses.
+interface ToolsPageCache {
+  tools: Tool[];
+  skills: Skill[];
+}
+let toolsPageCache: ToolsPageCache | null = null;
+
 export function Tools() {
   const { t } = useTranslation();
-  const [tools, setTools] = useState<Tool[]>([]);
-  const [skills, setSkills] = useState<Skill[]>([]);
+  const [tools, setTools] = useState<Tool[]>(() => toolsPageCache?.tools ?? []);
+  const [skills, setSkills] = useState<Skill[]>(() => toolsPageCache?.skills ?? []);
   const [error, setError] = useState<string | null>(null);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(() => toolsPageCache === null);
   const [refreshing, setRefreshing] = useState(false);
   const [bulkToggling, setBulkToggling] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
@@ -557,9 +566,23 @@ export function Tools() {
     }
   }, [reloadTools, t]);
 
+  // Track whether this mount had cached data. If so, skip the automatic
+  // loadTools() — the cache was just populated moments ago. Background Tauri
+  // calls would return identical data with new references, causing wasteful
+  // re-renders. User can click refresh for fresh data.
+  const hadCacheOnMountRef = useRef(toolsPageCache !== null);
+
   useEffect(() => {
+    if (hadCacheOnMountRef.current) return;
     loadTools();
   }, [loadTools]);
+
+  // Keep the module-level cache in sync with the latest loaded data so the
+  // next mount can render immediately without a PageLoader flash.
+  useEffect(() => {
+    if (initialLoading) return;
+    toolsPageCache = { tools, skills };
+  }, [initialLoading, tools, skills]);
 
   useEffect(() => {
     if (!formOpen) {
@@ -1220,7 +1243,7 @@ export function Tools() {
         minHeight: 0,
         overflow: 'auto',
       }}>
-        <div className="animate-page-enter page-container" style={{ maxWidth: '1200px' }}>
+        <div className="page-container" style={{ maxWidth: '1200px' }}>
           {/* Error */}
           {error && (
             <div className="mb-6">

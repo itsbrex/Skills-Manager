@@ -513,6 +513,17 @@ function SkillCardActionMenu({
   );
 }
 
+// Module-level cache: survives route changes so revisiting the Skills page
+// renders the last-known data immediately (no PageLoader flash) while a
+// silent background refresh runs. Same pattern Marketplace uses.
+interface SkillsPageCache {
+  skills: Skill[];
+  skillPackages: InstalledSkillPackage[];
+  tools: Tool[];
+  config: AppConfig | null;
+}
+let skillsPageCache: SkillsPageCache | null = null;
+
 export function Skills() {
   const { t, language } = useTranslation();
   const navigate = useNavigate();
@@ -520,10 +531,10 @@ export function Skills() {
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
   const [skillTranslationProgress, setSkillTranslationProgress] = useState<Record<string, SkillFileTranslationProgress>>({});
   const [batchTranslating, setBatchTranslating] = useState(false);
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [skillPackages, setSkillPackages] = useState<InstalledSkillPackage[]>([]);
-  const [tools, setTools] = useState<Tool[]>([]);
-  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [skills, setSkills] = useState<Skill[]>(() => skillsPageCache?.skills ?? []);
+  const [skillPackages, setSkillPackages] = useState<InstalledSkillPackage[]>(() => skillsPageCache?.skillPackages ?? []);
+  const [tools, setTools] = useState<Tool[]>(() => skillsPageCache?.tools ?? []);
+  const [config, setConfig] = useState<AppConfig | null>(() => skillsPageCache?.config ?? null);
   // Page-level search query is shared with the TopBar scope field via context,
   // so the Skills page no longer renders its own search input.
   const { query: searchQuery } = usePageSearch(t("skills.searchPlaceholder"));
@@ -556,7 +567,7 @@ export function Skills() {
   const [isBatchToolDialogOpen, setIsBatchToolDialogOpen] = useState(false);
   const [batchToolQuery, setBatchToolQuery] = useState("");
   const [batchSubmitting, setBatchSubmitting] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(() => skillsPageCache === null);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedCardKeys, setExpandedCardKeys] = useState<Set<string>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
@@ -675,16 +686,30 @@ export function Skills() {
     }
   }, [addToast]);
 
+  // Track whether this mount had cached data. If so, skip the automatic
+  // loadData() — the cache was just populated moments ago when the user was
+  // last on this page. The background Tauri calls would return identical data
+  // but with new object references, triggering a wasteful full re-render of
+  // 38+ useMemos and all skill cards. The user can click refresh for fresh data.
+  const hadCacheOnMountRef = useRef(skillsPageCache !== null);
+
   useEffect(() => {
+    if (hadCacheOnMountRef.current) return;
     loadData();
   }, [loadData]);
 
+  // Keep the module-level cache in sync with the latest loaded data so the
+  // next mount can render immediately without a PageLoader flash.
   useEffect(() => {
-    if (skills.length === 0) return;
-    const ids = skills.map((s) => s.instance_id);
-    void translation.preloadCachedSkills(ids, language);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [skills, language, translation.preloadCachedSkills]);
+    if (initialLoading) return;
+    skillsPageCache = { skills, skillPackages, tools, config };
+  }, [initialLoading, skills, skillPackages, tools, config]);
+
+  // Note: translation cache preloading is handled centrally by
+  // SkillTranslationProvider (see useSkillTranslation.tsx). A page-level
+  // preload effect here would duplicate the IPC calls and, worse, re-run
+  // whenever the `skills` array reference changes (e.g. after background
+  // refresh), each time triggering bump() → full app re-render.
 
   const persistMetadataTags = useCallback(async (metadataKey: string, nextTags: string[]) => {
     if (!config) {
@@ -2512,7 +2537,7 @@ export function Skills() {
           overflow: "auto",
         }}
       >
-        <div className="animate-page-enter" style={{ maxWidth: "1600px", margin: "0 auto" }}>
+        <div style={{ maxWidth: "1600px", margin: "0 auto" }}>
           {isBatchManageMode && (
             <div
               style={{

@@ -374,13 +374,22 @@ export function SkillTranslationProvider({ children }: { children: ReactNode }) 
     [bump],
   );
 
-  // 自动缓存预热：根据路由变化预热对应页面的翻译
+  // 自动缓存预热：仅在语言变化时预热当前路由对应页面的翻译。
+  // 不在每次路由切换时运行 — 那会重复调用 list_skills 并触发 bump(),
+  // 导致整个应用树重渲染（SkillTranslationProvider 包裹整个 app），
+  // 是 Skills 页面切换卡顿的主要根源。页面自己会在数据加载后预热。
   const location = useLocation();
   const { language } = useTranslation();
+  const lastPreloadedLangRef = useRef<string | null>(null);
+  const lastPreloadedPathRef = useRef<string | null>(null);
 
   useEffect(() => {
     const preloadForRoute = async () => {
       if (!isConfigured) return;
+      // 同一语言 + 同一路径只预热一次，避免每次 mount 重复触发
+      if (lastPreloadedLangRef.current === language && lastPreloadedPathRef.current === location.pathname) {
+        return;
+      }
 
       try {
         if (location.pathname === '/skills') {
@@ -400,6 +409,8 @@ export function SkillTranslationProvider({ children }: { children: ReactNode }) 
           }));
           await preloadCachedMarketplace(top50, language);
         }
+        lastPreloadedLangRef.current = language;
+        lastPreloadedPathRef.current = location.pathname;
       } catch (err) {
         // 预热失败静默处理，不影响用户
         console.debug('Cache preload failed:', err);

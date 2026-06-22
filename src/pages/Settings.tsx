@@ -356,7 +356,7 @@ export function Settings() {
       />
 
       <main className="page-main" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        <div className="animate-page-enter page-container" style={{ maxWidth: '760px' }}>
+        <div className="page-container" style={{ maxWidth: '760px' }}>
 
           {/* General Section */}
           <SectionTitle id="settings-general">{t("settings.general")}</SectionTitle>

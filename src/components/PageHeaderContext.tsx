@@ -1,12 +1,24 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useLayoutEffect,
+  useSyncExternalStore,
+  ReactNode,
+} from "react";
 
 interface PageHeaderContextValue {
   title: string;
   setHeader: (title: string) => void;
   /** Register a portal target node for page actions. Called by the TopBar. */
   registerActionsTarget: (node: HTMLElement | null) => void;
-  /** Subscribe to the current actions target node. Returns an unsubscribe fn. */
-  subscribeActionsTarget: (cb: (node: HTMLElement | null) => void) => () => void;
+  /** Subscribe to actions target changes. Returns an unsubscribe fn. */
+  subscribeActionsTarget: (cb: () => void) => () => void;
+  /** Read the current actions target node synchronously. */
+  getActionsTarget: () => HTMLElement | null;
   /** Shared page-level search query (driven by the TopBar scope field). */
   pageSearchQuery: string;
   setPageSearchQuery: (q: string) => void;
@@ -27,24 +39,26 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
   // (not React state) means action updates never re-render the provider or the
   // subscribed pages — eliminating the render loop entirely.
   const actionsTargetRef = useRef<HTMLElement | null>(null);
-  const listenersRef = useRef(new Set<(node: HTMLElement | null) => void>());
+  const listenersRef = useRef(new Set<() => void>());
 
   const setHeader = useCallback((nextTitle: string) => {
     setTitle((prev) => (prev === nextTitle ? prev : nextTitle));
   }, []);
 
   const registerActionsTarget = useCallback((node: HTMLElement | null) => {
+    if (actionsTargetRef.current === node) return;
     actionsTargetRef.current = node;
-    listenersRef.current.forEach((cb) => cb(node));
+    listenersRef.current.forEach((cb) => cb());
   }, []);
 
-  const subscribeActionsTarget = useCallback((cb: (node: HTMLElement | null) => void) => {
+  const subscribeActionsTarget = useCallback((cb: () => void) => {
     listenersRef.current.add(cb);
-    cb(actionsTargetRef.current);
     return () => {
       listenersRef.current.delete(cb);
     };
   }, []);
+
+  const getActionsTarget = useCallback(() => actionsTargetRef.current, []);
 
   return (
     <PageHeaderContext.Provider
@@ -53,6 +67,7 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
         setHeader,
         registerActionsTarget,
         subscribeActionsTarget,
+        getActionsTarget,
         pageSearchQuery,
         setPageSearchQuery,
         pageSearchPlaceholder,
@@ -71,28 +86,35 @@ export function usePageHeaderState() {
 }
 
 // TopBar uses this to register the DOM node that receives portalled actions.
+// useSyncExternalStore reads the target synchronously on mount, so the TopBar
+// never renders a stale (null) target for a frame when the actions slot ref
+// becomes available.
 export function useActionsTarget() {
   const ctx = useContext(PageHeaderContext);
-  const [target, setTarget] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    if (!ctx) return;
-    return ctx.subscribeActionsTarget(setTarget);
-  }, [ctx]);
+  const target = useSyncExternalStore(
+    ctx?.subscribeActionsTarget ?? (() => () => {}),
+    ctx?.getActionsTarget ?? (() => null),
+    () => null,
+  );
   return { target, registerActionsTarget: ctx?.registerActionsTarget };
 }
 
 // Pages call this to push their title (string) into context and receive the
 // portal target so they can render actions into it. Title goes through context
 // (loop-safe). Actions are rendered into the TopBar's portal target, so they
-// update naturally on every render without any loop.
+// update naturally on every render without any loop. useSyncExternalStore
+// returns the target synchronously on mount, so the portal is created in the
+// same commit as the page — the actions slot never flashes empty between pages.
 export function useRegisterPageHeader(title: string) {
   const ctx = useContext(PageHeaderContext);
-  const [target, setTarget] = useState<HTMLElement | null>(null);
+  const target = useSyncExternalStore(
+    ctx?.subscribeActionsTarget ?? (() => () => {}),
+    ctx?.getActionsTarget ?? (() => null),
+    () => null,
+  );
 
   useEffect(() => {
-    if (!ctx) return;
-    ctx.setHeader(title);
-    return ctx.subscribeActionsTarget(setTarget);
+    ctx?.setHeader(title);
   }, [ctx, title]);
 
   return target;
@@ -101,9 +123,12 @@ export function useRegisterPageHeader(title: string) {
 // Pages call this to advertise a search placeholder and read the shared query
 // that the TopBar scope field writes back. The placeholder is cleared on unmount
 // so a page without an in-page search falls back to the default scope hint.
+// useLayoutEffect ensures the placeholder swap happens in the same paint frame
+// as the route change, so the scope field never flashes the default placeholder
+// for one frame between pages.
 export function usePageSearch(placeholder: string) {
   const ctx = useContext(PageHeaderContext);
-  useEffect(() => {
+  useLayoutEffect(() => {
     ctx?.setPageSearchPlaceholder(placeholder);
     return () => ctx?.setPageSearchPlaceholder("");
   }, [ctx, placeholder]);
