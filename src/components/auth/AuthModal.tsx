@@ -1,17 +1,19 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "@/i18n";
 import { useAuth } from "@/contexts/AuthContext";
-import { MODAL_LAYER_Z_INDEX, MODAL_OVERLAY_COLOR } from "@/constants/modal";
+import { MODAL_LAYER_Z_INDEX } from "@/constants/modal";
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
+  anchorRef?: React.RefObject<HTMLElement | null>;
 }
 
-export function AuthModal({ isOpen, onClose }: AuthModalProps) {
+export function AuthModal({ isOpen, onClose, anchorRef }: AuthModalProps) {
   const { t } = useTranslation();
   const { authProfile, authProvider, isLoading, error, startAuth, logout, clearError } = useAuth();
   const wasLoggedInRef = useRef(!!authProfile);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
 
   // Track login state change to auto-close only on successful login (not on open)
   useEffect(() => {
@@ -39,6 +41,50 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     }
   }, [isOpen, clearError]);
 
+  // Position the panel relative to the trigger button
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function updatePosition() {
+      const anchor = anchorRef?.current;
+      if (anchor) {
+        const rect = anchor.getBoundingClientRect();
+        setPanelStyle({
+          position: "fixed",
+          top: rect.bottom + 8,
+          right: window.innerWidth - rect.right,
+          width: "min(340px, calc(100vw - 32px))",
+          maxHeight: `calc(100vh - ${rect.bottom + 8}px - 16px)`,
+        });
+      } else {
+        setPanelStyle({
+          position: "fixed",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "min(420px, calc(100vw - 48px))",
+          maxHeight: "calc(100vh - 48px)",
+        });
+      }
+    }
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    return () => window.removeEventListener("resize", updatePosition);
+  }, [isOpen, anchorRef]);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const displayName = authProfile?.username || t("auth.login");
@@ -53,36 +99,34 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       style={{
         position: "fixed",
         inset: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: MODAL_OVERLAY_COLOR,
         zIndex: MODAL_LAYER_Z_INDEX,
-        opacity: isOpen ? 1 : 0,
-        transition: "opacity 0.2s ease-out",
+        backgroundColor: "transparent",
       }}
       onClick={onClose}
     >
       <div
         style={{
-          width: "min(420px, calc(100vw - 48px))",
-          backgroundColor: "var(--background)",
-          borderRadius: "16px",
-          border: "1px solid var(--border)",
-          boxShadow: "0 24px 64px rgba(0,0,0,0.18), 0 0 1px rgba(0,0,0,0.1)",
-          padding: "24px",
+          ...panelStyle,
+          backgroundColor: "var(--glass-bg-elevated)",
+          backdropFilter: "var(--glass-backdrop)",
+          WebkitBackdropFilter: "var(--glass-backdrop)",
+          border: "1px solid var(--glass-border)",
+          boxShadow: "var(--glass-shadow)",
+          borderRadius: "var(--radius-xl)",
+          padding: "20px",
           display: "flex",
           flexDirection: "column",
-          gap: "20px",
-          transform: isOpen ? "scale(1)" : "scale(0.96)",
-          transition: "transform 0.2s ease-out",
+          gap: "16px",
+          overflow: "auto",
+          transformOrigin: "top right",
+          animation: "scaleIn 180ms cubic-bezier(0.23, 1, 0.32, 1) both",
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
           <div style={{ minWidth: 0 }}>
-            <h3 style={{ margin: "0 0 6px 0", fontSize: "17px", fontWeight: 600, color: "var(--foreground)" }}>
+            <h3 style={{ margin: "0 0 4px 0", fontSize: "16px", fontWeight: 600, color: "var(--foreground)" }}>
               {authProfile ? t("auth.accountTitle") : t("auth.loginTitle")}
             </h3>
             <p style={{ margin: 0, fontSize: "13px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
@@ -93,11 +137,11 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             onClick={onClose}
             disabled={isLoading}
             style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "8px",
-              border: "1px solid var(--border)",
-              backgroundColor: "var(--secondary)",
+              width: "28px",
+              height: "28px",
+              borderRadius: "6px",
+              border: "1px solid var(--glass-border)",
+              backgroundColor: "transparent",
               color: "var(--muted-foreground)",
               cursor: isLoading ? "not-allowed" : "pointer",
               display: "flex",
@@ -110,11 +154,11 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             }}
             onMouseEnter={(e) => {
               if (!isLoading) {
-                e.currentTarget.style.backgroundColor = "var(--muted)";
+                e.currentTarget.style.backgroundColor = "var(--secondary)";
               }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = "var(--secondary)";
+              e.currentTarget.style.backgroundColor = "transparent";
             }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -127,11 +171,11 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           /* Logged In View */
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             {/* Avatar & Username */}
-            <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px", borderRadius: "12px", backgroundColor: "var(--secondary)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px", borderRadius: "12px", backgroundColor: "var(--secondary)" }}>
               <div
                 style={{
-                  width: "48px",
-                  height: "48px",
+                  width: "44px",
+                  height: "44px",
                   borderRadius: "50%",
                   backgroundColor: "var(--muted)",
                   overflow: "hidden",
@@ -156,7 +200,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 )}
               </div>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--foreground)", marginBottom: "4px" }}>
+                <div style={{ fontSize: "15px", fontWeight: 600, color: "var(--foreground)", marginBottom: "2px" }}>
                   {displayName}
                 </div>
                 <div style={{ fontSize: "12px", color: "var(--muted-foreground)", display: "flex", alignItems: "center", gap: "6px" }}>
@@ -185,13 +229,13 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: "8px",
-                padding: "12px 16px",
-                fontSize: "14px",
+                padding: "10px 14px",
+                fontSize: "13px",
                 fontWeight: 600,
                 color: "var(--foreground)",
                 backgroundColor: "var(--secondary)",
                 border: "1px solid var(--border)",
-                borderRadius: "10px",
+                borderRadius: "8px",
                 cursor: isLoading ? "wait" : "pointer",
                 opacity: isLoading ? 0.7 : 1,
                 transition: "all 0.15s",
@@ -219,7 +263,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           </div>
         ) : (
           /* Login View */
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             {/* GitHub Login */}
             <button
               type="button"
@@ -230,13 +274,13 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: "10px",
-                padding: "12px 16px",
-                fontSize: "14px",
+                padding: "10px 14px",
+                fontSize: "13px",
                 fontWeight: 600,
                 color: "#fff",
                 backgroundColor: "#24292f",
                 border: "1px solid #24292f",
-                borderRadius: "10px",
+                borderRadius: "8px",
                 cursor: isLoading ? "wait" : "pointer",
                 opacity: isLoading ? 0.7 : 1,
                 transition: "all 0.15s",
@@ -264,13 +308,13 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: "10px",
-                padding: "12px 16px",
-                fontSize: "14px",
+                padding: "10px 14px",
+                fontSize: "13px",
                 fontWeight: 600,
                 color: "var(--foreground)",
                 backgroundColor: "var(--background)",
                 border: "1px solid var(--border)",
-                borderRadius: "10px",
+                borderRadius: "8px",
                 cursor: isLoading ? "wait" : "pointer",
                 opacity: isLoading ? 0.7 : 1,
                 transition: "all 0.15s",
@@ -294,8 +338,8 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 display: "flex",
                 alignItems: "center",
                 gap: "10px",
-                padding: "12px 14px",
-                borderRadius: "10px",
+                padding: "10px 12px",
+                borderRadius: "8px",
                 backgroundColor: "var(--secondary)",
                 fontSize: "12px",
                 color: "var(--muted-foreground)",
@@ -325,12 +369,6 @@ function Spinner({ size = 16 }: { size?: number }) {
       strokeWidth="2"
       style={{ animation: "spin 1s linear infinite" }}
     >
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
       <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" opacity="0.3" />
       <path d="M12 2v4" strokeLinecap="round" />
     </svg>
@@ -344,12 +382,12 @@ function ErrorAlert({ message }: { message: string }) {
         display: "flex",
         alignItems: "flex-start",
         gap: "10px",
-        padding: "12px 14px",
-        borderRadius: "10px",
-        backgroundColor: "#fef2f2",
-        border: "1px solid #fecaca",
+        padding: "10px 12px",
+        borderRadius: "8px",
+        backgroundColor: "var(--color-error-bg)",
+        border: "1px solid var(--color-error-border)",
         fontSize: "12px",
-        color: "#991b1b",
+        color: "var(--color-error)",
         lineHeight: 1.5,
       }}
     >

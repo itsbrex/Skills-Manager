@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "@/i18n";
 import { useAuth } from "@/contexts/AuthContext";
 import { AuthModal } from "@/components/auth/AuthModal";
@@ -11,6 +11,7 @@ export function AuthButton({ variant = "sidebar" }: AuthButtonProps) {
   const { t } = useTranslation();
   const { authProfile } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const displayName = authProfile?.username || t("auth.login");
 
@@ -18,6 +19,7 @@ export function AuthButton({ variant = "sidebar" }: AuthButtonProps) {
     return (
       <>
         <button
+          ref={triggerRef}
           type="button"
           onClick={() => setIsModalOpen(true)}
           title={displayName}
@@ -71,7 +73,11 @@ export function AuthButton({ variant = "sidebar" }: AuthButtonProps) {
           </div>
         </button>
 
-        <AuthModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+        <AuthModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          anchorRef={triggerRef}
+        />
       </>
     );
   }
@@ -80,6 +86,7 @@ export function AuthButton({ variant = "sidebar" }: AuthButtonProps) {
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setIsModalOpen(true)}
         style={{
@@ -131,7 +138,11 @@ export function AuthButton({ variant = "sidebar" }: AuthButtonProps) {
         <span>{authProfile ? displayName : t("auth.login")}</span>
       </button>
 
-      <AuthModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <AuthModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        anchorRef={triggerRef}
+      />
     </>
   );
 }
