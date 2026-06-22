@@ -983,7 +983,7 @@ export function Marketplace() {
                 {sourceDropdownOpen && (
                   <>
                     <div
-                      style={{ position: 'fixed', inset: 0, zIndex: 10 }}
+                      style={{ position: 'fixed', inset: 0, zIndex: MODAL_LAYER_Z_INDEX - 1 }}
                       onClick={() => setSourceDropdownOpen(false)}
                     />
                     <div style={{
@@ -991,11 +991,11 @@ export function Marketplace() {
                       top: 'calc(100% + 6px)',
                       left: 0,
                       minWidth: '220px',
-                      backgroundColor: 'var(--background)',
+                      backgroundColor: 'var(--popover)',
                       border: '1px solid var(--border)',
-                      borderRadius: '10px',
+                      borderRadius: 'var(--radius-md)',
                       boxShadow: 'var(--shadow-lg)',
-                      zIndex: 20,
+                      zIndex: MODAL_LAYER_Z_INDEX,
                       padding: '6px',
                     }}>
                       <button
@@ -1008,12 +1008,12 @@ export function Marketplace() {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          padding: '8px 10px',
+                          padding: '7px 10px',
                           fontSize: '12px',
                           border: 'none',
-                          borderRadius: '8px',
+                          borderRadius: 'var(--radius-sm)',
                           backgroundColor: selectedSourceIds.length === 0 ? 'var(--secondary)' : 'transparent',
-                          color: 'var(--foreground)',
+                          color: 'var(--popover-foreground)',
                           cursor: 'pointer',
                           textAlign: 'left',
                         }}
@@ -1034,12 +1034,12 @@ export function Marketplace() {
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'space-between',
-                              padding: '8px 10px',
+                              padding: '7px 10px',
                               fontSize: '12px',
                               border: 'none',
-                              borderRadius: '8px',
+                              borderRadius: 'var(--radius-sm)',
                               backgroundColor: selected ? 'var(--secondary)' : 'transparent',
-                              color: 'var(--foreground)',
+                              color: 'var(--popover-foreground)',
                               cursor: 'pointer',
                               textAlign: 'left',
                             }}
@@ -1158,7 +1158,7 @@ export function Marketplace() {
               {sortDropdownOpen && (
                 <>
                   <div
-                    style={{ position: 'fixed', inset: 0, zIndex: 10 }}
+                    style={{ position: 'fixed', inset: 0, zIndex: MODAL_LAYER_Z_INDEX - 1 }}
                     onClick={() => setSortDropdownOpen(false)}
                   />
                   <div style={{
@@ -1166,11 +1166,11 @@ export function Marketplace() {
                     top: 'calc(100% + 6px)',
                     right: 0,
                     minWidth: '160px',
-                    backgroundColor: 'var(--background)',
+                    backgroundColor: 'var(--popover)',
                     border: '1px solid var(--border)',
-                    borderRadius: '10px',
+                    borderRadius: 'var(--radius-md)',
                     boxShadow: 'var(--shadow-lg)',
-                    zIndex: 20,
+                    zIndex: MODAL_LAYER_Z_INDEX,
                     padding: '6px',
                   }}>
                     {MARKETPLACE_SORT_MODES.map((mode) => {
@@ -1190,9 +1190,9 @@ export function Marketplace() {
                             padding: '7px 10px',
                             fontSize: '12px',
                             border: 'none',
-                            borderRadius: '8px',
+                            borderRadius: 'var(--radius-sm)',
                             backgroundColor: active ? 'var(--secondary)' : 'transparent',
-                            color: 'var(--foreground)',
+                            color: 'var(--popover-foreground)',
                             cursor: 'pointer',
                             textAlign: 'left',
                           }}
