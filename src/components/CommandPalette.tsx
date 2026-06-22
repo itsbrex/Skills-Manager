@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "@/i18n";
 import { Skill, MarketplaceSkill, MarketplaceSkillsResponse } from "@/types";
 import { MODAL_LAYER_Z_INDEX } from "@/constants/modal";
+import { CustomCaretInput } from "@/components/ui/custom-caret-input";
 
 interface CommandItem {
   id: string;
@@ -334,7 +335,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />
           </svg>
-          <input
+          <CustomCaretInput
             ref={inputRef}
             type="text"
             value={query}
@@ -344,6 +345,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             style={{
               flex: 1,
               fontSize: "15px",
+              lineHeight: 1.4,
               background: "transparent",
               border: "none",
               outline: "none",
@@ -465,7 +467,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                             color: "var(--muted-foreground)",
                             background: "var(--secondary)",
                             border: "1px solid var(--border)",
-                            borderRadius: "var(--radius)",
+                            borderRadius: "var(--radius-sm)",
                             padding: "1px 5px",
                             flexShrink: 0,
                           }}

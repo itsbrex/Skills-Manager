@@ -306,6 +306,25 @@
   to { transform: rotate(360deg); }
 }
 
+@keyframes custom-caret-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.custom-caret {
+  animation: custom-caret-blink 1s step-end infinite;
+}
+
+.custom-caret-input::placeholder {
+  color: var(--muted-foreground);
+  opacity: 1;
+}
+
+.custom-caret-input:focus::placeholder {
+  color: transparent;
+  opacity: 0;
+}
+
 /* ===== Raycast motion system =====
    Entrances use outQuint (cubic-bezier(0.23, 1, 0.32, 1)): fast attack, long settle.
    Micro-interactions (color/opacity/shadow) default to 200ms ease.

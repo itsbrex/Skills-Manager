@@ -1,4 +1,5 @@
 import { Toggle } from "@/components/ui/toggle";
+import { CustomCaretInput } from "@/components/ui/custom-caret-input";
 import {
   MODAL_LAYER_Z_INDEX,
   MODAL_OVERLAY_COLOR,
@@ -130,7 +131,7 @@ export function RelationToggleDialog({
               <circle cx="11" cy="11" r="8" />
               <path d="m21 21-4.3-4.3" />
             </svg>
-            <input
+            <CustomCaretInput
               type="text"
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
@@ -139,6 +140,7 @@ export function RelationToggleDialog({
                 width: "100%",
                 padding: "8px 10px 8px 32px",
                 fontSize: "12px",
+                lineHeight: 1.4,
                 border: "1px solid var(--border)",
                 borderRadius: "8px",
                 backgroundColor: "var(--secondary)",

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation, TranslationPath } from "@/i18n";
 import { usePageHeaderState } from "@/components/PageHeaderContext";
+import { CustomCaretInput } from "@/components/ui/custom-caret-input";
 
 interface ScopeSearchFieldProps {
   onOpenPalette: () => void;
@@ -169,7 +170,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
             <span style={{ color: "var(--muted-foreground)", fontSize: 10 }}>▾</span>
           </button>
         )}
-        <input
+        <CustomCaretInput
           ref={inputRef}
           type="text"
           value={inputValue}
@@ -180,6 +181,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
             flex: 1,
             minWidth: 0,
             fontSize: 12,
+            lineHeight: 1.4,
             background: "transparent",
             border: "none",
             outline: "none",
@@ -229,7 +231,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
             fontFamily: "var(--font-mono)",
             color: "var(--muted-foreground)",
             border: "1px solid var(--border)",
-            borderRadius: "var(--radius)",
+            borderRadius: "var(--radius-sm)",
             padding: "1px 5px",
             background: "transparent",
             cursor: "pointer",

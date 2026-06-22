@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { FileNode } from "@/types";
 import { useTranslation } from "@/i18n";
+import { CustomCaretInput } from "@/components/ui/custom-caret-input";
 
 interface FileTreeProps {
   root: FileNode;
@@ -331,7 +332,7 @@ export function FileTree({ root, rootPath, selectedPath, onSelectFile, onRefresh
         }}
       >
         <div style={{ position: "relative" }}>
-          <input
+          <CustomCaretInput
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -341,6 +342,7 @@ export function FileTree({ root, rootPath, selectedPath, onSelectFile, onRefresh
               width: "100%",
               padding: "5px 24px 5px 8px",
               fontSize: 12,
+              lineHeight: 1.4,
               border: "1px solid var(--border)",
               borderRadius: 6,
               backgroundColor: "var(--background)",

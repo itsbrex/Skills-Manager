@@ -7,6 +7,7 @@ import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { usePageSearch } from "@/components/PageHeaderContext";
 import { PageLoader } from "@/components/ui/loading";
+import { CustomCaretInput } from "@/components/ui/custom-caret-input";
 import { Toggle } from "@/components/ui/toggle";
 import {
   CREATE_SKILL_MODAL_WIDTH,
@@ -3560,7 +3561,7 @@ function SkillManageDialog({
                   <circle cx="11" cy="11" r="8" />
                   <path d="m21 21-4.3-4.3" />
                 </svg>
-                <input
+                <CustomCaretInput
                   type="text"
                   value={query}
                   onChange={(e) => onQueryChange(e.target.value)}
@@ -3569,6 +3570,7 @@ function SkillManageDialog({
                     width: "100%",
                     padding: "8px 10px 8px 32px",
                     fontSize: "12px",
+                    lineHeight: 1.4,
                     border: "1px solid var(--border)",
                     borderRadius: "8px",
                     backgroundColor: "var(--secondary)",
