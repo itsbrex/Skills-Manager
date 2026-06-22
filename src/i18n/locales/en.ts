@@ -44,7 +44,7 @@ export const en = {
     switchTo: "Switch to",
     typeToFilter: "type to filter",
     navigate: "↑↓ navigate",
-    select: "↵ select",
+    select: "select",
   },
   welcome: {
     description: "One Skills, shared across tools.\nUnified management for Claude Code, Codex, CodeBuddy skills.",
@@ -733,6 +733,7 @@ export const en = {
     settingAbout: "About",
     installAction: "Install",
     openAction: "Open",
+    close: "Close",
   },
   shortcuts: {
     title: "Keyboard shortcuts",

@@ -45,7 +45,7 @@ export const zh = {
     switchTo: "切换到",
     typeToFilter: "输入以筛选",
     navigate: "↑↓ 导航",
-    select: "↵ 选择",
+    select: "选择",
   },
   welcome: {
     description:
@@ -733,6 +733,7 @@ export const zh = {
     settingAbout: "关于",
     installAction: "安装",
     openAction: "打开",
+    close: "关闭",
   },
   shortcuts: {
     title: "快捷键",

@@ -360,7 +360,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
               letterSpacing: "0.02em",
             }}
           >
-            ESC
+            Esc
           </kbd>
         </div>
 
@@ -502,7 +502,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
               {t("scope.select")}
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <kbd style={kbdStyle}>esc</kbd>
+              <kbd style={kbdStyle}>Esc</kbd>
+              {t("commandPalette.close")}
             </span>
           </div>
         </div>
