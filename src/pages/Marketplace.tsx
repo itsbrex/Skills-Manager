@@ -12,7 +12,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useNavigate } from "react-router-dom";
-import { ExternalLink, Link2 } from "lucide-react";
+import { ArrowUpDown, ExternalLink, Link2 } from "lucide-react";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { usePageSearch } from "@/components/PageHeaderContext";
@@ -918,6 +918,112 @@ export function Marketplace() {
               <Link2 size={14} />
             </button>
             <RefreshButton onClick={handleRefresh} loading={refreshing || updatingAll} iconOnly />
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setSortDropdownOpen((v) => !v)}
+                title={`${t("marketplace.sortLabel")}: ${sortLabelMap[sortMode]}`}
+                aria-label={`${t("marketplace.sortLabel")}: ${sortLabelMap[sortMode]}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 32,
+                  height: 32,
+                  padding: 0,
+                  color: sortMode !== 'default'
+                    ? 'var(--primary)'
+                    : (sortDropdownOpen ? 'var(--foreground)' : 'var(--muted-foreground)'),
+                  backgroundColor: sortMode !== 'default'
+                    ? 'var(--primary-tint)'
+                    : (sortDropdownOpen ? 'var(--secondary)' : 'transparent'),
+                  border: sortMode !== 'default'
+                    ? '1px solid var(--primary-tint-border)'
+                    : '1px solid transparent',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  transition: 'color 0.15s, background-color 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  if (sortMode === 'default' && !sortDropdownOpen) {
+                    e.currentTarget.style.color = 'var(--foreground)';
+                    e.currentTarget.style.backgroundColor = 'var(--secondary)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (sortMode === 'default' && !sortDropdownOpen) {
+                    e.currentTarget.style.color = 'var(--muted-foreground)';
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                <ArrowUpDown size={14} />
+                {sortMode !== 'default' && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: -3,
+                      right: -3,
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      backgroundColor: 'var(--primary)',
+                      border: '1.5px solid var(--card)',
+                    }}
+                  />
+                )}
+              </button>
+              {sortDropdownOpen && (
+                <>
+                  <div
+                    style={{ position: 'fixed', inset: 0, zIndex: MODAL_LAYER_Z_INDEX - 1 }}
+                    onClick={() => setSortDropdownOpen(false)}
+                  />
+                  <div style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    right: 0,
+                    minWidth: '160px',
+                    backgroundColor: 'var(--popover)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: 'var(--shadow-lg)',
+                    zIndex: MODAL_LAYER_Z_INDEX,
+                    padding: '6px',
+                  }}>
+                    {MARKETPLACE_SORT_MODES.map((mode) => {
+                      const active = mode === sortMode;
+                      return (
+                        <button
+                          key={mode}
+                          onClick={() => {
+                            setSortMode(mode);
+                            setSortDropdownOpen(false);
+                          }}
+                          style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '7px 10px',
+                            fontSize: '12px',
+                            border: 'none',
+                            borderRadius: 'var(--radius-sm)',
+                            backgroundColor: active ? 'var(--secondary)' : 'transparent',
+                            color: 'var(--popover-foreground)',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                          }}
+                        >
+                          <span>{sortLabelMap[mode]}</span>
+                          {active && <span>✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
             {showSourceFilter && (
               <div style={{ position: 'relative' }}>
                 <button
@@ -989,7 +1095,7 @@ export function Marketplace() {
                     <div style={{
                       position: 'absolute',
                       top: 'calc(100% + 6px)',
-                      left: 0,
+                      right: 0,
                       minWidth: '220px',
                       backgroundColor: 'var(--popover)',
                       border: '1px solid var(--border)',
@@ -1101,112 +1207,35 @@ export function Marketplace() {
         style={{ flex: 1, minHeight: 0, overflow: 'auto' }}
       >
         <div className="page-container" style={{ maxWidth: '1200px' }}>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap' }}>
-            {availableTags.length > 0 && (
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {availableTags.map((tag) => {
-                  const isSelected = selectedTags.includes(tag);
-                  return (
-                    <button
-                      key={tag}
-                      onClick={() => {
-                        setSelectedTags((prev) => isSelected
-                          ? prev.filter((t) => t !== tag)
-                          : [...prev, tag]);
-                      }}
-                      style={{
-                        borderRadius: '999px',
-                        padding: '4px 10px',
-                        fontSize: '11px',
-                        fontWeight: 500,
-                        border: isSelected ? '1px solid var(--primary-tint-border)' : '1px solid var(--border)',
-                        backgroundColor: isSelected ? 'var(--primary-tint)' : 'var(--secondary)',
-                        color: isSelected ? 'var(--primary)' : 'var(--muted-foreground)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {tag}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            <div style={{ marginLeft: 'auto', position: 'relative' }}>
-              <button
-                onClick={() => setSortDropdownOpen((v) => !v)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '5px 10px',
-                  fontSize: '11px',
-                  color: 'var(--foreground)',
-                  backgroundColor: sortDropdownOpen ? 'var(--secondary)' : 'var(--background)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '999px',
-                  cursor: 'pointer',
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 6h18M6 12h12M10 18h4"/>
-                </svg>
-                <span>{t("marketplace.sortLabel")}: {sortLabelMap[sortMode]}</span>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M6 9l6 6 6-6"/>
-                </svg>
-              </button>
-              {sortDropdownOpen && (
-                <>
-                  <div
-                    style={{ position: 'fixed', inset: 0, zIndex: MODAL_LAYER_Z_INDEX - 1 }}
-                    onClick={() => setSortDropdownOpen(false)}
-                  />
-                  <div style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 6px)',
-                    right: 0,
-                    minWidth: '160px',
-                    backgroundColor: 'var(--popover)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-md)',
-                    boxShadow: 'var(--shadow-lg)',
-                    zIndex: MODAL_LAYER_Z_INDEX,
-                    padding: '6px',
-                  }}>
-                    {MARKETPLACE_SORT_MODES.map((mode) => {
-                      const active = mode === sortMode;
-                      return (
-                        <button
-                          key={mode}
-                          onClick={() => {
-                            setSortMode(mode);
-                            setSortDropdownOpen(false);
-                          }}
-                          style={{
-                            width: '100%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '7px 10px',
-                            fontSize: '12px',
-                            border: 'none',
-                            borderRadius: 'var(--radius-sm)',
-                            backgroundColor: active ? 'var(--secondary)' : 'transparent',
-                            color: 'var(--popover-foreground)',
-                            cursor: 'pointer',
-                            textAlign: 'left',
-                          }}
-                        >
-                          <span>{sortLabelMap[mode]}</span>
-                          {active && <span>✓</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
+          {availableTags.length > 0 && (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+              {availableTags.map((tag) => {
+                const isSelected = selectedTags.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    onClick={() => {
+                      setSelectedTags((prev) => isSelected
+                        ? prev.filter((t) => t !== tag)
+                        : [...prev, tag]);
+                    }}
+                    style={{
+                      borderRadius: '999px',
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      border: isSelected ? '1px solid var(--primary-tint-border)' : '1px solid var(--border)',
+                      backgroundColor: isSelected ? 'var(--primary-tint)' : 'var(--secondary)',
+                      color: isSelected ? 'var(--primary)' : 'var(--muted-foreground)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
             </div>
-          </div>
+          )}
 
           {filteredSkills.length === 0 ? (
             <div style={{
