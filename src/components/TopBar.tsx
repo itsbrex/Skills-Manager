@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "@/i18n";
 import { checkUpdate } from "@/services/updater";
@@ -41,6 +40,7 @@ export function TopBar({ onOpenPalette }: TopBarProps) {
   return (
     <header
       className="glass"
+      data-tauri-drag-region
       style={{
         height: 52,
         minHeight: 52,
@@ -52,14 +52,11 @@ export function TopBar({ onOpenPalette }: TopBarProps) {
         borderBottom: "1px solid var(--glass-border)",
         position: "relative",
         zIndex: 50,
+        cursor: "grab",
       }}
     >
-      {/* Drag zone / traffic-light space — native window dragging */}
-      <div
-        onMouseDown={() => getCurrentWindow().startDragging()}
-        data-tauri-drag-region
-        style={{ width: 72, height: "100%", flexShrink: 0, cursor: "grab" }}
-      />
+      {/* Traffic-light space (macOS) — the whole header is draggable */}
+      <div style={{ width: 72, height: "100%", flexShrink: 0 }} />
 
       {/* Brand: ember ✦ + wordmark */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
