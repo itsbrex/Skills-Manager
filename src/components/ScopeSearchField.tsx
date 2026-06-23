@@ -8,6 +8,12 @@ interface ScopeSearchFieldProps {
   onOpenPalette: () => void;
 }
 
+// 平台相关快捷键提示：macOS 显示 ⌘K，Windows/Linux 显示 Ctrl+K
+const SEARCH_HINT =
+  typeof navigator !== "undefined" && /macintosh|mac os/i.test(navigator.userAgent)
+    ? "⌘K"
+    : "Ctrl+K";
+
 interface PageEntry {
   path: string;
   labelKey: TranslationPath;
@@ -238,7 +244,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
             flexShrink: 0,
           }}
         >
-          {t("topbar.searchHint")}
+          {SEARCH_HINT}
         </button>
       </div>
 

@@ -7,6 +7,66 @@
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-06-23
+
+### 中文
+
+#### Added
+- 全新 Raycast 风格 UI 设计语言，重塑整体视觉体验
+- 新增 TopBar 顶栏布局，整合品牌标识、范围搜索、认证与更新提示，移除原侧边栏
+- 新增 ScopeSearchField 范围搜索组件，支持页面范围切换与 `/` 快捷键
+- CommandPalette 命令面板升级至 Raycast 规格
+- 新增 Raycast 设计令牌（Token）基础与 Inter + GeistMono 字体预设
+- 新增页面入场动画与 Raycast 动效系统
+- 新增自定义 Raycast Monaco 编辑器主题
+- 设置面板与欢迎页新增氛围渐变效果
+- Skills 页面工具启用状态改用工具图标展示，替代原文字标签
+
+#### Changed
+- 全站硬编码颜色清理，统一使用语义化设计令牌
+- 设置页改为垂直滚动布局，简化字体预设为 default/serif
+- 页面操作按钮整合为统一图标按钮
+- 下拉菜单、标签筛选、更多菜单统一 Raycast 风格
+- 搜索快捷键提示改为平台自适应（macOS 显示 ⌘K，Windows/Linux 显示 Ctrl+K）
+- 市场页排序移至顶部操作栏
+
+#### Fixed
+- 修复页面切换时的闪烁与卡顿问题
+- 修复 TopBar 固定定位导致的布局问题
+- 修复暗色模式下的可读性问题
+- 修复 Shell 渲染循环导致的导航卡死与错误
+- 修复认证登录弹窗定位问题
+- 修复命令面板重复的 Enter 提示
+
+### English
+
+#### Added
+- Brand-new Raycast-style UI design language across the app
+- New TopBar layout integrating brand, scope search, auth, and update badge; removed the sidebar
+- New ScopeSearchField component with page-scope chip and `/` switcher
+- Elevated CommandPalette to Raycast spec
+- Added Raycast design token foundation with Inter + GeistMono font preset
+- Page entrance animations and Raycast motion system
+- Custom Raycast Monaco editor theme
+- Atmosphere gradients on Settings panel and Welcome hero
+- Skills page now shows tool enable status with tool icons instead of text labels
+
+#### Changed
+- Swept hardcoded colors app-wide; unified on semantic design tokens
+- Settings page switched to vertical scroll layout; simplified font presets to default/serif
+- Consolidated page actions into unified icon buttons
+- Unified dropdown menus, tag filters, and more menu to Raycast style
+- Search shortcut hint is now platform-aware (⌘K on macOS, Ctrl+K on Windows/Linux)
+- Marketplace sort moved to the header action bar
+
+#### Fixed
+- Eliminated flicker and lag on page switching
+- Fixed TopBar fixed-positioning layout issues
+- Fixed dark-mode readability issues
+- Fixed render loop causing stuck navigation and red errors
+- Fixed auth login popup positioning
+- Fixed duplicate Enter hint in command palette
+
 ## [2.1.0] - 2026-06-14
 
 ### Added
@@ -47,7 +107,8 @@
 - Rust 后端
 - 跨平台支持（macOS/Windows/Linux）
 
-[Unreleased]: https://github.com/jiweiyeah/Skills-Manager/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/jiweiyeah/Skills-Manager/compare/v2.1.2...HEAD
+[2.1.2]: https://github.com/jiweiyeah/Skills-Manager/releases/tag/v2.1.2
 [2.1.0]: https://github.com/jiweiyeah/Skills-Manager/releases/tag/v2.1.0
 [2.0.3]: https://github.com/jiweiyeah/Skills-Manager/releases/tag/v2.0.3
 [2.0.0]: https://github.com/jiweiyeah/Skills-Manager/releases/tag/v2.0.0

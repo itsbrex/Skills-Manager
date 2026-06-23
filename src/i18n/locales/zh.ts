@@ -39,7 +39,6 @@ export const zh = {
   topbar: {
     brand: "Skills Manager",
     search: "搜索技能、工具、操作…",
-    searchHint: "⌘K",
   },
   scope: {
     switchTo: "切换到",

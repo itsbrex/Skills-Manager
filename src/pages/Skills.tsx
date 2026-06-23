@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { RefreshButton } from "@/components/ui/refresh-button";
@@ -96,11 +96,79 @@ import {
   resolveNextProjectBindingsAfterRemoval,
 } from "./projectBindings";
 import { ProjectBindingsDialog } from "./ProjectBindingsDialog";
+import { getToolIconUrl } from "@/assets/tools";
 
 function getToolDisplayName(toolId: string, tools: Tool[]): string {
   const tool = tools.find((t) => t.id === toolId);
   if (tool) return tool.name;
   return toolId;
+}
+
+function resolveToolIconSrc(tool: Tool | undefined): string | null {
+  if (!tool) return null;
+  if (tool.icon_path) return convertFileSrc(tool.icon_path);
+  return getToolIconUrl(tool.id);
+}
+
+function ToolIconChip({
+  toolId,
+  tools,
+  size,
+  enabled,
+  detected,
+}: {
+  toolId: string;
+  tools: Tool[];
+  size: number;
+  enabled: boolean;
+  detected: boolean;
+}) {
+  const tool = tools.find((t) => t.id === toolId);
+  const displayName = getToolDisplayName(toolId, tools);
+  const iconSrc = resolveToolIconSrc(tool);
+  return (
+    <span
+      title={displayName}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: size + 10,
+        height: size + 10,
+        borderRadius: 6,
+        flexShrink: 0,
+        border: enabled
+          ? "1px solid var(--primary-tint-border)"
+          : "1px solid var(--border)",
+        backgroundColor: enabled ? "var(--primary-tint)" : "var(--background)",
+        opacity: detected ? 1 : 0.6,
+      }}
+    >
+      {iconSrc ? (
+        <img
+          src={iconSrc}
+          alt={displayName}
+          style={{
+            width: size,
+            height: size,
+            borderRadius: 3,
+            objectFit: "cover",
+            filter: enabled ? "none" : "grayscale(1)",
+          }}
+        />
+      ) : (
+        <span
+          style={{
+            fontSize: size * 0.5,
+            fontWeight: 600,
+            color: enabled ? "var(--primary)" : "var(--muted-foreground)",
+          }}
+        >
+          {displayName.charAt(0).toUpperCase()}
+        </span>
+      )}
+    </span>
+  );
 }
 
 function getSkillColor(name: string): { bg: string; icon: string } {
@@ -3045,23 +3113,16 @@ export function Skills() {
                         {getUnifiedItemMetaLabel(item, t)}
                       </div>
                       {item.kind === "skill" && item.toolSummary?.state === "partial" && item.toolSummary.visibleEnabledToolIds.length > 0 && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
                           {item.toolSummary.visibleEnabledToolIds.map((toolId) => (
-                            <span
+                            <ToolIconChip
                               key={toolId}
-                              style={{
-                                fontSize: "12px",
-                                fontWeight: 500,
-                                color: "var(--primary)",
-                                backgroundColor: "var(--primary-tint)",
-                                padding: "4px 8px",
-                                borderRadius: "6px",
-                                border: "1px solid var(--primary-tint-border)",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {getToolDisplayName(toolId, tools)}
-                            </span>
+                              toolId={toolId}
+                              tools={tools}
+                              size={18}
+                              enabled={true}
+                              detected={true}
+                            />
                           ))}
                           {item.toolSummary.remainingCount > 0 && (
                             <span style={{
@@ -3153,30 +3214,14 @@ export function Skills() {
                                     const tool = tools.find((it) => it.id === toolId);
                                     const isDetected = tool?.detected ?? false;
                                     return (
-                                      <span
+                                      <ToolIconChip
                                         key={toolId}
-                                        style={{
-                                          fontSize: "12px",
-                                          fontWeight: 500,
-                                          padding: "4px 8px",
-                                          borderRadius: "6px",
-                                          whiteSpace: "nowrap",
-                                          border: isEnabled
-                                            ? "1px solid var(--primary-tint-border)"
-                                            : "1px solid var(--border)",
-                                          color: isEnabled
-                                            ? "var(--primary)"
-                                            : isDetected
-                                              ? "var(--muted-foreground)"
-                                              : "var(--muted-foreground)",
-                                          backgroundColor: isEnabled
-                                            ? "var(--primary-tint)"
-                                            : "var(--background)",
-                                          opacity: isDetected ? 1 : 0.6,
-                                        }}
-                                      >
-                                        {getToolDisplayName(toolId, tools)}
-                                      </span>
+                                        toolId={toolId}
+                                        tools={tools}
+                                        size={20}
+                                        enabled={isEnabled}
+                                        detected={isDetected}
+                                      />
                                     );
                                   })}
                                 </div>
@@ -4182,7 +4227,7 @@ function CreateSkillDialog({
           placeholder={t("skills.skillDescPlaceholder")}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && e.metaKey && !creating) handleSubmit(); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !creating) handleSubmit(); }}
           rows={3}
           style={{
             width: "100%",

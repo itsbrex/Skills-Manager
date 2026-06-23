@@ -38,7 +38,6 @@ export const en = {
   topbar: {
     brand: "Skills Manager",
     search: "Search skills, tools, actions…",
-    searchHint: "⌘K",
   },
   scope: {
     switchTo: "Switch to",
