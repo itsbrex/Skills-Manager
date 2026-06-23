@@ -12,7 +12,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useNavigate } from "react-router-dom";
-import { ArrowUpDown, ExternalLink, Link2 } from "lucide-react";
+import { ArrowUpDown, Check, ExternalLink, Link2 } from "lucide-react";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { usePageSearch } from "@/components/PageHeaderContext";
@@ -979,18 +979,20 @@ export function Marketplace() {
                     style={{ position: 'fixed', inset: 0, zIndex: MODAL_LAYER_Z_INDEX - 1 }}
                     onClick={() => setSortDropdownOpen(false)}
                   />
-                  <div style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 6px)',
-                    right: 0,
-                    minWidth: '160px',
-                    backgroundColor: 'var(--popover)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-md)',
-                    boxShadow: 'var(--shadow-lg)',
-                    zIndex: MODAL_LAYER_Z_INDEX,
-                    padding: '6px',
-                  }}>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 6px)',
+                      right: 0,
+                      minWidth: '172px',
+                      backgroundColor: 'var(--popover)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-md)',
+                      boxShadow: 'var(--shadow-lg)',
+                      zIndex: MODAL_LAYER_Z_INDEX,
+                      padding: '6px',
+                    }}
+                  >
                     {MARKETPLACE_SORT_MODES.map((mode) => {
                       const active = mode === sortMode;
                       return (
@@ -1000,23 +1002,42 @@ export function Marketplace() {
                             setSortMode(mode);
                             setSortDropdownOpen(false);
                           }}
+                          onMouseEnter={(e) => {
+                            if (!active) {
+                              e.currentTarget.style.backgroundColor = 'var(--secondary)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!active) {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                            }
+                          }}
                           style={{
                             width: '100%',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
+                            gap: '12px',
                             padding: '7px 10px',
                             fontSize: '12px',
+                            fontWeight: active ? 600 : 500,
                             border: 'none',
                             borderRadius: 'var(--radius-sm)',
                             backgroundColor: active ? 'var(--secondary)' : 'transparent',
-                            color: 'var(--popover-foreground)',
+                            color: active ? 'var(--foreground)' : 'var(--popover-foreground)',
                             cursor: 'pointer',
                             textAlign: 'left',
+                            transition: 'color 0.12s ease, background-color 0.12s ease',
                           }}
                         >
                           <span>{sortLabelMap[mode]}</span>
-                          {active && <span>✓</span>}
+                          {active && (
+                            <Check
+                              size={13}
+                              strokeWidth={2.5}
+                              style={{ color: 'var(--primary)', flexShrink: 0 }}
+                            />
+                          )}
                         </button>
                       );
                     })}
@@ -1092,40 +1113,61 @@ export function Marketplace() {
                       style={{ position: 'fixed', inset: 0, zIndex: MODAL_LAYER_Z_INDEX - 1 }}
                       onClick={() => setSourceDropdownOpen(false)}
                     />
-                    <div style={{
-                      position: 'absolute',
-                      top: 'calc(100% + 6px)',
-                      right: 0,
-                      minWidth: '220px',
-                      backgroundColor: 'var(--popover)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-md)',
-                      boxShadow: 'var(--shadow-lg)',
-                      zIndex: MODAL_LAYER_Z_INDEX,
-                      padding: '6px',
-                    }}>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 6px)',
+                        right: 0,
+                        minWidth: '220px',
+                        backgroundColor: 'var(--popover)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        boxShadow: 'var(--shadow-lg)',
+                        zIndex: MODAL_LAYER_Z_INDEX,
+                        padding: '6px',
+                      }}
+                    >
                       <button
                         onClick={() => {
                           setSelectedSourceIds([]);
                           setSourceDropdownOpen(false);
+                        }}
+                        onMouseEnter={(e) => {
+                          if (selectedSourceIds.length > 0) {
+                            e.currentTarget.style.backgroundColor = 'var(--secondary)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (selectedSourceIds.length > 0) {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                          }
                         }}
                         style={{
                           width: '100%',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
+                          gap: '12px',
                           padding: '7px 10px',
                           fontSize: '12px',
+                          fontWeight: selectedSourceIds.length === 0 ? 600 : 500,
                           border: 'none',
                           borderRadius: 'var(--radius-sm)',
                           backgroundColor: selectedSourceIds.length === 0 ? 'var(--secondary)' : 'transparent',
-                          color: 'var(--popover-foreground)',
+                          color: selectedSourceIds.length === 0 ? 'var(--foreground)' : 'var(--popover-foreground)',
                           cursor: 'pointer',
                           textAlign: 'left',
+                          transition: 'color 0.12s ease, background-color 0.12s ease',
                         }}
                       >
                         <span>{t("marketplace.sourceAll")}</span>
-                        {selectedSourceIds.length === 0 && <span>✓</span>}
+                        {selectedSourceIds.length === 0 && (
+                          <Check
+                            size={13}
+                            strokeWidth={2.5}
+                            style={{ color: 'var(--primary)', flexShrink: 0 }}
+                          />
+                        )}
                       </button>
                       {availableSources.map((source) => {
                         const selected = selectedSourceIds.length === 0
@@ -1135,23 +1177,42 @@ export function Marketplace() {
                           <button
                             key={source.id}
                             onClick={() => toggleSourceSelection(source.id)}
+                            onMouseEnter={(e) => {
+                              if (!selected) {
+                                e.currentTarget.style.backgroundColor = 'var(--secondary)';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!selected) {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                              }
+                            }}
                             style={{
                               width: '100%',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'space-between',
+                              gap: '12px',
                               padding: '7px 10px',
                               fontSize: '12px',
+                              fontWeight: selected ? 600 : 500,
                               border: 'none',
                               borderRadius: 'var(--radius-sm)',
                               backgroundColor: selected ? 'var(--secondary)' : 'transparent',
-                              color: 'var(--popover-foreground)',
+                              color: selected ? 'var(--foreground)' : 'var(--popover-foreground)',
                               cursor: 'pointer',
                               textAlign: 'left',
+                              transition: 'color 0.12s ease, background-color 0.12s ease',
                             }}
                           >
                             <span>{source.name}</span>
-                            {selected && <span>✓</span>}
+                            {selected && (
+                              <Check
+                                size={13}
+                                strokeWidth={2.5}
+                                style={{ color: 'var(--primary)', flexShrink: 0 }}
+                              />
+                            )}
                           </button>
                         );
                       })}
@@ -1785,6 +1846,7 @@ function GithubInstallDialog({
   onSubmit: () => void;
 }) {
   const { t } = useTranslation();
+  const [inputFocused, setInputFocused] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -1825,7 +1887,7 @@ function GithubInstallDialog({
     >
       <div
         style={{
-          width: "min(680px, calc(100vw - 48px))",
+          width: "min(560px, calc(100vw - 48px))",
           backgroundColor: "var(--background)",
           borderRadius: "18px",
           border: "1px solid var(--border)",
@@ -1842,9 +1904,10 @@ function GithubInstallDialog({
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: "8px",
-              fontSize: "16px",
-              fontWeight: 700,
+              gap: "10px",
+              fontSize: "15px",
+              fontWeight: 650,
+              letterSpacing: "-0.01em",
               color: "var(--foreground)",
             }}
           >
@@ -1855,12 +1918,13 @@ function GithubInstallDialog({
                 justifyContent: "center",
                 width: "28px",
                 height: "28px",
-                borderRadius: "10px",
+                borderRadius: "var(--radius-md)",
                 background: "var(--primary-tint)",
                 color: "var(--primary)",
+                border: "1px solid var(--primary-tint-border)",
               }}
             >
-              <Link2 size={15} />
+              <Link2 size={14} />
             </span>
             {t("marketplace.githubInstallTitle")}
           </div>
@@ -1868,7 +1932,7 @@ function GithubInstallDialog({
             style={{
               margin: 0,
               fontSize: "13px",
-              lineHeight: 1.6,
+              lineHeight: 1.55,
               color: "var(--muted-foreground)",
             }}
           >
@@ -1876,25 +1940,10 @@ function GithubInstallDialog({
           </p>
         </div>
 
-        <div
-          style={{
-            padding: "12px 14px",
-            borderRadius: "14px",
-            border: "1px solid var(--primary-tint-border)",
-            background:
-              "linear-gradient(135deg, var(--primary-tint), transparent)",
-            fontSize: "12px",
-            color: "var(--muted-foreground)",
-            lineHeight: 1.6,
-          }}
-        >
-          {t("marketplace.githubInstallPlaceholder")}
-        </div>
-
         <input
           autoFocus
           type="text"
-          placeholder={t("marketplace.githubInstallPlaceholder")}
+          placeholder={t("marketplace.githubInstallInputPlaceholder")}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
@@ -1903,18 +1952,48 @@ function GithubInstallDialog({
               onSubmit();
             }
           }}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
           style={{
             width: "100%",
             padding: "12px 14px",
             fontSize: "13px",
-            border: "1px solid var(--border)",
+            border: `1px solid ${inputFocused ? 'var(--ring)' : 'var(--border)'}`,
             borderRadius: "12px",
             backgroundColor: "var(--background)",
             color: "var(--foreground)",
             outline: "none",
             boxSizing: "border-box",
+            boxShadow: inputFocused ? "var(--shadow-ring)" : "none",
+            transition: "border-color 0.15s ease, box-shadow 0.15s ease",
           }}
         />
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            fontSize: "12px",
+            color: "var(--muted-foreground)",
+            lineHeight: 1.5,
+          }}
+        >
+          <span>{t("marketplace.example")}</span>
+          <code
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "11px",
+              color: "var(--foreground)",
+              backgroundColor: "var(--secondary)",
+              padding: "2px 6px",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            {t("marketplace.githubInstallPlaceholder")}
+          </code>
+        </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
           <button
@@ -1931,6 +2010,15 @@ function GithubInstallDialog({
               fontWeight: 600,
               cursor: installing ? "wait" : "pointer",
               opacity: installing ? 0.7 : 1,
+              transition: "background-color 0.15s ease, opacity 0.15s ease",
+            }}
+            onMouseEnter={(e) => {
+              if (!installing) {
+                e.currentTarget.style.backgroundColor = "var(--muted)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "var(--secondary)";
             }}
           >
             {t("common.cancel")}
@@ -1949,6 +2037,23 @@ function GithubInstallDialog({
               fontWeight: 700,
               cursor: installing ? "wait" : "pointer",
               opacity: installing ? 0.7 : 1,
+              transition: "opacity 0.15s ease, transform 0.12s ease",
+            }}
+            onMouseEnter={(e) => {
+              if (!installing) {
+                e.currentTarget.style.opacity = "0.92";
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.opacity = installing ? "0.7" : "1";
+            }}
+            onMouseDown={(e) => {
+              if (!installing) {
+                e.currentTarget.style.transform = "scale(0.98)";
+              }
+            }}
+            onMouseUp={(e) => {
+              e.currentTarget.style.transform = "scale(1)";
             }}
           >
             {installing ? t("marketplace.installing") : t("marketplace.githubInstallAction")}

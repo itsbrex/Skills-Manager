@@ -264,6 +264,8 @@ export const zh = {
     githubInstallTitle: "通过 GitHub 链接安装",
     githubInstallDesc: "粘贴具体技能目录、SKILL.md 或 README 链接，安装后会纳入市场技能更新追踪。",
     githubInstallPlaceholder: "https://github.com/owner/repo/tree/main/skills/demo",
+    githubInstallInputPlaceholder: "粘贴 GitHub 技能链接…",
+    example: "示例：",
     githubInstallOpen: "GitHub 安装",
     githubInstallAction: "安装链接技能",
     githubInstallSuccess: "已成功安装 GitHub Skill",

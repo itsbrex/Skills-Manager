@@ -264,6 +264,8 @@ export const en = {
     githubInstallTitle: "Install From GitHub Link",
     githubInstallDesc: "Paste a skill directory, SKILL.md, or README link. Installed skills stay on the marketplace update track.",
     githubInstallPlaceholder: "https://github.com/owner/repo/tree/main/skills/demo",
+    githubInstallInputPlaceholder: "Paste GitHub skill link…",
+    example: "Example:",
     githubInstallOpen: "GitHub Install",
     githubInstallAction: "Install Link",
     githubInstallSuccess: "GitHub skill installed",
