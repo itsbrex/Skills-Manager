@@ -125,17 +125,44 @@ function buildTagFilterMenuItemStyle(active: boolean): CSSProperties {
     justifyContent: "space-between",
     gap: "12px",
     width: "100%",
-    padding: "7px 10px",
+    padding: "6px 10px 6px 28px",
     fontSize: "12px",
-    fontWeight: 500,
+    fontWeight: active ? 600 : 500,
     color: active ? "var(--primary)" : "var(--popover-foreground)",
     backgroundColor: active ? "var(--primary-tint)" : "transparent",
     border: "none",
-    borderRadius: "var(--radius-sm)",
+    borderRadius: "var(--radius-md)",
     cursor: "pointer",
     textAlign: "left",
-    transition: "background-color 0.15s ease, color 0.15s ease",
+    transition: "background-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease",
+    position: "relative",
+    boxShadow: active ? "var(--shadow-highlight)" : "none",
   };
+}
+
+function TagFilterCheck({ active }: { active: boolean }) {
+  return (
+    <span
+      style={{
+        position: "absolute",
+        left: "9px",
+        top: "50%",
+        transform: "translateY(-50%)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "12px",
+        height: "12px",
+        color: "var(--primary)",
+        opacity: active ? 1 : 0,
+        transition: "opacity 0.12s ease",
+      }}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    </span>
+  );
 }
 
 type SkillEditorTab = "tools" | "tags";
@@ -2339,33 +2366,34 @@ export function Skills() {
                       onClick={() => setShowTagFilterMenu(false)}
                     />
                     <div
+                      className="glass-elevated animate-popover"
                       style={{
                         position: "absolute",
                         top: "calc(100% + 6px)",
                         right: 0,
-                        width: "260px",
-                        maxHeight: "360px",
+                        width: "280px",
+                        maxHeight: "420px",
                         overflow: "auto",
-                        padding: "6px",
-                        backgroundColor: "var(--popover)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "var(--radius-md)",
-                        boxShadow: "var(--shadow-lg)",
+                        padding: "8px",
+                        borderRadius: "var(--radius-lg)",
                         zIndex: MODAL_LAYER_Z_INDEX,
+                        background: "var(--background)",
                       }}
                     >
                       <div style={{
                         display: "flex",
-                        alignItems: "center",
+                        alignItems: "flex-start",
                         justifyContent: "space-between",
                         gap: "12px",
-                        marginBottom: "10px",
+                        padding: "4px 6px 10px",
+                        marginBottom: "6px",
+                        borderBottom: "1px solid var(--border)",
                       }}>
                         <div>
-                          <div style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)" }}>
+                          <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)", letterSpacing: "-0.01em" }}>
                             {t("skills.tagFilterButton")}
                           </div>
-                          <div style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "2px" }}>
+                          <div style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "2px", lineHeight: 1.4 }}>
                             {t("skills.tagFilterHintCompact")}
                           </div>
                         </div>
@@ -2376,11 +2404,12 @@ export function Skills() {
                             style={{
                               fontSize: "11px",
                               fontWeight: 600,
-                              color: "var(--muted-foreground)",
+                              color: "var(--primary)",
                               backgroundColor: "transparent",
                               border: "none",
                               cursor: "pointer",
                               padding: "4px 6px",
+                              whiteSpace: "nowrap",
                             }}
                           >
                             {t("common.reset")}
@@ -2388,15 +2417,7 @@ export function Skills() {
                         )}
                       </div>
 
-                      <div style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "2px",
-                        padding: "4px",
-                        marginBottom: "8px",
-                        backgroundColor: "var(--muted)",
-                        borderRadius: "8px",
-                      }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px", marginBottom: "10px" }}>
                         {([
                           { value: "all" as const, label: t("skills.scopeFilterAll"), count: unifiedItems.length },
                           { value: "global" as const, label: t("skills.scopeGlobal"), count: scopeFilterCounts.global },
@@ -2408,25 +2429,20 @@ export function Skills() {
                               key={value}
                               type="button"
                               onClick={() => { setScopeFilter(value); setShowTagFilterMenu(false); }}
+                              onMouseEnter={(e) => {
+                                if (!isActive) {
+                                  e.currentTarget.style.backgroundColor = "var(--surface-hover)";
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = isActive ? "var(--primary-tint)" : "transparent";
+                              }}
                               style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                gap: "8px",
-                                padding: "6px 10px",
-                                fontSize: "12px",
-                                fontWeight: isActive ? 600 : 500,
-                                color: isActive ? "var(--primary)" : "var(--foreground)",
-                                backgroundColor: isActive ? "var(--background)" : "transparent",
-                                border: "none",
-                                borderRadius: "6px",
-                                cursor: "pointer",
-                                boxShadow: isActive ? "var(--shadow-sm)" : "none",
-                                transition: "background-color 0.15s, color 0.15s",
-                                minWidth: 0,
-                                textAlign: "left",
+                                ...buildTagFilterMenuItemStyle(isActive),
+                                paddingLeft: "28px",
                               }}
                             >
+                              <TagFilterCheck active={isActive} />
                               <span style={{
                                 minWidth: 0,
                                 overflow: "hidden",
@@ -2440,7 +2456,6 @@ export function Skills() {
                                 fontSize: "11px",
                                 fontWeight: 500,
                                 color: isActive ? "var(--primary)" : "var(--muted-foreground)",
-                                opacity: 0.8,
                                 flexShrink: 0,
                                 fontVariantNumeric: "tabular-nums",
                               }}>
@@ -2451,36 +2466,93 @@ export function Skills() {
                         })}
                       </div>
 
-                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                         <button
                           type="button"
                           onClick={handleResetTagFilters}
+                          onMouseEnter={(e) => {
+                            if (tagFilterSelection.kind !== "all") {
+                              e.currentTarget.style.backgroundColor = "var(--surface-hover)";
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = tagFilterSelection.kind === "all" ? "var(--primary-tint)" : "transparent";
+                          }}
                           style={buildTagFilterMenuItemStyle(tagFilterSelection.kind === "all")}
                         >
+                          <TagFilterCheck active={tagFilterSelection.kind === "all"} />
                           <span>{t("skills.allTags")}</span>
-                          <span style={{ opacity: 0.72 }}>{skills.length}</span>
+                          <span style={{
+                            fontSize: "11px",
+                            fontWeight: 500,
+                            color: tagFilterSelection.kind === "all" ? "var(--primary)" : "var(--muted-foreground)",
+                            flexShrink: 0,
+                            fontVariantNumeric: "tabular-nums",
+                          }}>
+                            {skills.length}
+                          </span>
                         </button>
 
                         <button
                           type="button"
                           onClick={handleToggleUntaggedOnly}
+                          onMouseEnter={(e) => {
+                            if (!untaggedOnly) {
+                              e.currentTarget.style.backgroundColor = "var(--surface-hover)";
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = untaggedOnly ? "var(--primary-tint)" : "transparent";
+                          }}
                           style={buildTagFilterMenuItemStyle(untaggedOnly)}
                         >
+                          <TagFilterCheck active={untaggedOnly} />
                           <span>{t("skills.untagged")}</span>
-                          <span style={{ opacity: 0.72 }}>{untaggedSkillsCount}</span>
+                          <span style={{
+                            fontSize: "11px",
+                            fontWeight: 500,
+                            color: untaggedOnly ? "var(--primary)" : "var(--muted-foreground)",
+                            flexShrink: 0,
+                            fontVariantNumeric: "tabular-nums",
+                          }}>
+                            {untaggedSkillsCount}
+                          </span>
                         </button>
 
-                        {allTagSummaries.map(({ tag, count }) => (
-                          <button
-                            key={tag}
-                            type="button"
-                            onClick={() => toggleTagFilter(tag)}
-                            style={buildTagFilterMenuItemStyle(selectedTags.includes(tag))}
-                          >
-                            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>#{tag}</span>
-                            <span style={{ opacity: 0.72, flexShrink: 0 }}>{count}</span>
-                          </button>
-                        ))}
+                        {allTagSummaries.map(({ tag, count }) => {
+                          const active = selectedTags.includes(tag);
+                          return (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => toggleTagFilter(tag)}
+                              onMouseEnter={(e) => {
+                                if (!active) {
+                                  e.currentTarget.style.backgroundColor = "var(--surface-hover)";
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = active ? "var(--primary-tint)" : "transparent";
+                              }}
+                              style={buildTagFilterMenuItemStyle(active)}
+                            >
+                              <TagFilterCheck active={active} />
+                              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", display: "flex", alignItems: "center", gap: "4px" }}>
+                                <span style={{ color: "var(--muted-foreground)", fontWeight: 400 }}>#</span>
+                                {tag}
+                              </span>
+                              <span style={{
+                                fontSize: "11px",
+                                fontWeight: 500,
+                                color: active ? "var(--primary)" : "var(--muted-foreground)",
+                                flexShrink: 0,
+                                fontVariantNumeric: "tabular-nums",
+                              }}>
+                                {count}
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   </>
