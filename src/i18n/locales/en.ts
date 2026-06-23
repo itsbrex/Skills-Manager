@@ -301,6 +301,8 @@ export const en = {
   },
   tools: {
     title: "Tools",
+    searchPlaceholder: "Search tools",
+    noMatch: "No matching tools",
     detected: "Detected",
     detectedStatus: "Detected",
     notDetected: "Not detected",

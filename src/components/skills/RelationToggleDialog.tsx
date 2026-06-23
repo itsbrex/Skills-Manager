@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Toggle } from "@/components/ui/toggle";
 import { CustomCaretInput } from "@/components/ui/custom-caret-input";
 import {
@@ -51,6 +52,35 @@ export function RelationToggleDialog({
   onBulkToggle: () => void;
   onClose: () => void;
 }) {
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Auto-focus the search field on open — Raycast-style search-first UX.
+  useEffect(() => {
+    const t = window.setTimeout(() => searchInputRef.current?.focus(), 60);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  // Esc closes the dialog; Cmd/Ctrl+Enter triggers bulk toggle.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        if (!bulkToggleDisabled) {
+          e.preventDefault();
+          onBulkToggle();
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [bulkToggleDisabled, onBulkToggle, onClose]);
+
+  const enabledCount = items.filter((i) => i.enabled).length;
+
   return (
     <div
       style={{
@@ -61,38 +91,65 @@ export function RelationToggleDialog({
         justifyContent: "center",
         backgroundColor: MODAL_OVERLAY_COLOR,
         zIndex: MODAL_LAYER_Z_INDEX,
+        padding: "24px",
       }}
       onClick={onClose}
     >
       <div
+        className="animate-modal"
         style={{
-          width: "min(640px, calc(100vw - 48px))",
+          width: "min(560px, calc(100vw - 48px))",
           maxHeight: "calc(100vh - 72px)",
-          backgroundColor: "var(--background)",
-          borderRadius: "12px",
-          border: "1px solid var(--border)",
-          padding: "20px",
           display: "flex",
           flexDirection: "column",
-          gap: "14px",
+          overflow: "hidden",
+          background: "var(--background)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-xl)",
+          boxShadow: "0 18px 60px rgba(0,0,0,0.25)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
-          <div style={{ minWidth: 0 }}>
-            <h3 style={{ margin: "0 0 6px 0", fontSize: "15px", fontWeight: 600, color: "var(--foreground)" }}>
+        {/* Header — compact title row with close affordance */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: "12px",
+            padding: "16px 18px 12px",
+          }}
+        >
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: "14px",
+                fontWeight: 600,
+                color: "var(--foreground)",
+                letterSpacing: "-0.01em",
+              }}
+            >
               {title}
             </h3>
-            <p style={{ margin: 0, fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
+            <p
+              style={{
+                margin: "4px 0 0 0",
+                fontSize: "12px",
+                color: "var(--muted-foreground)",
+                lineHeight: 1.45,
+              }}
+            >
               {description}
             </p>
           </div>
           <button
             onClick={onClose}
+            aria-label={doneLabel}
             style={{
-              width: "30px",
-              height: "30px",
-              borderRadius: "8px",
+              width: "26px",
+              height: "26px",
+              borderRadius: "var(--radius-sm)",
               border: "1px solid var(--border)",
               backgroundColor: "var(--secondary)",
               color: "var(--muted-foreground)",
@@ -102,27 +159,54 @@ export function RelationToggleDialog({
               justifyContent: "center",
               padding: 0,
               flexShrink: 0,
+              transition: "background-color 0.15s, color 0.15s, border-color 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "var(--muted)";
+              e.currentTarget.style.color = "var(--foreground)";
+              e.currentTarget.style.borderColor = "var(--ring)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "var(--secondary)";
+              e.currentTarget.style.color = "var(--muted-foreground)";
+              e.currentTarget.style.borderColor = "var(--border)";
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
               <path d="M18 6 6 18M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-          <div style={{ position: "relative", flex: "1 1 280px", minWidth: "200px" }}>
+        {/* Search — prominent, Raycast-style focal point */}
+        <div style={{ padding: "0 18px" }}>
+          <div
+            style={{
+              position: "relative",
+              display: "flex",
+              alignItems: "center",
+              height: "38px",
+              padding: "0 12px",
+              background: "var(--background)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+              transition: "border-color 0.15s",
+            }}
+            onFocusCapture={(e) => {
+              e.currentTarget.style.borderColor = "var(--ring)";
+            }}
+            onBlurCapture={(e) => {
+              e.currentTarget.style.borderColor = "var(--border)";
+            }}
+          >
             <svg
               style={{
-                position: "absolute",
-                left: "10px",
-                top: "50%",
-                transform: "translateY(-50%)",
                 color: "var(--muted-foreground)",
-                pointerEvents: "none",
+                flexShrink: 0,
+                marginRight: "8px",
               }}
-              width="13"
-              height="13"
+              width="14"
+              height="14"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -132,34 +216,75 @@ export function RelationToggleDialog({
               <path d="m21 21-4.3-4.3" />
             </svg>
             <CustomCaretInput
+              ref={searchInputRef}
               type="text"
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
               placeholder={searchPlaceholder}
               style={{
-                width: "100%",
-                padding: "8px 10px 8px 32px",
-                fontSize: "12px",
+                flex: 1,
+                minWidth: 0,
+                fontSize: "13px",
                 lineHeight: 1.4,
-                border: "1px solid var(--border)",
-                borderRadius: "8px",
-                backgroundColor: "var(--secondary)",
-                color: "var(--foreground)",
+                background: "transparent",
+                border: "none",
                 outline: "none",
-                boxSizing: "border-box",
+                color: "var(--foreground)",
               }}
             />
+            {query.length > 0 && (
+              <button
+                type="button"
+                aria-label="clear"
+                onClick={() => onQueryChange("")}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "18px",
+                  height: "18px",
+                  color: "var(--muted-foreground)",
+                  background: "transparent",
+                  border: "none",
+                  borderRadius: "var(--radius-sm)",
+                  cursor: "pointer",
+                  flexShrink: 0,
+                  padding: 0,
+                  marginLeft: "6px",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--foreground)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted-foreground)")}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            )}
           </div>
+        </div>
 
+        {/* Toolbar — enabled-only filter + bulk action */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "10px",
+            padding: "12px 18px 8px",
+          }}
+        >
           <label
             style={{
               display: "flex",
               alignItems: "center",
               gap: "8px",
               fontSize: "12px",
-              color: "var(--muted-foreground)",
+              color: enabledOnly ? "var(--foreground)" : "var(--muted-foreground)",
               userSelect: "none",
+              cursor: "pointer",
+              transition: "color 0.15s",
             }}
+            onClick={() => onEnabledOnlyChange(!enabledOnly)}
           >
             <Toggle
               checked={enabledOnly}
@@ -177,15 +302,25 @@ export function RelationToggleDialog({
               display: "inline-flex",
               alignItems: "center",
               gap: "6px",
-              padding: "8px 10px",
+              padding: "6px 10px",
               fontSize: "12px",
               fontWeight: 500,
               color: "var(--foreground)",
               backgroundColor: "var(--secondary)",
               border: "1px solid var(--border)",
-              borderRadius: "8px",
+              borderRadius: "var(--radius-sm)",
               cursor: bulkToggleDisabled ? "not-allowed" : "pointer",
-              opacity: bulkToggleDisabled ? 0.6 : 1,
+              opacity: bulkToggleDisabled ? 0.5 : 1,
+              transition: "background-color 0.15s, border-color 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              if (bulkToggleDisabled) return;
+              e.currentTarget.style.backgroundColor = "var(--muted)";
+              e.currentTarget.style.borderColor = "var(--ring)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "var(--secondary)";
+              e.currentTarget.style.borderColor = "var(--border)";
             }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -195,78 +330,136 @@ export function RelationToggleDialog({
           </button>
         </div>
 
+        {/* List — single column, Raycast-style rows */}
         <div
           style={{
-            border: "1px solid var(--border)",
-            borderRadius: "10px",
-            backgroundColor: "var(--secondary)",
-            overflow: "hidden",
+            flex: 1,
+            minHeight: 0,
+            overflow: "auto",
+            padding: "4px 12px 8px",
           }}
         >
-          <div style={{ maxHeight: "360px", overflow: "auto", padding: "6px" }}>
-            {items.length === 0 ? (
+          {items.length === 0 ? (
+            <div
+              style={{
+                padding: "40px 14px",
+                textAlign: "center",
+                fontSize: "12px",
+                color: "var(--muted-foreground)",
+              }}
+            >
+              {emptyLabel}
+            </div>
+          ) : (
+            items.map((item) => (
               <div
+                key={item.id}
                 style={{
-                  padding: "30px 14px",
-                  textAlign: "center",
-                  fontSize: "12px",
-                  color: "var(--muted-foreground)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                  minHeight: "40px",
+                  padding: "8px 12px",
+                  marginBottom: "2px",
+                  borderRadius: "var(--radius-md)",
+                  border: "1px solid transparent",
+                  backgroundColor: item.enabled
+                    ? "var(--primary-tint)"
+                    : "transparent",
+                  opacity: item.dimmed ? 0.6 : 1,
+                  cursor: item.disabled ? "default" : "pointer",
+                  transition:
+                    "background-color 0.12s ease, border-color 0.12s ease",
+                }}
+                title={item.tooltip}
+                onMouseEnter={(e) => {
+                  if (item.disabled) return;
+                  if (!item.enabled) {
+                    e.currentTarget.style.backgroundColor = "var(--surface-hover)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (item.disabled) return;
+                  e.currentTarget.style.backgroundColor = item.enabled
+                    ? "var(--primary-tint)"
+                    : "transparent";
+                }}
+                onClick={() => {
+                  if (item.disabled) return;
+                  onToggle(item.id, !item.enabled);
                 }}
               >
-                {emptyLabel}
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                  gap: "8px",
-                }}
-              >
-                {items.map((item) => (
-                  <div
-                    key={item.id}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    minWidth: 0,
+                    flex: 1,
+                  }}
+                >
+                  {/* Status dot — subtle ember accent for enabled items */}
+                  <span
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "10px",
-                      minHeight: "48px",
-                      padding: "10px 12px",
-                      borderRadius: "8px",
-                      border: "1px solid var(--border)",
-                      backgroundColor: item.enabled ? "var(--primary-tint)" : "var(--background)",
-                      opacity: item.dimmed ? 0.6 : 1,
+                      width: "6px",
+                      height: "6px",
+                      borderRadius: "50%",
+                      flexShrink: 0,
+                      backgroundColor: item.enabled
+                        ? "var(--ember)"
+                        : "var(--border)",
+                      transition: "background-color 0.15s",
                     }}
-                    title={item.tooltip}
+                  />
+                  <div
+                    style={{
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "var(--foreground)",
+                      lineHeight: 1.35,
+                      minWidth: 0,
+                      overflow: "hidden",
+                      whiteSpace: "nowrap",
+                      textOverflow: "ellipsis",
+                    }}
                   >
-                    <div
-                      style={{
-                        fontSize: "14px",
-                        fontWeight: 500,
-                        color: "var(--foreground)",
-                        lineHeight: 1.35,
-                        minWidth: 0,
-                        overflow: "hidden",
-                        whiteSpace: "nowrap",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {item.label}
-                    </div>
-                    <Toggle
-                      checked={item.enabled}
-                      disabled={item.disabled}
-                      onChange={(checked) => onToggle(item.id, checked)}
-                    />
+                    {item.label}
                   </div>
-                ))}
+                </div>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Toggle
+                    checked={item.enabled}
+                    disabled={item.disabled}
+                    onChange={(checked) => onToggle(item.id, checked)}
+                  />
+                </div>
               </div>
-            )}
-          </div>
+            ))
+          )}
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        {/* Footer — count + done action */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            padding: "10px 18px 14px",
+            borderTop: "1px solid var(--border)",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "11px",
+              color: "var(--muted-foreground)",
+              fontFamily: "var(--font-mono)",
+              letterSpacing: "0.02em",
+            }}
+          >
+            {enabledCount}/{items.length}
+          </div>
           <button
             onClick={onClose}
             style={{
@@ -275,10 +468,13 @@ export function RelationToggleDialog({
               color: "var(--primary-foreground)",
               backgroundColor: "var(--foreground)",
               border: "none",
-              borderRadius: "8px",
-              padding: "7px 12px",
+              borderRadius: "var(--radius-sm)",
+              padding: "7px 16px",
               cursor: "pointer",
+              transition: "opacity 0.15s",
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
           >
             {doneLabel}
           </button>

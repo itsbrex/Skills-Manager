@@ -4,6 +4,7 @@ import { confirm, open } from "@tauri-apps/plugin-dialog";
 
 import { Skill, Tool } from "@/types";
 import { useTranslation } from "@/i18n";
+import { usePageSearch } from "@/components/PageHeaderContext";
 import { getToolIconUrl, GenericToolIcon } from "@/assets/tools";
 import { FolderOpen, Pencil, Plus, Power, Trash2, X } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
@@ -44,6 +45,7 @@ let toolsPageCache: ToolsPageCache | null = null;
 
 export function Tools() {
   const { t } = useTranslation();
+  const { query: searchQuery } = usePageSearch(t("tools.searchPlaceholder"));
   const [tools, setTools] = useState<Tool[]>(() => toolsPageCache?.tools ?? []);
   const [skills, setSkills] = useState<Skill[]>(() => toolsPageCache?.skills ?? []);
   const [error, setError] = useState<string | null>(null);
@@ -610,6 +612,22 @@ export function Tools() {
     () => sortToolsByEnabled(tools.filter((tool) => tool.source === "custom")),
     [tools]
   );
+
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const visibleBuiltinTools = useMemo(() => {
+    if (!normalizedSearchQuery) return builtinTools;
+    return builtinTools.filter((tool) =>
+      tool.name.toLowerCase().includes(normalizedSearchQuery) ||
+      tool.id.toLowerCase().includes(normalizedSearchQuery)
+    );
+  }, [builtinTools, normalizedSearchQuery]);
+  const visibleCustomTools = useMemo(() => {
+    if (!normalizedSearchQuery) return customTools;
+    return customTools.filter((tool) =>
+      tool.name.toLowerCase().includes(normalizedSearchQuery) ||
+      tool.id.toLowerCase().includes(normalizedSearchQuery)
+    );
+  }, [customTools, normalizedSearchQuery]);
   const bulkToggleLabel = bulkToggling
     ? t("tools.bulkUpdating")
     : bulkToggleMode === "enable"
@@ -1280,9 +1298,22 @@ export function Tools() {
                   {t("tools.noToolsDesc")}
                 </div>
               </div>
+            ) : visibleBuiltinTools.length === 0 ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '48px 24px',
+                textAlign: 'center',
+                gap: 8,
+              }}>
+                <div style={{ fontSize: 24, color: 'var(--ember)', opacity: 0.4 }}>✦</div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--foreground)' }}>{t("tools.noMatch")}</div>
+              </div>
             ) : (
               <div className="card-grid">
-                {builtinTools.map(renderToolCard)}
+                {visibleBuiltinTools.map(renderToolCard)}
               </div>
             )}
           </section>
@@ -1340,9 +1371,22 @@ export function Tools() {
                   <Plus style={{ width: '18px', height: '18px' }} />
                 </button>
               </div>
+            ) : visibleCustomTools.length === 0 ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '48px 24px',
+                textAlign: 'center',
+                gap: 8,
+              }}>
+                <div style={{ fontSize: 24, color: 'var(--ember)', opacity: 0.4 }}>✦</div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--foreground)' }}>{t("tools.noMatch")}</div>
+              </div>
             ) : (
               <div className="card-grid">
-                {customTools.map(renderToolCard)}
+                {visibleCustomTools.map(renderToolCard)}
               </div>
             )}
           </section>

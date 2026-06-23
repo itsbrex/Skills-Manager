@@ -301,6 +301,8 @@ export const zh = {
   },
   tools: {
     title: "工 具",
+    searchPlaceholder: "搜索工具",
+    noMatch: "没有匹配的工具",
     detected: "已检测",
     detectedStatus: "已检测",
     notDetected: "未检测到",
