@@ -51,7 +51,7 @@ function App() {
   const { isInitialized, isLoading: initLoading, markInitialized } = useInitialization();
   const [language, setLanguage] = useState<Language>("en");
   const [theme, setTheme] = useState<Theme>("system");
-  const [fontFamily, setFontFamily] = useState<FontFamilyPreset>("raycast");
+  const [fontFamily, setFontFamily] = useState<FontFamilyPreset>("default");
   const [configLoaded, setConfigLoaded] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const { toasts, removeToast } = useToast();

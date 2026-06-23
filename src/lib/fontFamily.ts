@@ -1,8 +1,8 @@
-export const FONT_FAMILY_PRESETS = ["raycast", "system", "rounded", "serif"] as const;
+export const FONT_FAMILY_PRESETS = ["default", "serif"] as const;
 
 export type FontFamilyPreset = (typeof FONT_FAMILY_PRESETS)[number];
 
-const RAYCAST_FONT_STACK = [
+const DEFAULT_FONT_STACK = [
   "\"Inter Variable\"",
   "\"Inter\"",
   "ui-sans-serif",
@@ -19,30 +19,6 @@ const RAYCAST_FONT_STACK = [
   "sans-serif",
 ].join(", ");
 
-const SYSTEM_FONT_STACK = [
-  "-apple-system",
-  "BlinkMacSystemFont",
-  "\"Segoe UI\"",
-  "\"PingFang SC\"",
-  "\"Hiragino Sans GB\"",
-  "\"Microsoft YaHei\"",
-  "\"Noto Sans\"",
-  "Helvetica",
-  "Arial",
-  "sans-serif",
-].join(", ");
-
-const ROUNDED_FONT_STACK = [
-  "\"SF Pro Rounded\"",
-  "\"ui-rounded\"",
-  "\"Nunito\"",
-  "\"Hiragino Maru Gothic ProN\"",
-  "\"Segoe UI\"",
-  "\"PingFang SC\"",
-  "\"Microsoft YaHei\"",
-  "sans-serif",
-].join(", ");
-
 const SERIF_FONT_STACK = [
   "\"Iowan Old Style\"",
   "\"Palatino Linotype\"",
@@ -56,23 +32,19 @@ const SERIF_FONT_STACK = [
 ].join(", ");
 
 export function normalizeFontFamilyPreset(preset: string | null | undefined): FontFamilyPreset {
-  if (preset === "system" || preset === "rounded" || preset === "serif") {
-    return preset;
+  if (preset === "serif") {
+    return "serif";
   }
 
-  return "raycast";
+  return "default";
 }
 
 export function getFontFamilyStack(preset: string | null | undefined): string {
   switch (normalizeFontFamilyPreset(preset)) {
-    case "system":
-      return SYSTEM_FONT_STACK;
-    case "rounded":
-      return ROUNDED_FONT_STACK;
     case "serif":
       return SERIF_FONT_STACK;
-    case "raycast":
+    case "default":
     default:
-      return RAYCAST_FONT_STACK;
+      return DEFAULT_FONT_STACK;
   }
 }

@@ -407,21 +407,45 @@ export function Settings() {
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     cursor: 'pointer',
-                    minWidth: '140px',
+                    minWidth: '160px',
                     justifyContent: 'space-between',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!editorDropdownOpen) {
+                      e.currentTarget.style.backgroundColor = 'var(--muted)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!editorDropdownOpen) {
+                      e.currentTarget.style.backgroundColor = 'var(--background)';
+                    }
                   }}
                 >
-                  {selectedEditor?.icon_data ? (
-                    <img
-                      src={selectedEditor.icon_data}
-                      alt={selectedEditor.name}
-                      style={{ width: 24, height: 24, borderRadius: 6 }}
-                    />
-                  ) : (
-                    FallbackEditorIcon && <FallbackEditorIcon />
-                  )}
-                  <span>{selectedEditor?.name || t("editors.builtin")}</span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {selectedEditor?.icon_data ? (
+                      <img
+                        src={selectedEditor.icon_data}
+                        alt={selectedEditor.name}
+                        style={{ width: 22, height: 22, borderRadius: 5 }}
+                      />
+                    ) : (
+                      FallbackEditorIcon && <FallbackEditorIcon />
+                    )}
+                    <span>{selectedEditor?.name || t("editors.builtin")}</span>
+                  </div>
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    style={{
+                      transition: 'transform 0.2s ease',
+                      transform: editorDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                    }}
+                  >
                     <path d="M6 9l6 6 6-6"/>
                   </svg>
                 </button>
@@ -436,20 +460,22 @@ export function Settings() {
                       }}
                       onClick={() => setEditorDropdownOpen(false)}
                     />
-                    <div style={{
+                    <div className="animate-popover" style={{
                       position: 'absolute',
-                      top: 'calc(100% + 4px)',
+                      top: 'calc(100% + 6px)',
                       right: 0,
-                      backgroundColor: 'var(--background)',
-                      border: '1px solid var(--border)',
+                      backgroundColor: 'var(--popover)',
+                      border: '1px solid var(--glass-border-strong)',
                       borderRadius: '10px',
                       zIndex: 20,
-                      minWidth: '180px',
-                      padding: '4px',
+                      minWidth: '190px',
+                      padding: '5px',
                       overflow: 'hidden',
+                      boxShadow: 'var(--shadow-xl)',
                     }}>
                       {availableEditors.map((editor) => {
                         const FallbackIcon = getEditorIcon(editor.id);
+                        const isSelected = prefs.default_editor === editor.id;
                         return (
                           <button
                             key={editor.id}
@@ -462,26 +488,42 @@ export function Settings() {
                               alignItems: 'center',
                               gap: '10px',
                               width: '100%',
-                              padding: '6px 10px',
+                              padding: '7px 10px',
                               fontSize: '13px',
-                              color: 'var(--foreground)',
-                              backgroundColor: prefs.default_editor === editor.id ? 'var(--secondary)' : 'transparent',
+                              color: isSelected ? 'var(--foreground)' : 'var(--popover-foreground)',
+                              backgroundColor: isSelected ? 'var(--secondary)' : 'transparent',
                               border: 'none',
                               borderRadius: '6px',
                               cursor: 'pointer',
                               textAlign: 'left',
+                              transition: 'all 0.12s',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isSelected) {
+                                e.currentTarget.style.backgroundColor = 'var(--accent)';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isSelected) {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                              }
                             }}
                           >
                             {editor.icon_data ? (
                               <img
                                 src={editor.icon_data}
                                 alt={editor.name}
-                                style={{ width: 24, height: 24, borderRadius: 6 }}
+                                style={{ width: 20, height: 20, borderRadius: 5 }}
                               />
                             ) : (
                               <FallbackIcon />
                             )}
                             <span>{editor.name}</span>
+                            {isSelected && (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: 'auto' }}>
+                                <path d="M20 6L9 17l-5-5"/>
+                              </svg>
+                            )}
                           </button>
                         );
                       })}
@@ -533,43 +575,18 @@ export function Settings() {
               description={t("settings.githubTokenDesc")}
               isLast={marketplaceRows.length === 0}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <input
-                    type={showGithubToken ? "text" : "password"}
-                    value={prefs.github_token || ""}
-                    onChange={(e) => updatePreference("github_token", e.target.value)}
-                    placeholder={t("settings.githubTokenPlaceholder")}
-                    style={{
-                      width: '220px',
-                      padding: '8px 10px',
-                      fontSize: '12px',
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                      backgroundColor: 'var(--background)',
-                      color: 'var(--foreground)',
-                      outline: 'none',
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowGithubToken((v) => !v)}
-                    style={{
-                      padding: '0 12px',
-                      fontSize: '12px',
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                      background: 'transparent',
-                      color: 'var(--foreground)',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {showGithubToken ? t("settings.llmHideKey") : t("settings.llmShowKey")}
-                  </button>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <PasswordInput
+                  value={prefs.github_token || ""}
+                  onChange={(value) => updatePreference("github_token", value)}
+                  placeholder={t("settings.githubTokenPlaceholder")}
+                  visible={showGithubToken}
+                  onToggleVisibility={() => setShowGithubToken((v) => !v)}
+                  width={240}
+                />
                 <span style={{
                   fontSize: '12px',
+                  fontWeight: 500,
                   color: (prefs.github_token || "").trim() ? 'var(--color-success)' : 'var(--muted-foreground)',
                 }}>
                   {(prefs.github_token || "").trim()
@@ -633,9 +650,7 @@ export function Settings() {
                 value={normalizeFontFamilyPreset(prefs.font_family)}
                 onChange={(v) => updatePreference("font_family", normalizeFontFamilyPreset(v))}
                 options={[
-                  { value: "raycast", label: t("settings.fontFamilyRaycast") },
-                  { value: "system", label: t("settings.fontFamilySystem") },
-                  { value: "rounded", label: t("settings.fontFamilyRounded") },
+                  { value: "default", label: t("settings.fontFamilyDefault") },
                   { value: "serif", label: t("settings.fontFamilySerif") },
                 ]}
               />
@@ -1162,6 +1177,95 @@ function SegmentedControl({ value, onChange, options }: SegmentedControlProps) {
   );
 }
 
+interface PasswordInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  visible: boolean;
+  onToggleVisibility: () => void;
+  width?: number;
+}
+
+function PasswordInput({ value, onChange, placeholder, visible, onToggleVisibility, width }: PasswordInputProps) {
+  return (
+    <div style={{
+      position: 'relative',
+      display: 'flex',
+      alignItems: 'center',
+      width: width ? `${width}px` : '100%',
+    }}>
+      <input
+        type={visible ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          width: '100%',
+          padding: '8px 36px 8px 10px',
+          fontSize: '13px',
+          border: '1px solid var(--border)',
+          borderRadius: '8px',
+          backgroundColor: 'var(--background)',
+          color: 'var(--foreground)',
+          transition: 'border-color 0.15s, box-shadow 0.15s',
+        }}
+      />
+      <button
+        type="button"
+        onClick={onToggleVisibility}
+        title={visible ? "隐藏" : "显示"}
+        style={{
+          position: 'absolute',
+          right: '4px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '28px',
+          height: '28px',
+          border: 'none',
+          borderRadius: '6px',
+          backgroundColor: 'transparent',
+          color: 'var(--muted-foreground)',
+          cursor: 'pointer',
+          transition: 'all 0.15s',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = 'var(--secondary)';
+          e.currentTarget.style.color = 'var(--foreground)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = 'transparent';
+          e.currentTarget.style.color = 'var(--muted-foreground)';
+        }}
+      >
+        {visible ? <EyeOffIcon /> : <EyeIcon />}
+      </button>
+    </div>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <line x1="2" x2="22" y1="2" y2="22" />
+    </svg>
+  );
+}
+
 type ToastFn = (msg: string, kind?: "success" | "error" | "info") => void;
 type TFn = (key: TranslationPath) => string;
 
@@ -1291,13 +1395,13 @@ function LlmProviderSection({ provider, onChange, addToast, t }: LlmProviderSect
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
-    padding: "6px 10px",
+    padding: "8px 10px",
     fontSize: "13px",
     border: "1px solid var(--border)",
-    borderRadius: "6px",
+    borderRadius: "8px",
     backgroundColor: "var(--background)",
     color: "var(--foreground)",
-    outline: "none",
+    transition: "border-color 0.15s, box-shadow 0.15s",
   };
 
   return (
@@ -1324,31 +1428,13 @@ function LlmProviderSection({ provider, onChange, addToast, t }: LlmProviderSect
         </Field>
 
         <Field label={t("settings.llmApiKey")}>
-          <div style={{ display: "flex", gap: "6px" }}>
-            <input
-              type={showKey ? "text" : "password"}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-..."
-              style={inputStyle}
-            />
-            <button
-              type="button"
-              onClick={() => setShowKey((v) => !v)}
-              style={{
-                padding: "0 12px",
-                fontSize: "12px",
-                border: "1px solid var(--border)",
-                borderRadius: "6px",
-                background: "transparent",
-                color: "var(--foreground)",
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {showKey ? t("settings.llmHideKey") : t("settings.llmShowKey")}
-            </button>
-          </div>
+          <PasswordInput
+            value={apiKey}
+            onChange={setApiKey}
+            placeholder="sk-..."
+            visible={showKey}
+            onToggleVisibility={() => setShowKey((v) => !v)}
+          />
         </Field>
 
         <Field label={t("settings.llmModel")} hint={t("settings.llmModelHint")}>
