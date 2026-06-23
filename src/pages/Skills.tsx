@@ -176,6 +176,23 @@ type SkillCardActionMenuProps = {
   onDelete: () => void;
 };
 
+const menuItemBaseStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  width: "100%",
+  padding: "6px 10px",
+  fontSize: "12px",
+  fontWeight: 500,
+  color: "var(--popover-foreground)",
+  backgroundColor: "transparent",
+  border: "none",
+  borderRadius: "var(--radius-md)",
+  cursor: "pointer",
+  textAlign: "left",
+  transition: "background-color 0.12s ease, color 0.12s ease",
+  position: "relative",
+};
+
 type SkillsHeaderMoreMenuItem = {
   id: string;
   label: string;
@@ -195,23 +212,6 @@ function SkillsHeaderMoreMenu({
   if (items.length === 0) {
     return null;
   }
-
-  const menuItemBaseStyle: CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    width: "100%",
-    padding: "6px 10px",
-    fontSize: "12px",
-    fontWeight: 500,
-    color: "var(--popover-foreground)",
-    backgroundColor: "transparent",
-    border: "none",
-    borderRadius: "var(--radius-md)",
-    cursor: "pointer",
-    textAlign: "left",
-    transition: "background-color 0.12s ease, color 0.12s ease",
-    position: "relative",
-  };
 
   return (
     <div style={{ position: "relative", flexShrink: 0 }}>
@@ -447,21 +447,20 @@ function SkillCardActionMenu({
             }}
           />
           <div
+            className="glass-elevated animate-popover"
             onClick={(e) => e.stopPropagation()}
             style={{
               position: "absolute",
-              top: "calc(100% + 8px)",
+              top: "calc(100% + 6px)",
               right: 0,
               display: "flex",
               flexDirection: "column",
               gap: "2px",
-              minWidth: "132px",
-              padding: "4px",
-              backgroundColor: "var(--popover)",
-              border: "1px solid var(--border)",
-              borderRadius: "8px",
-              boxShadow: "var(--shadow-lg)",
-              backdropFilter: "blur(10px)",
+              minWidth: "120px",
+              maxHeight: "320px",
+              overflow: "auto",
+              padding: "8px",
+              borderRadius: "var(--radius-lg)",
               zIndex: MODAL_LAYER_Z_INDEX,
             }}
           >
@@ -472,23 +471,9 @@ function SkillCardActionMenu({
                 setOpen(false);
                 onEdit();
               }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                width: "100%",
-                padding: "10px 12px",
-                fontSize: "13px",
-                fontWeight: 500,
-                color: "var(--popover-foreground)",
-                backgroundColor: "transparent",
-                border: "none",
-                borderRadius: "6px",
-                cursor: "pointer",
-                textAlign: "left",
-                transition: "background-color 0.15s ease, color 0.15s ease",
-              }}
+              style={menuItemBaseStyle}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "color-mix(in srgb, var(--foreground) 8%, transparent)";
+                e.currentTarget.style.backgroundColor = "var(--surface-hover)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "transparent";
@@ -505,20 +490,10 @@ function SkillCardActionMenu({
               }}
               disabled={deleting}
               style={{
-                display: "flex",
-                alignItems: "center",
-                width: "100%",
-                padding: "10px 12px",
-                fontSize: "13px",
-                fontWeight: 500,
+                ...menuItemBaseStyle,
                 color: "var(--destructive)",
-                backgroundColor: "transparent",
-                border: "none",
-                borderRadius: "6px",
                 cursor: deleting ? "wait" : "pointer",
-                textAlign: "left",
                 opacity: deleting ? 0.6 : 1,
-                transition: "background-color 0.15s ease, color 0.15s ease",
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = "var(--color-error-bg)";
@@ -3504,6 +3479,7 @@ function SkillManageDialog({
   t: (key: TranslationPath) => string;
 }) {
   const canAddTag = normalizeSkillTags([tagDraft]).length > 0;
+  const enabledCount = items.filter((i) => i.enabled).length;
 
   return (
     <div
@@ -3515,39 +3491,66 @@ function SkillManageDialog({
         justifyContent: "center",
         backgroundColor: MODAL_OVERLAY_COLOR,
         zIndex: MODAL_LAYER_Z_INDEX,
+        padding: "24px",
       }}
       onClick={onClose}
     >
       <div
+        className="animate-modal"
         style={{
-          width: "min(680px, calc(100vw - 48px))",
-          maxHeight: "calc(100vh - 72px)",
-          backgroundColor: "var(--background)",
-          borderRadius: "14px",
-          border: "1px solid var(--border)",
-          boxShadow: "var(--shadow-xl)",
-          padding: "20px",
+          width: "min(640px, calc(100vw - 48px))",
+          height: "min(560px, calc(100vh - 72px))",
           display: "flex",
           flexDirection: "column",
-          gap: "14px",
+          overflow: "hidden",
+          background: "var(--background)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-xl)",
+          boxShadow: "0 18px 60px rgba(0,0,0,0.25)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
-          <div style={{ minWidth: 0 }}>
-            <h3 style={{ margin: "0 0 6px 0", fontSize: "16px", fontWeight: 600, color: "var(--foreground)" }}>
+        {/* Header */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: "12px",
+            padding: "16px 18px 12px",
+          }}
+        >
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: "14px",
+                fontWeight: 600,
+                color: "var(--foreground)",
+                letterSpacing: "-0.01em",
+              }}
+            >
               {skillName}
             </h3>
-            <p style={{ margin: 0, fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
+            <p
+              style={{
+                margin: "4px 0 0 0",
+                fontSize: "12px",
+                color: "var(--muted-foreground)",
+                lineHeight: 1.45,
+              }}
+            >
               {skillDescription}
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label={doneLabel}
             style={{
-              width: "30px",
-              height: "30px",
-              borderRadius: "8px",
+              width: "26px",
+              height: "26px",
+              borderRadius: "var(--radius-sm)",
               border: "1px solid var(--border)",
               backgroundColor: "var(--secondary)",
               color: "var(--muted-foreground)",
@@ -3557,70 +3560,109 @@ function SkillManageDialog({
               justifyContent: "center",
               padding: 0,
               flexShrink: 0,
+              transition: "background-color 0.15s, color 0.15s, border-color 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "var(--muted)";
+              e.currentTarget.style.color = "var(--foreground)";
+              e.currentTarget.style.borderColor = "var(--ring)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "var(--secondary)";
+              e.currentTarget.style.color = "var(--muted-foreground)";
+              e.currentTarget.style.borderColor = "var(--border)";
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
               <path d="M18 6 6 18M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-            padding: "4px",
-            backgroundColor: "var(--secondary)",
-            border: "1px solid var(--border)",
-            borderRadius: "10px",
-            width: "fit-content",
-          }}
-        >
-          {availableTabs.map((tab) => {
-            const active = activeTab === tab;
-            return (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => onTabChange(tab)}
-                style={{
-                  padding: "7px 12px",
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  color: active ? "var(--primary-foreground)" : "var(--foreground)",
-                  backgroundColor: active ? "var(--foreground)" : "transparent",
-                  border: "none",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                }}
-              >
-                {tab === "tools" ? t("skills.manageToolsTab") : t("skills.manageTagsTab")}
-              </button>
-            );
-          })}
+        {/* Tabs */}
+        <div style={{ padding: "0 18px 12px" }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              padding: "3px",
+              backgroundColor: "var(--secondary)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+            }}
+          >
+            {availableTabs.map((tab) => {
+              const active = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => onTabChange(tab)}
+                  style={{
+                    padding: "5px 10px",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    color: active ? "var(--primary-foreground)" : "var(--foreground)",
+                    backgroundColor: active ? "var(--foreground)" : "transparent",
+                    border: "none",
+                    borderRadius: "var(--radius-sm)",
+                    cursor: "pointer",
+                    transition: "background-color 0.15s, color 0.15s",
+                  }}
+                >
+                  {tab === "tools" ? t("skills.manageToolsTab") : t("skills.manageTagsTab")}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {activeTab === "tools" ? (
-          <>
-            <div style={{ fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
-              <strong style={{ color: "var(--foreground)" }}>{toolsTitle}</strong>
-              <div>{toolsDescription}</div>
-            </div>
+        {/* Content */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: "auto",
+            padding: "16px 18px",
+          }}
+        >
+          {activeTab === "tools" ? (
+            <>
+              <div style={{ fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5, marginBottom: "16px" }}>
+                <strong style={{ display: "block", color: "var(--foreground)", marginBottom: "4px" }}>{toolsTitle}</strong>
+                <div>{toolsDescription}</div>
+              </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-              <div style={{ position: "relative", flex: "1 1 280px", minWidth: "200px" }}>
+              {/* Search */}
+              <div
+                style={{
+                  position: "relative",
+                  display: "flex",
+                  alignItems: "center",
+                  height: "38px",
+                  padding: "0 12px",
+                  marginBottom: "12px",
+                  background: "var(--background)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-md)",
+                  transition: "border-color 0.15s",
+                }}
+                onFocusCapture={(e) => {
+                  e.currentTarget.style.borderColor = "var(--ring)";
+                }}
+                onBlurCapture={(e) => {
+                  e.currentTarget.style.borderColor = "var(--border)";
+                }}
+              >
                 <svg
                   style={{
-                    position: "absolute",
-                    left: "10px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
                     color: "var(--muted-foreground)",
-                    pointerEvents: "none",
+                    flexShrink: 0,
+                    marginRight: "8px",
                   }}
-                  width="13"
-                  height="13"
+                  width="14"
+                  height="14"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -3635,77 +3677,119 @@ function SkillManageDialog({
                   onChange={(e) => onQueryChange(e.target.value)}
                   placeholder={searchPlaceholder}
                   style={{
-                    width: "100%",
-                    padding: "8px 10px 8px 32px",
-                    fontSize: "12px",
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: "13px",
                     lineHeight: 1.4,
-                    border: "1px solid var(--border)",
-                    borderRadius: "8px",
-                    backgroundColor: "var(--secondary)",
-                    color: "var(--foreground)",
+                    background: "transparent",
+                    border: "none",
                     outline: "none",
-                    boxSizing: "border-box",
+                    color: "var(--foreground)",
                   }}
                 />
+                {query.length > 0 && (
+                  <button
+                    type="button"
+                    aria-label="clear"
+                    onClick={() => onQueryChange("")}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "18px",
+                      height: "18px",
+                      color: "var(--muted-foreground)",
+                      background: "transparent",
+                      border: "none",
+                      borderRadius: "var(--radius-sm)",
+                      cursor: "pointer",
+                      flexShrink: 0,
+                      padding: 0,
+                      marginLeft: "6px",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--foreground)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted-foreground)")}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
               </div>
 
-              <label
+              {/* Toolbar */}
+              <div
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: "8px",
-                  fontSize: "12px",
-                  color: "var(--muted-foreground)",
-                  userSelect: "none",
+                  justifyContent: "space-between",
+                  gap: "10px",
+                  padding: "0 0 12px",
                 }}
               >
-                <Toggle
-                  checked={enabledOnly}
-                  onChange={(checked) => onEnabledOnlyChange(checked)}
-                />
-                {enabledOnlyLabel}
-              </label>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "12px",
+                    color: enabledOnly ? "var(--foreground)" : "var(--muted-foreground)",
+                    userSelect: "none",
+                    cursor: "pointer",
+                    transition: "color 0.15s",
+                  }}
+                  onClick={() => onEnabledOnlyChange(!enabledOnly)}
+                >
+                  <Toggle
+                    checked={enabledOnly}
+                    onChange={(checked) => onEnabledOnlyChange(checked)}
+                  />
+                  {enabledOnlyLabel}
+                </label>
 
-              <button
-                type="button"
-                onClick={onBulkToggle}
-                disabled={bulkToggleDisabled}
-                title={bulkToggleTitle}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  padding: "8px 10px",
-                  fontSize: "12px",
-                  fontWeight: 500,
-                  color: "var(--foreground)",
-                  backgroundColor: "var(--secondary)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  cursor: bulkToggleDisabled ? "not-allowed" : "pointer",
-                  opacity: bulkToggleDisabled ? 0.6 : 1,
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
-                </svg>
-                {bulkToggleLabel}
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={onBulkToggle}
+                  disabled={bulkToggleDisabled}
+                  title={bulkToggleTitle}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 10px",
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    color: "var(--foreground)",
+                    backgroundColor: "var(--secondary)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)",
+                    cursor: bulkToggleDisabled ? "not-allowed" : "pointer",
+                    opacity: bulkToggleDisabled ? 0.5 : 1,
+                    transition: "background-color 0.15s, border-color 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (bulkToggleDisabled) return;
+                    e.currentTarget.style.backgroundColor = "var(--muted)";
+                    e.currentTarget.style.borderColor = "var(--ring)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "var(--secondary)";
+                    e.currentTarget.style.borderColor = "var(--border)";
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5" />
+                  </svg>
+                  {bulkToggleLabel}
+                </button>
+              </div>
 
-            <div
-              style={{
-                border: "1px solid var(--border)",
-                borderRadius: "10px",
-                backgroundColor: "var(--secondary)",
-                overflow: "hidden",
-              }}
-            >
-              <div style={{ maxHeight: "360px", overflow: "auto", padding: "6px" }}>
+              {/* List */}
+              <div style={{ padding: "8px 0 0" }}>
                 {items.length === 0 ? (
                   <div
                     style={{
-                      padding: "30px 14px",
+                      padding: "40px 14px",
                       textAlign: "center",
                       fontSize: "12px",
                       color: "var(--muted-foreground)",
@@ -3714,27 +3798,64 @@ function SkillManageDialog({
                     {emptyLabel}
                   </div>
                 ) : (
-                  <div className="tools-grid">
-                    {items.map((item) => (
+                  items.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "12px",
+                        minHeight: "40px",
+                        padding: "8px 12px",
+                        marginBottom: "4px",
+                        borderRadius: "var(--radius-md)",
+                        border: "1px solid transparent",
+                        backgroundColor: item.enabled ? "var(--primary-tint)" : "transparent",
+                        opacity: item.dimmed ? 0.6 : 1,
+                        cursor: item.disabled ? "default" : "pointer",
+                        transition: "background-color 0.12s ease, border-color 0.12s ease",
+                      }}
+                      title={item.tooltip}
+                      onMouseEnter={(e) => {
+                        if (item.disabled) return;
+                        if (!item.enabled) {
+                          e.currentTarget.style.backgroundColor = "var(--surface-hover)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (item.disabled) return;
+                        e.currentTarget.style.backgroundColor = item.enabled
+                          ? "var(--primary-tint)"
+                          : "transparent";
+                      }}
+                      onClick={() => {
+                        if (item.disabled) return;
+                        onToggle(item.id, !item.enabled);
+                      }}
+                    >
                       <div
-                        key={item.id}
                         style={{
                           display: "flex",
                           alignItems: "center",
-                          justifyContent: "space-between",
                           gap: "10px",
-                          minHeight: "48px",
-                          padding: "10px 12px",
-                          borderRadius: "8px",
-                          border: "1px solid var(--border)",
-                          backgroundColor: item.enabled ? "var(--primary-tint)" : "var(--background)",
-                          opacity: item.dimmed ? 0.6 : 1,
+                          minWidth: 0,
+                          flex: 1,
                         }}
-                        title={item.tooltip}
                       >
+                        <span
+                          style={{
+                            width: "6px",
+                            height: "6px",
+                            borderRadius: "50%",
+                            flexShrink: 0,
+                            backgroundColor: item.enabled ? "var(--ember)" : "var(--border)",
+                            transition: "background-color 0.15s",
+                          }}
+                        />
                         <div
                           style={{
-                            fontSize: "14px",
+                            fontSize: "13px",
                             fontWeight: 500,
                             color: "var(--foreground)",
                             lineHeight: 1.35,
@@ -3746,158 +3867,170 @@ function SkillManageDialog({
                         >
                           {item.label}
                         </div>
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
                         <Toggle
                           checked={item.enabled}
                           disabled={item.disabled}
                           onChange={(checked) => onToggle(item.id, checked)}
                         />
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))
                 )}
               </div>
-            </div>
-          </>
-        ) : (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "12px",
-              border: "1px solid var(--border)",
-              borderRadius: "12px",
-              backgroundColor: "var(--secondary)",
-              padding: "14px",
-            }}
-          >
-            <div style={{ fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
-              {t("skills.tagEditorHint")}
-            </div>
+            </>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div style={{ fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
+                {t("skills.tagEditorHint")}
+              </div>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", minHeight: "30px" }}>
-              {tags.length === 0 ? (
-                <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
-                  {t("skills.noTags")}
-                </span>
-              ) : (
-                tags.map((tag) => (
-                  <span
-                    key={tag}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      fontSize: "11px",
-                      fontWeight: 500,
-                      color: "var(--muted-foreground)",
-                      backgroundColor: "var(--primary-tint)",
-                      border: "1px solid var(--primary-tint-border)",
-                      borderRadius: "999px",
-                      padding: "3px 5px 3px 8px",
-                    }}
-                  >
-                    <span>#{tag}</span>
-                    <button
-                      type="button"
-                      onClick={() => onRemoveTag(tag)}
-                      disabled={savingTags}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", minHeight: "30px" }}>
+                {tags.length === 0 ? (
+                  <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                    {t("skills.noTags")}
+                  </span>
+                ) : (
+                  tags.map((tag) => (
+                    <span
+                      key={tag}
                       style={{
                         display: "inline-flex",
                         alignItems: "center",
-                        justifyContent: "center",
-                        width: "18px",
-                        height: "18px",
-                        padding: 0,
+                        gap: "4px",
+                        fontSize: "11px",
+                        fontWeight: 500,
                         color: "var(--muted-foreground)",
-                        backgroundColor: "transparent",
-                        border: "none",
-                        borderRadius: "999px",
+                        backgroundColor: "var(--primary-tint)",
+                        border: "1px solid var(--primary-tint-border)",
+                        borderRadius: "var(--radius-md)",
+                        padding: "3px 5px 3px 8px",
+                      }}
+                    >
+                      <span>#{tag}</span>
+                      <button
+                        type="button"
+                        onClick={() => onRemoveTag(tag)}
+                        disabled={savingTags}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: "18px",
+                          height: "18px",
+                          padding: 0,
+                          color: "var(--muted-foreground)",
+                          backgroundColor: "transparent",
+                          border: "none",
+                          borderRadius: "var(--radius-sm)",
+                          cursor: savingTags ? "wait" : "pointer",
+                        }}
+                        title={t("skills.removeTag")}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input
+                  type="text"
+                  value={tagDraft}
+                  placeholder={t("skills.tagInputPlaceholder")}
+                  onChange={(e) => onTagDraftChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.key === "Enter" || e.key === ",") && !savingTags) {
+                      e.preventDefault();
+                      onAddTag();
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    padding: "8px 10px",
+                    fontSize: "12px",
+                    color: "var(--foreground)",
+                    backgroundColor: "var(--background)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)",
+                    outline: "none",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={onAddTag}
+                  disabled={savingTags || !canAddTag}
+                  style={{
+                    padding: "8px 12px",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    color: "var(--primary-foreground)",
+                    backgroundColor: "var(--foreground)",
+                    border: "none",
+                    borderRadius: "var(--radius-sm)",
+                    cursor: savingTags || !canAddTag ? "not-allowed" : "pointer",
+                    opacity: savingTags || !canAddTag ? 0.5 : 1,
+                  }}
+                >
+                  {t("skills.addTag")}
+                </button>
+              </div>
+
+              {tagSuggestions.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--muted-foreground)" }}>
+                    {t("skills.commonTags")}
+                  </span>
+                  {tagSuggestions.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => onSelectTagSuggestion(tag)}
+                      disabled={savingTags}
+                      style={{
+                        padding: "5px 10px",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        color: "var(--foreground)",
+                        backgroundColor: "var(--background)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius-md)",
                         cursor: savingTags ? "wait" : "pointer",
                       }}
-                      title={t("skills.removeTag")}
                     >
-                      ×
+                      + {tag}
                     </button>
-                  </span>
-                ))
+                  ))}
+                </div>
               )}
             </div>
+          )}
+        </div>
 
-            <div style={{ display: "flex", gap: "8px" }}>
-              <input
-                type="text"
-                value={tagDraft}
-                placeholder={t("skills.tagInputPlaceholder")}
-                onChange={(e) => onTagDraftChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.key === "Enter" || e.key === ",") && !savingTags) {
-                    e.preventDefault();
-                    onAddTag();
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  padding: "8px 10px",
-                  fontSize: "12px",
-                  color: "var(--foreground)",
-                  backgroundColor: "var(--background)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "8px",
-                  outline: "none",
-                }}
-              />
-              <button
-                type="button"
-                onClick={onAddTag}
-                disabled={savingTags || !canAddTag}
-                style={{
-                  padding: "8px 12px",
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  color: "var(--primary-foreground)",
-                  backgroundColor: "var(--foreground)",
-                  border: "none",
-                  borderRadius: "8px",
-                  cursor: savingTags || !canAddTag ? "not-allowed" : "pointer",
-                  opacity: savingTags || !canAddTag ? 0.5 : 1,
-                }}
-              >
-                {t("skills.addTag")}
-              </button>
-            </div>
-
-            {tagSuggestions.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--muted-foreground)" }}>
-                  {t("skills.commonTags")}
-                </span>
-                {tagSuggestions.map((tag) => (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() => onSelectTagSuggestion(tag)}
-                    disabled={savingTags}
-                    style={{
-                      padding: "5px 10px",
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      color: "var(--foreground)",
-                      backgroundColor: "var(--background)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "999px",
-                      cursor: savingTags ? "wait" : "pointer",
-                    }}
-                  >
-                    + {tag}
-                  </button>
-                ))}
-              </div>
-            )}
+        {/* Footer */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            padding: "10px 18px 14px",
+            borderTop: "1px solid var(--border)",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "11px",
+              color: "var(--muted-foreground)",
+              fontFamily: "var(--font-mono)",
+              letterSpacing: "0.02em",
+            }}
+          >
+            {activeTab === "tools" ? `${enabledCount}/${items.length}` : `${tags.length}`}
           </div>
-        )}
-
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <button
             onClick={onClose}
             style={{
@@ -3906,10 +4039,13 @@ function SkillManageDialog({
               color: "var(--primary-foreground)",
               backgroundColor: "var(--foreground)",
               border: "none",
-              borderRadius: "8px",
-              padding: "7px 12px",
+              borderRadius: "var(--radius-sm)",
+              padding: "7px 16px",
               cursor: "pointer",
+              transition: "opacity 0.15s",
             }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
           >
             {doneLabel}
           </button>
