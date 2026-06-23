@@ -200,16 +200,17 @@ function SkillsHeaderMoreMenu({
     display: "flex",
     alignItems: "center",
     width: "100%",
-    padding: "7px 10px",
+    padding: "6px 10px",
     fontSize: "12px",
     fontWeight: 500,
     color: "var(--popover-foreground)",
     backgroundColor: "transparent",
     border: "none",
-    borderRadius: "var(--radius-sm)",
+    borderRadius: "var(--radius-md)",
     cursor: "pointer",
     textAlign: "left",
-    transition: "background-color 0.15s ease",
+    transition: "background-color 0.12s ease, color 0.12s ease",
+    position: "relative",
   };
 
   return (
@@ -253,22 +254,16 @@ function SkillsHeaderMoreMenu({
 
       {open && (
         <>
-          <button
-            type="button"
-            aria-label={label}
-            onClick={() => setOpen(false)}
+          <div
             style={{
               position: "fixed",
               inset: 0,
-              background: "transparent",
-              border: "none",
-              padding: 0,
-              margin: 0,
-              cursor: "default",
               zIndex: MODAL_LAYER_Z_INDEX - 1,
             }}
+            onClick={() => setOpen(false)}
           />
           <div
+            className="glass-elevated animate-popover"
             style={{
               position: "absolute",
               top: "calc(100% + 6px)",
@@ -276,14 +271,13 @@ function SkillsHeaderMoreMenu({
               display: "flex",
               flexDirection: "column",
               gap: "2px",
-              minWidth: "160px",
-              padding: "6px",
-              backgroundColor: "var(--popover)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius-md)",
-              boxShadow: "var(--shadow-lg)",
-              backdropFilter: "blur(10px)",
+              minWidth: "180px",
+              maxHeight: "320px",
+              overflow: "auto",
+              padding: "8px",
+              borderRadius: "var(--radius-lg)",
               zIndex: MODAL_LAYER_Z_INDEX,
+              background: "var(--background)",
             }}
           >
             {items.map((item) => (
@@ -299,12 +293,13 @@ function SkillsHeaderMoreMenu({
                 }}
                 style={{
                   ...menuItemBaseStyle,
+                  color: item.disabled ? "var(--muted-foreground)" : "var(--popover-foreground)",
                   cursor: item.disabled ? "not-allowed" : "pointer",
-                  opacity: item.disabled ? 0.6 : 1,
+                  opacity: item.disabled ? 0.5 : 1,
                 }}
                 onMouseEnter={(e) => {
                   if (!item.disabled) {
-                    e.currentTarget.style.backgroundColor = "color-mix(in srgb, var(--foreground) 8%, transparent)";
+                    e.currentTarget.style.backgroundColor = "var(--surface-hover)";
                   }
                 }}
                 onMouseLeave={(e) => {
@@ -1465,23 +1460,22 @@ export function Skills() {
               width: 32,
               height: 32,
               padding: 0,
-              color: "var(--muted-foreground)",
-              backgroundColor: "transparent",
+              color: isBatchManageMode ? "var(--muted-foreground)" : "var(--primary-foreground)",
+              backgroundColor: isBatchManageMode ? "transparent" : "var(--primary)",
               border: "1px solid transparent",
               borderRadius: "6px",
               cursor: isBatchManageMode ? "not-allowed" : "pointer",
-              transition: "color 0.15s, background-color 0.15s",
+              transition: "color 0.15s, background-color 0.15s, box-shadow 0.15s",
               opacity: isBatchManageMode ? 0.5 : 1,
+              boxShadow: isBatchManageMode ? "none" : "var(--shadow-sm)",
             }}
             onMouseEnter={(e) => {
               if (!isBatchManageMode) {
-                e.currentTarget.style.color = "var(--foreground)";
-                e.currentTarget.style.backgroundColor = "var(--secondary)";
+                e.currentTarget.style.backgroundColor = "color-mix(in srgb, var(--primary) 85%, transparent)";
               }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = "var(--muted-foreground)";
-              e.currentTarget.style.backgroundColor = "transparent";
+              e.currentTarget.style.backgroundColor = isBatchManageMode ? "transparent" : "var(--primary)";
             }}
             onClick={() => {
               if (!isBatchManageMode) {
