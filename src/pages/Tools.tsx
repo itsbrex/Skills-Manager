@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+
 import { PageLoader } from "@/components/ui/loading";
 import { sortToolsByEnabled } from "./tools/sortTools";
 import {
@@ -1423,11 +1423,10 @@ export function Tools() {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
-            backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            backgroundColor: 'rgba(0, 0, 0, 0.45)',
             zIndex: 50,
             padding: '24px',
           }}
@@ -1437,54 +1436,90 @@ export function Tools() {
             }
           }}
         >
-          <Card
+          <div
+            className="animate-modal"
             style={{
-              width: 'min(720px, 92vw)',
+              width: 'min(520px, 92vw)',
               maxHeight: '88vh',
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
               background: 'var(--background)',
               border: '1px solid var(--border)',
-              borderRadius: '16px',
+              borderRadius: 'var(--radius-xl)',
+              boxShadow: '0 18px 60px rgba(0,0,0,0.25)',
             }}
             onClick={(event) => event.stopPropagation()}
           >
-            <CardHeader style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <CardTitle style={{ fontSize: '16px' }}>
-                  {editingToolId ? t("tools.customEditTitle") : t("tools.customCreateTitle")}
-                </CardTitle>
-                <button
-                  onClick={() => setFormOpen(false)}
-                  title={t("common.cancel")}
+            {/* Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: '12px',
+                padding: '16px 18px 12px',
+                borderBottom: '1px solid var(--border)',
+              }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <h3
                   style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border)',
-                    background: 'var(--background)',
-                    color: 'var(--muted-foreground)',
-                    cursor: 'pointer',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--muted)';
-                    e.currentTarget.style.color = 'var(--foreground)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--background)';
-                    e.currentTarget.style.color = 'var(--muted-foreground)';
+                    margin: 0,
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: 'var(--foreground)',
+                    letterSpacing: '-0.01em',
                   }}
                 >
-                  <X style={{ width: '14px', height: '14px' }} />
-                </button>
+                  {editingToolId ? t("tools.customEditTitle") : t("tools.customCreateTitle")}
+                </h3>
+                <p
+                  style={{
+                    margin: '4px 0 0 0',
+                    fontSize: '12px',
+                    color: 'var(--muted-foreground)',
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {editingToolId ? t("tools.customIdLocked") : t("tools.customEmptyDesc")}
+                </p>
               </div>
-            </CardHeader>
+              <button
+                onClick={() => setFormOpen(false)}
+                title={t("common.cancel")}
+                style={{
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--secondary)',
+                  color: 'var(--muted-foreground)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
+                  flexShrink: 0,
+                  transition: 'background-color 0.15s, color 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--muted)';
+                  e.currentTarget.style.color = 'var(--foreground)';
+                  e.currentTarget.style.borderColor = 'var(--ring)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--secondary)';
+                  e.currentTarget.style.color = 'var(--muted-foreground)';
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                }}
+              >
+                <X style={{ width: '14px', height: '14px' }} />
+              </button>
+            </div>
 
-            <CardContent style={{ padding: '18px 20px', overflow: 'auto' }}>
+            {/* Body */}
+            <div style={{ padding: '16px 18px', overflow: 'auto' }}>
               {formError && (
                 <div style={{ marginBottom: '16px' }}>
                   <Alert variant="destructive">
@@ -1493,7 +1528,7 @@ export function Tools() {
                 </div>
               )}
 
-              <div className="compact-grid">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div>
                   <label style={fieldLabelStyle}>{t("tools.customNameLabel")}</label>
                   <Input
@@ -1518,11 +1553,6 @@ export function Tools() {
                       WebkitTextFillColor: editingToolId ? 'var(--muted-foreground)' : 'var(--foreground)',
                     }}
                   />
-                  {editingToolId && (
-                    <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
-                      {t("tools.customIdLocked")}
-                    </span>
-                  )}
                   {!editingToolId && (
                     <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>
                       {t("tools.customIdHint")}
@@ -1585,7 +1615,7 @@ export function Tools() {
                     </button>
                   </div>
                 </div>
-                <div style={{ gridColumn: '1 / -1' }}>
+                <div>
                   <label style={fieldLabelStyle}>{t("tools.customIconPathLabel")}</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <Input
@@ -1614,27 +1644,42 @@ export function Tools() {
                   </div>
                 </div>
               </div>
-            </CardContent>
+            </div>
 
-            <CardFooter style={{
-              padding: '16px 20px',
-              borderTop: '1px solid var(--border)',
-              justifyContent: 'flex-end',
-              gap: '10px',
-            }}>
+            {/* Footer */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: '10px',
+                padding: '12px 18px 14px',
+                borderTop: '1px solid var(--border)',
+              }}
+            >
               <button
                 onClick={() => setFormOpen(false)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  padding: '8px 16px',
-                  borderRadius: '8px',
+                  padding: '7px 14px',
+                  borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border)',
                   background: 'var(--background)',
                   color: 'var(--foreground)',
                   cursor: 'pointer',
-                  fontSize: '13px',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  transition: 'background-color 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--muted)';
+                  e.currentTarget.style.borderColor = 'var(--ring)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--background)';
+                  e.currentTarget.style.borderColor = 'var(--border)';
                 }}
               >
                 {t("common.cancel")}
@@ -1645,20 +1690,23 @@ export function Tools() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  padding: '8px 18px',
-                  borderRadius: '8px',
+                  padding: '7px 16px',
+                  borderRadius: 'var(--radius-sm)',
                   border: 'none',
                   background: 'var(--foreground)',
                   color: 'var(--primary-foreground)',
                   cursor: 'pointer',
-                  fontSize: '13px',
+                  fontSize: '12px',
                   fontWeight: 500,
+                  transition: 'opacity 0.15s',
                 }}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.85'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
               >
                 {t("common.save")}
               </button>
-            </CardFooter>
-          </Card>
+            </div>
+          </div>
         </div>
       )}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
