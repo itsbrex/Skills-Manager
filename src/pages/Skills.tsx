@@ -271,7 +271,7 @@ function SkillsHeaderMoreMenu({
               display: "flex",
               flexDirection: "column",
               gap: "2px",
-              minWidth: "180px",
+              minWidth: "140px",
               maxHeight: "320px",
               overflow: "auto",
               padding: "8px",
