@@ -11,6 +11,7 @@ import { useTranslation } from "@/i18n";
 import { useTheme } from "@/hooks/useTheme";
 import { useSkillTranslation, makeTranslationKey } from "@/hooks/useSkillTranslation";
 import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
+import { FavoriteIconButton } from "@/components/favorites/FavoriteIconButton";
 import {
   MODAL_LAYER_Z_INDEX,
   MODAL_MAX_VIEWPORT_WIDTH,
@@ -26,6 +27,8 @@ interface SkillDetailModalProps {
   onClose: () => void;
   onInstall: (skill: MarketplaceSkill, event?: MouseEvent) => void;
   installing: boolean;
+  isFavorite: boolean;
+  onToggleFavorite: (skill: MarketplaceSkill) => void;
 }
 
 interface ParsedFrontmatter {
@@ -83,7 +86,7 @@ function clearFileContentCacheForTree(tree: SkillFileNode | null) {
   }
 }
 
-export function SkillDetailModal({ skill, onClose, onInstall, installing }: SkillDetailModalProps) {
+export function SkillDetailModal({ skill, onClose, onInstall, installing, isFavorite, onToggleFavorite }: SkillDetailModalProps) {
   const { t, language } = useTranslation();
   const { theme } = useTheme();
   const translation = useSkillTranslation();
@@ -533,6 +536,13 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing }: Skil
                   <ExternalLink size={15} />
                 </span>
               )}
+              <FavoriteIconButton
+                favorited={isFavorite}
+                onClick={() => onToggleFavorite(skill)}
+                favoriteLabel={t("skills.favoriteAction")}
+                unfavoriteLabel={t("skills.unfavoriteAction")}
+                size={24}
+              />
               <TranslateIconButton
                 hasTranslation={cachedTranslation != null}
                 showingTranslation={showingTranslation}

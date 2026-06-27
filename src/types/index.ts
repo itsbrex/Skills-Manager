@@ -55,9 +55,25 @@ export interface InstalledSkillPackage {
 
 export interface SkillMetadata {
   tags: string[];
+  favorited_at?: number | null;
 }
 
 export type SkillMetadataMap = Record<string, SkillMetadata>;
+
+export interface MarketplaceFavoriteMeta {
+  favorited_at: number;
+  name: string;
+  description?: string | null;
+  source_id: string;
+  source_name: string;
+  repo_url?: string | null;
+  skill_path?: string | null;
+  external_url?: string | null;
+  install_count?: number | null;
+  tags: string[];
+}
+
+export type MarketplaceFavoriteMap = Record<string, MarketplaceFavoriteMeta>;
 
 export interface ToolConfig {
   enabled: boolean;
@@ -220,6 +236,7 @@ export interface AppConfig {
   tools: Record<string, ToolConfig>;
   custom_tools?: Record<string, CustomToolConfig>;
   skill_metadata?: SkillMetadataMap;
+  marketplace_favorites?: MarketplaceFavoriteMap;
   preferences?: UserPreferences;
   marketplace_sources?: MarketplaceSource[];
   poll_client_state?: PollClientStateConfig | null;

@@ -21,6 +21,8 @@ import { ToastContainer, useToast } from "@/components/ui/toast";
 import { InstallCountBadge } from "@/components/marketplace/InstallCountBadge";
 import {
   InstallResult,
+  MarketplaceFavoriteMap,
+  MarketplaceFavoriteMeta,
   MarketplaceSkill,
   MarketplaceSkillsResponse,
   MarketplaceSource,
@@ -29,6 +31,8 @@ import {
 } from "@/types";
 import { useTranslation } from "@/i18n";
 import { useSkillTranslation, makeTranslationKey } from "@/hooks/useSkillTranslation";
+import { useFavorites } from "@/hooks/useFavorites";
+import { FavoriteIconButton } from "@/components/favorites/FavoriteIconButton";
 import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
 import { SkillDetailModal } from "@/components/marketplace/SkillDetailModal";
 import { formatInstallCountLabel } from "@/pages/marketplace/formatInstallCount";
@@ -145,10 +149,36 @@ function skeletonBarStyle(widthFraction: number): CSSProperties {
   };
 }
 
+/** 将市场收藏快照转换为 MarketplaceSkill，用于断网时展示。
+ *  install_status 无法从快照得知，默认 not_installed；调用方可用当前 skills 列表覆盖。 */
+function snapshotToMarketplaceSkill(id: string, meta: MarketplaceFavoriteMeta): MarketplaceSkill {
+  return {
+    id,
+    slug: null,
+    name: meta.name,
+    description: meta.description ?? null,
+    author: null,
+    source_id: meta.source_id,
+    source_name: meta.source_name,
+    install_count: meta.install_count ?? null,
+    install_url: null,
+    created_at: null,
+    repo_url: meta.repo_url ?? null,
+    skill_path: meta.skill_path ?? null,
+    external_url: meta.external_url ?? null,
+    remote_revision: null,
+    tags: meta.tags,
+    install_status: "not_installed",
+  };
+}
+
 export function Marketplace() {
   const { t, language } = useTranslation();
   const translation = useSkillTranslation();
   const navigate = useNavigate();
+  const favorites = useFavorites(undefined);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favoriteSnapshot, setFavoriteSnapshot] = useState<MarketplaceFavoriteMap>({});
   const [translatingMarketIds, setTranslatingMarketIds] = useState<Set<string>>(new Set());
   const { toasts, addToast, removeToast } = useToast();
   const [skills, setSkills] = useState<MarketplaceSkill[]>(
@@ -293,6 +323,11 @@ export function Marketplace() {
   }, []);
 
   useEffect(() => {
+    // 仅看收藏时跳过远程加载，使用本地快照
+    if (favoritesOnly) {
+      setSearching(false);
+      return;
+    }
     const loadSeq = remoteLoadSeqRef.current + 1;
     remoteLoadSeqRef.current = loadSeq;
     setSearching(true);
@@ -305,7 +340,20 @@ export function Marketplace() {
         setSearching(false);
       }
     });
-  }, [loadSkills, normalizedRemoteQuery, selectedSourceIds]);
+  }, [loadSkills, normalizedRemoteQuery, selectedSourceIds, favoritesOnly]);
+
+  // 切换到"仅看收藏"时加载本地快照
+  useEffect(() => {
+    if (!favoritesOnly) return;
+    let cancelled = false;
+    void favorites.loadMarketplaceFavorites().then((map) => {
+      if (cancelled) return;
+      setFavoriteSnapshot(map ?? {});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [favoritesOnly, favorites]);
 
   useEffect(() => {
     if (skills.length === 0) return;
@@ -499,7 +547,7 @@ export function Marketplace() {
   ]);
 
   const handleLoadMore = useCallback(async () => {
-    if (loadingMore || refreshing || initialLoading || !hasMore) {
+    if (favoritesOnly || loadingMore || refreshing || initialLoading || !hasMore) {
       return;
     }
     setLoadingMore(true);
@@ -515,6 +563,7 @@ export function Marketplace() {
     }
   }, [
     currentPage,
+    favoritesOnly,
     hasMore,
     initialLoading,
     loadSkills,
@@ -739,6 +788,28 @@ export function Marketplace() {
     }
   }, [showMarketplaceError, t]);
 
+  const handleToggleFavorite = useCallback(async (skill: MarketplaceSkill, event?: MouseEvent) => {
+    event?.stopPropagation();
+    const willFavorite = !favorites.isMarketplaceFavorite(skill.id);
+    try {
+      await favorites.toggleMarketplaceFavorite(skill, willFavorite);
+      // 若当前处于"仅看收藏"，取消收藏后需刷新快照以从列表移除
+      if (favoritesOnly && !willFavorite) {
+        const fresh = await favorites.loadMarketplaceFavorites();
+        setFavoriteSnapshot(fresh ?? {});
+      }
+      addToast(
+        t(willFavorite ? "skills.favoriteSuccess" : "skills.unfavoriteSuccess").replace(
+          "{name}",
+          skill.name,
+        ),
+        "success",
+      );
+    } catch (err) {
+      showMarketplaceError(err, t("marketplace.networkError"));
+    }
+  }, [addToast, favorites, favoritesOnly, showMarketplaceError, t]);
+
   const handleMainScroll = useCallback((event: UIEvent<HTMLElement>) => {
     const el = event.currentTarget;
     const shouldShow = el.scrollTop > el.clientHeight;
@@ -750,7 +821,7 @@ export function Marketplace() {
   }, []);
 
   useEffect(() => {
-    if (!hasMore || initialLoading || refreshing) {
+    if (favoritesOnly || !hasMore || initialLoading || refreshing) {
       return;
     }
     const target = loadMoreRef.current;
@@ -769,7 +840,7 @@ export function Marketplace() {
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [handleLoadMore, hasMore, initialLoading, refreshing, skills.length]);
+  }, [favoritesOnly, handleLoadMore, hasMore, initialLoading, refreshing, skills.length]);
 
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -780,6 +851,36 @@ export function Marketplace() {
   }, [skills]);
 
   const filteredSkills = useMemo(() => {
+    // 仅看收藏：从本地快照构建列表，用当前 skills 数据覆盖（保留 install_status 等实时信息）
+    if (favoritesOnly) {
+      const skillsMap = new Map(skills.map((s) => [s.id, s]));
+      const list = Object.entries(favoriteSnapshot).map(([id, meta]) => {
+        const existing = skillsMap.get(id);
+        return existing ?? snapshotToMarketplaceSkill(id, meta);
+      });
+      const filtered = list.filter((skill) => {
+        const matchesTags = selectedTags.length === 0
+          || selectedTags.some((tag) => skill.tags.includes(tag));
+        return matchesTags;
+      });
+      if (sortMode === "default") {
+        // 默认按收藏时间倒序（最新收藏在前）
+        const tsMap: Record<string, number> = {};
+        Object.entries(favoriteSnapshot).forEach(([id, meta]) => {
+          tsMap[id] = meta.favorited_at;
+        });
+        return filtered.sort((a, b) => (tsMap[b.id] ?? 0) - (tsMap[a.id] ?? 0));
+      }
+      const sorted = [...filtered];
+      if (sortMode === "name") {
+        sorted.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+      } else if (sortMode === "newest") {
+        sorted.sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
+      } else if (sortMode === "popular") {
+        sorted.sort((a, b) => (b.install_count ?? 0) - (a.install_count ?? 0));
+      }
+      return sorted;
+    }
     const filtered = skills.filter((skill) => {
       const matchesTags = selectedTags.length === 0
         || selectedTags.some((tag) => skill.tags.includes(tag));
@@ -797,7 +898,7 @@ export function Marketplace() {
       sorted.sort((a, b) => (b.install_count ?? 0) - (a.install_count ?? 0));
     }
     return sorted;
-  }, [selectedTags, skills, sortMode]);
+  }, [selectedTags, skills, sortMode, favoritesOnly, favoriteSnapshot]);
 
   useEffect(() => {
     persistSortMode(sortMode);
@@ -1045,6 +1146,52 @@ export function Marketplace() {
                 </>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => setFavoritesOnly((v) => !v)}
+              title={t("skills.favoritesOnly")}
+              aria-label={t("skills.favoritesOnly")}
+              aria-pressed={favoritesOnly}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 32,
+                height: 32,
+                padding: 0,
+                color: favoritesOnly ? 'var(--primary)' : (sortDropdownOpen ? 'var(--foreground)' : 'var(--muted-foreground)'),
+                backgroundColor: favoritesOnly ? 'var(--primary-tint)' : 'transparent',
+                border: favoritesOnly ? '1px solid var(--primary-tint-border)' : '1px solid transparent',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                transition: 'color 0.15s, background-color 0.15s, border-color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                if (!favoritesOnly) {
+                  e.currentTarget.style.color = 'var(--foreground)';
+                  e.currentTarget.style.backgroundColor = 'var(--secondary)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!favoritesOnly) {
+                  e.currentTarget.style.color = 'var(--muted-foreground)';
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill={favoritesOnly ? 'currentColor' : 'none'}
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+            </button>
             {showSourceFilter && (
               <div style={{ position: 'relative' }}>
                 <button
@@ -1312,9 +1459,11 @@ export function Marketplace() {
               <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--foreground)' }}>
                 {searching
                   ? t("loading.default")
-                  : skills.length === 0
-                    ? t("marketplace.noSkills")
-                    : t("marketplace.noMatch")}
+                  : favoritesOnly
+                    ? t("skills.favoritesEmpty")
+                    : skills.length === 0
+                      ? t("marketplace.noSkills")
+                      : t("marketplace.noMatch")}
               </div>
             </div>
           ) : (
@@ -1422,6 +1571,13 @@ export function Marketplace() {
                                 <ExternalLink size={13} />
                               </span>
                             )}
+                            <FavoriteIconButton
+                              favorited={favorites.isMarketplaceFavorite(skill.id)}
+                              onClick={(e) => void handleToggleFavorite(skill, e)}
+                              favoriteLabel={t("skills.favoriteAction")}
+                              unfavoriteLabel={t("skills.unfavoriteAction")}
+                              size={22}
+                            />
                             <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
                               <TranslateIconButton
                                 hasTranslation={cachedTranslation != null}
@@ -1599,7 +1755,7 @@ export function Marketplace() {
             </div>
           )}
 
-          {hasMore && (
+          {hasMore && !favoritesOnly && (
             <>
               <div ref={loadMoreRef} style={{ height: '1px' }} />
               {loadingMore && (
@@ -1664,6 +1820,8 @@ export function Marketplace() {
           onClose={() => setSelectedSkill(null)}
           onInstall={handleInstall}
           installing={updatingAll || installingSkill === selectedSkill.id}
+          isFavorite={favorites.isMarketplaceFavorite(selectedSkill.id)}
+          onToggleFavorite={(skill) => void handleToggleFavorite(skill)}
         />
       )}
 

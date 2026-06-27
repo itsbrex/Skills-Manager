@@ -109,7 +109,7 @@ impl ConfigManager {
             };
 
             if normalized
-                .insert(normalized_id, SkillMetadata { tags })
+                .insert(normalized_id, SkillMetadata { tags, favorited_at: None })
                 .is_some()
             {
                 changed = true;
@@ -743,6 +743,7 @@ mod tests {
                 "shared-skill".to_string(),
                 SkillMetadata {
                     tags: vec!["legacy-tag".to_string()],
+                    ..Default::default()
                 },
             );
 
@@ -753,6 +754,7 @@ mod tests {
                 loaded.skill_metadata.get("global:shared-skill"),
                 Some(&SkillMetadata {
                     tags: vec!["legacy-tag".to_string()],
+                    ..Default::default()
                 })
             );
             assert_eq!(loaded.skill_metadata.get("shared-skill"), None);

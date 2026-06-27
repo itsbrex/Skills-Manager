@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties, type MouseEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
@@ -30,6 +30,8 @@ import {
   type SkillFileTranslationProgress,
 } from "@/hooks/useSkillTranslation";
 import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
+import { useFavorites } from "@/hooks/useFavorites";
+import { FavoriteIconButton } from "@/components/favorites/FavoriteIconButton";
 import {
   applyTagFilterAction,
   getGroupMetadataKey,
@@ -609,6 +611,7 @@ export function Skills() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [untaggedOnly, setUntaggedOnly] = useState(false);
   const [scopeFilter, setScopeFilter] = useState<"all" | "global" | "project">("all");
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
   const [deletingSkill, setDeletingSkill] = useState<string | null>(null);
   const [toolEditorSkillId, setToolEditorSkillId] = useState<string | null>(null);
@@ -643,9 +646,27 @@ export function Skills() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { toasts, addToast, updateToast, removeToast } = useToast();
   const skillMetadata = config?.skill_metadata;
+  const favorites = useFavorites(skillMetadata);
   const listContainerRef = useRef<HTMLElement | null>(null);
   const hasRestoredScrollRef = useRef(false);
   const highlightTargetRef = useRef<HTMLDivElement | null>(null);
+
+  const handleToggleFavorite = useCallback(async (instanceId: string, skillName: string, event: MouseEvent) => {
+    event.stopPropagation();
+    const willFavorite = !favorites.isSkillFavorite(instanceId);
+    try {
+      await favorites.toggleSkillFavorite(instanceId, willFavorite);
+      addToast(
+        t(willFavorite ? "skills.favoriteSuccess" : "skills.unfavoriteSuccess").replace(
+          "{name}",
+          skillName,
+        ),
+        "success",
+      );
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [addToast, favorites, t]);
 
   const handleOpenUnifiedItem = useCallback(async (item: UnifiedSkillListItem) => {
     if (!item.openPath) {
@@ -1294,17 +1315,36 @@ export function Skills() {
     return { global: globalCount, project: projectCount };
   }, [unifiedItems]);
 
-  const filteredUnifiedItems = useMemo(() => filterUnifiedSkillItems(unifiedItems, {
-    searchQuery,
-    selectedTags,
-    untaggedOnly,
-    scopeFilter,
-  }), [searchQuery, selectedTags, unifiedItems, untaggedOnly, scopeFilter]);
+  const filteredUnifiedItems = useMemo(() => {
+    const base = filterUnifiedSkillItems(unifiedItems, {
+      searchQuery,
+      selectedTags,
+      untaggedOnly,
+      scopeFilter,
+    });
+    if (!favoritesOnly) return base;
+    // 仅看收藏：只保留已收藏的 skill（group 项不参与）
+    return base.filter((item) =>
+      item.kind === "skill" && item.skill
+        ? favorites.isSkillFavorite(item.skill.instance_id)
+        : false,
+    );
+  }, [searchQuery, selectedTags, unifiedItems, untaggedOnly, scopeFilter, favoritesOnly, favorites]);
 
-  const sortedUnifiedItems = useMemo(
-    () => sortUnifiedSkillItems(filteredUnifiedItems, searchQuery),
-    [filteredUnifiedItems, searchQuery],
-  );
+  const sortedUnifiedItems = useMemo(() => {
+    const sorted = sortUnifiedSkillItems(filteredUnifiedItems, searchQuery);
+    // 已收藏的 skill 置顶（按收藏时间倒序，最新收藏在前）
+    const ts = favorites.skillFavoriteTimestamps;
+    if (ts.size === 0) return sorted;
+    return [...sorted].sort((a, b) => {
+      const aFav = a.kind === "skill" && a.skill ? ts.get(a.skill.instance_id) : undefined;
+      const bFav = b.kind === "skill" && b.skill ? ts.get(b.skill.instance_id) : undefined;
+      if (aFav && bFav) return bFav - aFav;
+      if (aFav) return -1;
+      if (bFav) return 1;
+      return 0;
+    });
+  }, [filteredUnifiedItems, searchQuery, favorites.skillFavoriteTimestamps]);
 
   useEffect(() => {
     const highlight = searchParams.get("highlight");
@@ -2328,6 +2368,53 @@ export function Skills() {
         actions={
           <>
             <RefreshButton onClick={handleRefresh} loading={refreshing} iconOnly />
+            <button
+              type="button"
+              onClick={() => setFavoritesOnly((v) => !v)}
+              title={t("skills.favoritesOnly")}
+              aria-label={t("skills.favoritesOnly")}
+              aria-pressed={favoritesOnly}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 32,
+                height: 32,
+                padding: 0,
+                color: favoritesOnly ? 'var(--primary)' : 'var(--muted-foreground)',
+                backgroundColor: favoritesOnly ? 'var(--primary-tint)' : 'transparent',
+                border: favoritesOnly ? '1px solid var(--primary-tint-border)' : '1px solid transparent',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                transition: 'color 0.15s, background-color 0.15s, border-color 0.15s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                if (!favoritesOnly) {
+                  e.currentTarget.style.color = 'var(--foreground)';
+                  e.currentTarget.style.backgroundColor = 'var(--secondary)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!favoritesOnly) {
+                  e.currentTarget.style.color = 'var(--muted-foreground)';
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill={favoritesOnly ? 'currentColor' : 'none'}
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+            </button>
 
             {showTagFilterControl && (
               <div style={{ position: "relative" }}>
@@ -2967,6 +3054,13 @@ export function Skills() {
 
                       {!isBatchManageMode && item.kind === "skill" && item.skill && (
                         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, minWidth: 0 }}>
+                          <FavoriteIconButton
+                            favorited={favorites.isSkillFavorite(item.skill.instance_id)}
+                            onClick={(e) => void handleToggleFavorite(item.skill!.instance_id, cardTitle, e)}
+                            favoriteLabel={t("skills.favoriteAction")}
+                            unfavoriteLabel={t("skills.unfavoriteAction")}
+                            size={28}
+                          />
                           {fileProgressText && (
                             <div
                               role="status"

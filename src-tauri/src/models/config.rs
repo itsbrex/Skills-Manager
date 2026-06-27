@@ -45,6 +45,31 @@ pub struct LlmProvider {
 pub struct SkillMetadata {
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub favorited_at: Option<i64>,
+}
+
+/// 收藏时的市场 skill 快照，断网也能展示基本信息
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MarketplaceFavoriteMeta {
+    pub favorited_at: i64,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub source_id: String,
+    #[serde(default)]
+    pub source_name: String,
+    #[serde(default)]
+    pub repo_url: Option<String>,
+    #[serde(default)]
+    pub skill_path: Option<String>,
+    #[serde(default)]
+    pub external_url: Option<String>,
+    #[serde(default)]
+    pub install_count: Option<u64>,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 fn default_theme() -> String {
@@ -181,6 +206,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub skill_metadata: HashMap<String, SkillMetadata>,
     #[serde(default)]
+    pub marketplace_favorites: HashMap<String, MarketplaceFavoriteMeta>,
+    #[serde(default)]
     pub preferences: Option<UserPreferences>,
     #[serde(default)]
     pub marketplace_sources: Option<Vec<MarketplaceSource>>,
@@ -223,6 +250,7 @@ impl Default for AppConfig {
             tools: HashMap::new(),
             custom_tools: HashMap::new(),
             skill_metadata: HashMap::new(),
+            marketplace_favorites: HashMap::new(),
             preferences: Some(UserPreferences::default()),
             marketplace_sources: Some(default_marketplace_sources()),
             projects: Vec::new(),
@@ -355,6 +383,7 @@ mod tests {
             "react-playground".to_string(),
             SkillMetadata {
                 tags: vec!["react".to_string(), "frontend".to_string()],
+                ..Default::default()
             },
         );
         config.skill_metadata = metadata;
@@ -366,6 +395,7 @@ mod tests {
             restored.skill_metadata.get("react-playground"),
             Some(&SkillMetadata {
                 tags: vec!["react".to_string(), "frontend".to_string()],
+                ..Default::default()
             })
         );
     }

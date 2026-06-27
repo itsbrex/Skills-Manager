@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod config;
 pub mod editors;
+pub mod favorites;
 pub mod feedback;
 pub mod files;
 pub mod llm;
@@ -18,6 +19,9 @@ pub use auth::{
 pub use config::{get_config, is_initialized, mark_initialized, save_config};
 pub use editors::{
     detect_available_editors, get_available_editors, open_in_editor, refresh_editors,
+};
+pub use favorites::{
+    list_marketplace_favorites, toggle_marketplace_favorite, toggle_skill_favorite,
 };
 pub use feedback::submit_feedback;
 pub use files::{
