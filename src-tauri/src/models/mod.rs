@@ -7,7 +7,6 @@ pub mod skill_package;
 pub mod tool;
 pub mod update;
 
-pub use auth::{AuthProfile, AuthSession};
 pub use config::{
     AppConfig, CustomToolConfig, LlmProvider, MarketplaceFavoriteMeta, ProjectBinding,
     SkillMetadata, ToolConfig,

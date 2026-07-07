@@ -425,6 +425,7 @@ struct ClawhubVersionRef {
     version: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ClawhubStats {
@@ -475,15 +476,17 @@ struct ClawhubSearchResponse {
 }
 
 /// clawhub /api/v1/skills/{slug}?owner= 详情响应
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ClawhubDetailResponse {
+pub(crate) struct ClawhubDetailResponse {
     skill: ClawhubDetailSkill,
     #[serde(rename = "latestVersion")]
     latest_version: Option<ClawhubVersionInfo>,
     owner: Option<ClawhubOwner>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ClawhubDetailSkill {
@@ -509,6 +512,7 @@ struct ClawhubOwner {
 }
 
 /// 409 AMBIGUOUS_SKILL_SLUG 响应体，列出所有候选 owner
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ClawhubAmbiguousResponse {
