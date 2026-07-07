@@ -18,6 +18,7 @@ pub enum SourceType {
     Api,
     Crawler,
     Manual,
+    ClawhubApi,
     #[serde(other)]
     Unknown,
 }
@@ -45,6 +46,13 @@ pub struct MarketplaceSkill {
     pub remote_revision: Option<String>,
     pub tags: Vec<String>,
     pub install_status: InstallStatus,
+    // clawhub.ai 专用字段：clawhub 源的 skill 用 slug+owner+version 定位与下载
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clawhub_slug: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clawhub_owner: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clawhub_version: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

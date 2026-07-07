@@ -25,7 +25,6 @@ import {
   MarketplaceFavoriteMeta,
   MarketplaceSkill,
   MarketplaceSkillsResponse,
-  MarketplaceSource,
   MarketplaceSyncResult,
   Skill,
 } from "@/types";
@@ -169,6 +168,9 @@ function snapshotToMarketplaceSkill(id: string, meta: MarketplaceFavoriteMeta): 
     remote_revision: null,
     tags: meta.tags,
     install_status: "not_installed",
+    clawhub_slug: meta.clawhub_slug ?? null,
+    clawhub_owner: meta.clawhub_owner ?? null,
+    clawhub_version: meta.clawhub_version ?? null,
   };
 }
 
@@ -186,8 +188,6 @@ export function Marketplace() {
   );
   const [hasMore, setHasMore] = useState(() => marketplaceSnapshot?.hasMore ?? false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [availableSources, setAvailableSources] = useState<MarketplaceSource[]>([]);
-  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
   const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
   const [githubInstallDialogOpen, setGithubInstallDialogOpen] = useState(false);
   // Page-level search query is shared with the TopBar scope field via context,
@@ -300,29 +300,6 @@ export function Marketplace() {
   }, [showMarketplaceError, t]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadSources() {
-      try {
-        const sources = await invoke<MarketplaceSource[]>("get_marketplace_sources");
-        if (cancelled) return;
-        const enabledSources = sources.filter((source) => source.enabled);
-        setAvailableSources(enabledSources);
-        setSelectedSourceIds((current) => (
-          current.filter((id) => enabledSources.some((source) => source.id === id))
-        ));
-      } catch (_err) {
-        // ignore source loading failures to avoid blocking marketplace page
-      }
-    }
-
-    void loadSources();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
     // 仅看收藏时跳过远程加载，使用本地快照
     if (favoritesOnly) {
       setSearching(false);
@@ -334,13 +311,13 @@ export function Marketplace() {
     void loadSkills({
       page: 1,
       query: normalizedRemoteQuery,
-      sourceIds: selectedSourceIds,
+      sourceIds: undefined,
     }).finally(() => {
       if (remoteLoadSeqRef.current === loadSeq) {
         setSearching(false);
       }
     });
-  }, [loadSkills, normalizedRemoteQuery, selectedSourceIds, favoritesOnly]);
+  }, [loadSkills, normalizedRemoteQuery, favoritesOnly]);
 
   // 切换到"仅看收藏"时加载本地快照
   useEffect(() => {
@@ -479,7 +456,7 @@ export function Marketplace() {
         forceRefresh: true,
         page: 1,
         query: normalizedRemoteQuery,
-        sourceIds: selectedSourceIds,
+        sourceIds: undefined,
       });
       addToast(t("common.refreshSuccess"), "success");
     } catch (err) {
@@ -487,7 +464,7 @@ export function Marketplace() {
     } finally {
       setRefreshing(false);
     }
-  }, [addToast, loadSkills, normalizedRemoteQuery, selectedSourceIds, showMarketplaceError, t]);
+  }, [addToast, loadSkills, normalizedRemoteQuery, showMarketplaceError, t]);
 
   const updateAvailableCount = useMemo(
     () => skills.filter((skill) => skill.install_status === "update_available").length,
@@ -505,7 +482,7 @@ export function Marketplace() {
       const syncResult = await invoke<MarketplaceSyncResult>(
         "sync_marketplace_installed_skills",
         {
-          sourceIds: selectedSourceIds.length > 0 ? selectedSourceIds : undefined,
+          sourceIds: undefined,
         },
       );
       if (syncResult.updated > 0) {
@@ -528,7 +505,7 @@ export function Marketplace() {
         forceRefresh: true,
         page: 1,
         query: normalizedRemoteQuery,
-        sourceIds: selectedSourceIds,
+        sourceIds: undefined,
       });
     } catch (err) {
       showMarketplaceError(err, t("marketplace.networkError"));
@@ -539,7 +516,6 @@ export function Marketplace() {
     installingSkill,
     loadSkills,
     normalizedRemoteQuery,
-    selectedSourceIds,
     showMarketplaceError,
     t,
     updateAvailableCount,
@@ -556,7 +532,7 @@ export function Marketplace() {
         page: currentPage + 1,
         append: true,
         query: normalizedRemoteQuery,
-        sourceIds: selectedSourceIds,
+        sourceIds: undefined,
       });
     } finally {
       setLoadingMore(false);
@@ -570,7 +546,6 @@ export function Marketplace() {
     loadingMore,
     normalizedRemoteQuery,
     refreshing,
-    selectedSourceIds,
   ]);
 
   const handleInstall = useCallback(async (skill: MarketplaceSkill, event?: MouseEvent) => {
@@ -591,7 +566,7 @@ export function Marketplace() {
           forceRefresh: true,
           page: 1,
           query: normalizedRemoteQuery,
-          sourceIds: selectedSourceIds,
+          sourceIds: undefined,
         });
         const successMessage = t(isUpdateAction ? "marketplace.updateSuccess" : "marketplace.installSuccess").replace(
           "{name}",
@@ -619,7 +594,7 @@ export function Marketplace() {
     } finally {
       setInstallingSkill(null);
     }
-  }, [addToast, loadSkills, navigate, normalizedRemoteQuery, selectedSourceIds, showMarketplaceError, t]);
+  }, [addToast, loadSkills, navigate, normalizedRemoteQuery, showMarketplaceError, t]);
 
   const handleUninstallConfirm = useCallback(async (skill: MarketplaceSkill) => {
     if (uninstallingSkillId) return;
@@ -651,14 +626,14 @@ export function Marketplace() {
         forceRefresh: true,
         page: 1,
         query: normalizedRemoteQuery,
-        sourceIds: selectedSourceIds,
+        sourceIds: undefined,
       });
     } catch (err) {
       showMarketplaceError(err, t("marketplace.uninstallFailed"));
     } finally {
       setUninstallingSkillId(null);
     }
-  }, [addToast, loadSkills, normalizedRemoteQuery, selectedSourceIds, showMarketplaceError, t, uninstallingSkillId]);
+  }, [addToast, loadSkills, normalizedRemoteQuery, showMarketplaceError, t, uninstallingSkillId]);
 
   const handleGithubInstall = useCallback(async () => {
     const directUrl = githubInstallUrl.trim();
@@ -686,7 +661,7 @@ export function Marketplace() {
           forceRefresh: true,
           page: 1,
           query: normalizedRemoteQuery,
-          sourceIds: selectedSourceIds,
+          sourceIds: undefined,
         });
       } else {
         addToast(t("marketplace.githubInstallFailed"), "error");
@@ -703,7 +678,6 @@ export function Marketplace() {
     loadSkills,
     normalizedRemoteQuery,
     refreshing,
-    selectedSourceIds,
     showMarketplaceError,
     t,
     updatingAll,
@@ -911,22 +885,16 @@ export function Marketplace() {
     name: t("marketplace.sortName"),
   };
 
-  const showSourceFilter = availableSources.length > 1;
+  const showTagFilter = availableTags.length > 0;
 
-  const toggleSourceSelection = useCallback((sourceId: string) => {
-    setSelectedSourceIds((prev) => {
-      if (prev.length === 0) {
-        // When showing all, click to select ONLY the clicked source
-        return [sourceId];
+  const toggleTagSelection = useCallback((tag: string) => {
+    setSelectedTags((prev) => {
+      if (prev.includes(tag)) {
+        return prev.filter((t) => t !== tag);
       }
-      if (prev.includes(sourceId)) {
-        const next = prev.filter((id) => id !== sourceId);
-        return next.length === 0 ? [] : next;
-      }
-      const next = [...prev, sourceId];
-      return next.length >= availableSources.length ? [] : next;
+      return [...prev, tag];
     });
-  }, [availableSources]);
+  }, []);
 
   if (initialLoading) {
     return (
@@ -1192,12 +1160,12 @@ export function Marketplace() {
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
               </svg>
             </button>
-            {showSourceFilter && (
+            {showTagFilter && (
               <div style={{ position: 'relative' }}>
                 <button
                   onClick={() => setSourceDropdownOpen((v) => !v)}
-                  title={t("marketplace.sourceFilter")}
-                  aria-label={t("marketplace.sourceFilter")}
+                  title={t("marketplace.tagFilter")}
+                  aria-label={t("marketplace.tagFilter")}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -1205,30 +1173,31 @@ export function Marketplace() {
                     width: 32,
                     height: 32,
                     padding: 0,
-                    color: selectedSourceIds.length > 0 ? 'var(--primary)' : (sourceDropdownOpen ? 'var(--foreground)' : 'var(--muted-foreground)'),
-                    backgroundColor: selectedSourceIds.length > 0 ? 'var(--primary-tint)' : (sourceDropdownOpen ? 'var(--secondary)' : 'transparent'),
-                    border: selectedSourceIds.length > 0 ? '1px solid var(--primary-tint-border)' : '1px solid transparent',
+                    color: selectedTags.length > 0 ? 'var(--primary)' : (sourceDropdownOpen ? 'var(--foreground)' : 'var(--muted-foreground)'),
+                    backgroundColor: selectedTags.length > 0 ? 'var(--primary-tint)' : (sourceDropdownOpen ? 'var(--secondary)' : 'transparent'),
+                    border: selectedTags.length > 0 ? '1px solid var(--primary-tint-border)' : '1px solid transparent',
                     borderRadius: '6px',
                     cursor: 'pointer',
                     transition: 'color 0.15s, background-color 0.15s, border-color 0.15s',
                   }}
                   onMouseEnter={(e) => {
-                    if (selectedSourceIds.length === 0 && !sourceDropdownOpen) {
+                    if (selectedTags.length === 0 && !sourceDropdownOpen) {
                       e.currentTarget.style.color = 'var(--foreground)';
                       e.currentTarget.style.backgroundColor = 'var(--secondary)';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (selectedSourceIds.length === 0 && !sourceDropdownOpen) {
+                    if (selectedTags.length === 0 && !sourceDropdownOpen) {
                       e.currentTarget.style.color = 'var(--muted-foreground)';
                       e.currentTarget.style.backgroundColor = 'transparent';
                     }
                   }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M3 6h18M6 12h12M10 18h4" />
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                    <line x1="7" y1="7" x2="7.01" y2="7" />
                   </svg>
-                  {selectedSourceIds.length > 0 && (
+                  {selectedTags.length > 0 && (
                     <span
                       style={{
                         position: 'absolute',
@@ -1249,7 +1218,7 @@ export function Marketplace() {
                         lineHeight: 1,
                       }}
                     >
-                      {selectedSourceIds.length}
+                      {selectedTags.length}
                     </span>
                   )}
                 </button>
@@ -1266,6 +1235,8 @@ export function Marketplace() {
                         top: 'calc(100% + 6px)',
                         right: 0,
                         minWidth: '220px',
+                        maxHeight: '320px',
+                        overflowY: 'auto',
                         backgroundColor: 'var(--popover)',
                         border: '1px solid var(--border)',
                         borderRadius: 'var(--radius-md)',
@@ -1276,16 +1247,16 @@ export function Marketplace() {
                     >
                       <button
                         onClick={() => {
-                          setSelectedSourceIds([]);
+                          setSelectedTags([]);
                           setSourceDropdownOpen(false);
                         }}
                         onMouseEnter={(e) => {
-                          if (selectedSourceIds.length > 0) {
+                          if (selectedTags.length > 0) {
                             e.currentTarget.style.backgroundColor = 'var(--secondary)';
                           }
                         }}
                         onMouseLeave={(e) => {
-                          if (selectedSourceIds.length > 0) {
+                          if (selectedTags.length > 0) {
                             e.currentTarget.style.backgroundColor = 'transparent';
                           }
                         }}
@@ -1297,18 +1268,18 @@ export function Marketplace() {
                           gap: '12px',
                           padding: '7px 10px',
                           fontSize: '12px',
-                          fontWeight: selectedSourceIds.length === 0 ? 600 : 500,
+                          fontWeight: selectedTags.length === 0 ? 600 : 500,
                           border: 'none',
                           borderRadius: 'var(--radius-sm)',
-                          backgroundColor: selectedSourceIds.length === 0 ? 'var(--secondary)' : 'transparent',
-                          color: selectedSourceIds.length === 0 ? 'var(--foreground)' : 'var(--popover-foreground)',
+                          backgroundColor: selectedTags.length === 0 ? 'var(--secondary)' : 'transparent',
+                          color: selectedTags.length === 0 ? 'var(--foreground)' : 'var(--popover-foreground)',
                           cursor: 'pointer',
                           textAlign: 'left',
                           transition: 'color 0.12s ease, background-color 0.12s ease',
                         }}
                       >
-                        <span>{t("marketplace.sourceAll")}</span>
-                        {selectedSourceIds.length === 0 && (
+                        <span>{t("marketplace.tagFilterAll")}</span>
+                        {selectedTags.length === 0 && (
                           <Check
                             size={13}
                             strokeWidth={2.5}
@@ -1316,14 +1287,12 @@ export function Marketplace() {
                           />
                         )}
                       </button>
-                      {availableSources.map((source) => {
-                        const selected = selectedSourceIds.length === 0
-                          ? true
-                          : selectedSourceIds.includes(source.id);
+                      {availableTags.map((tag) => {
+                        const selected = selectedTags.includes(tag);
                         return (
                           <button
-                            key={source.id}
-                            onClick={() => toggleSourceSelection(source.id)}
+                            key={tag}
+                            onClick={() => toggleTagSelection(tag)}
                             onMouseEnter={(e) => {
                               if (!selected) {
                                 e.currentTarget.style.backgroundColor = 'var(--secondary)';
@@ -1352,7 +1321,7 @@ export function Marketplace() {
                               transition: 'color 0.12s ease, background-color 0.12s ease',
                             }}
                           >
-                            <span>{source.name}</span>
+                            <span>{tag}</span>
                             {selected && (
                               <Check
                                 size={13}
@@ -1415,36 +1384,6 @@ export function Marketplace() {
         style={{ flex: 1, minHeight: 0, overflow: 'auto' }}
       >
         <div className="page-container" style={{ maxWidth: '1200px' }}>
-          {availableTags.length > 0 && (
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
-              {availableTags.map((tag) => {
-                const isSelected = selectedTags.includes(tag);
-                return (
-                  <button
-                    key={tag}
-                    onClick={() => {
-                      setSelectedTags((prev) => isSelected
-                        ? prev.filter((t) => t !== tag)
-                        : [...prev, tag]);
-                    }}
-                    style={{
-                      borderRadius: '999px',
-                      padding: '4px 10px',
-                      fontSize: '11px',
-                      fontWeight: 500,
-                      border: isSelected ? '1px solid var(--primary-tint-border)' : '1px solid var(--border)',
-                      backgroundColor: isSelected ? 'var(--primary-tint)' : 'var(--secondary)',
-                      color: isSelected ? 'var(--primary)' : 'var(--muted-foreground)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {tag}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
           {filteredSkills.length === 0 ? (
             <div style={{
               display: 'flex',
@@ -1493,7 +1432,6 @@ export function Marketplace() {
                   && !skill.description
                   && !descriptionFetchedRef.current.has(skill.id);
                 const metaItems = buildMarketplaceMetaItems(
-                  t("marketplace.source").replace("{source}", skill.source_name),
                   skill.author ? t("marketplace.author").replace("{author}", skill.author) : null,
                   installCountLabel,
                 );
@@ -1730,22 +1668,31 @@ export function Marketplace() {
                         ))}
                         {skill.tags.length > 0 && (
                           <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                            {skill.tags.slice(0, 3).map((tag) => (
-                              <span
-                                key={tag}
-                                style={{
-                                  fontSize: '10px',
-                                  fontWeight: 500,
-                                  color: 'var(--primary)',
-                                  backgroundColor: 'var(--primary-tint)',
-                                  padding: '2px 6px',
-                                  borderRadius: '999px',
-                                  border: '1px solid var(--primary-tint-border)',
-                                }}
-                              >
-                                {tag}
-                              </span>
-                            ))}
+                            {skill.tags.slice(0, 3).map((tag) => {
+                              const selected = selectedTags.includes(tag);
+                              return (
+                                <button
+                                  key={tag}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleTagSelection(tag);
+                                  }}
+                                  style={{
+                                    fontSize: '10px',
+                                    fontWeight: 500,
+                                    cursor: 'pointer',
+                                    color: selected ? '#fff' : 'var(--primary)',
+                                    backgroundColor: selected ? 'var(--primary)' : 'var(--primary-tint)',
+                                    padding: '2px 6px',
+                                    borderRadius: '999px',
+                                    border: '1px solid var(--primary-tint-border)',
+                                  }}
+                                >
+                                  {tag}
+                                </button>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -1822,6 +1769,10 @@ export function Marketplace() {
           installing={updatingAll || installingSkill === selectedSkill.id}
           isFavorite={favorites.isMarketplaceFavorite(selectedSkill.id)}
           onToggleFavorite={(skill) => void handleToggleFavorite(skill)}
+          onTagClick={(tag) => {
+            setSelectedSkill(null);
+            toggleTagSelection(tag);
+          }}
         />
       )}
 

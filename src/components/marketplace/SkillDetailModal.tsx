@@ -29,6 +29,7 @@ interface SkillDetailModalProps {
   installing: boolean;
   isFavorite: boolean;
   onToggleFavorite: (skill: MarketplaceSkill) => void;
+  onTagClick?: (tag: string) => void;
 }
 
 interface ParsedFrontmatter {
@@ -86,7 +87,7 @@ function clearFileContentCacheForTree(tree: SkillFileNode | null) {
   }
 }
 
-export function SkillDetailModal({ skill, onClose, onInstall, installing, isFavorite, onToggleFavorite }: SkillDetailModalProps) {
+export function SkillDetailModal({ skill, onClose, onInstall, installing, isFavorite, onToggleFavorite, onTagClick }: SkillDetailModalProps) {
   const { t, language } = useTranslation();
   const { theme } = useTheme();
   const translation = useSkillTranslation();
@@ -104,7 +105,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing, isFavo
   // Keep a ref to the latest file tree so the unmount cleanup can release the
   // associated file-content cache entries without stale-closure issues.
   const fileTreeRef = useRef<SkillFileNode | null>(null);
-  const canShowFiles = Boolean(skill.repo_url && skill.skill_path);
+  const canShowFiles = Boolean((skill.repo_url && skill.skill_path) || skill.clawhub_slug);
   const externalUrl = skill.external_url || skill.repo_url;
   const isUpdateAvailable = skill.install_status === "update_available";
   const installCountLabel = formatInstallCountLabel(skill.install_count);
@@ -365,6 +366,34 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing, isFavo
 
     async function loadFiles() {
       try {
+        if (skill.clawhub_slug) {
+          const cacheKey = makeSkillTreeCacheKey(
+            skill.clawhub_slug,
+            skill.clawhub_version ?? "",
+          );
+          const cachedTree = skillTreeCache.get(cacheKey);
+          if (cachedTree) {
+            if (!cancelled && requestId === previewRequestId.current) {
+              setFileTree(cachedTree);
+              setFilesLoading(false);
+            }
+            return;
+          }
+
+          setFileTree(null);
+          setFilesLoading(true);
+          const tree = await invoke<SkillFileNode>("fetch_clawhub_skill_files", {
+            slug: skill.clawhub_slug,
+            owner: skill.clawhub_owner,
+            version: skill.clawhub_version,
+          });
+          if (!cancelled && requestId === previewRequestId.current) {
+            setBoundedCache(skillTreeCache, cacheKey, tree, SKILL_TREE_CACHE_MAX);
+            setFileTree(tree);
+          }
+          return;
+        }
+
         if (!skill.repo_url || !skill.skill_path) {
           setFilesLoading(false);
           setFileTree(null);
@@ -563,18 +592,19 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing, isFavo
                   {t("marketplace.author").replace("{author}", skill.author)}
                 </span>
               )}
-              <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
-                {t("marketplace.source").replace("{source}", skill.source_name)}
-              </span>
             </div>
             {skill.tags.length > 0 && (
               <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                 {skill.tags.map((tag) => (
-                  <span
+                  <button
                     key={tag}
+                    type="button"
+                    disabled={!onTagClick}
+                    onClick={() => onTagClick?.(tag)}
                     style={{
                       fontSize: "11px",
                       fontWeight: 500,
+                      cursor: onTagClick ? "pointer" : "default",
                       color: "var(--primary)",
                       backgroundColor: "var(--primary-tint)",
                       padding: "3px 8px",
@@ -583,7 +613,7 @@ export function SkillDetailModal({ skill, onClose, onInstall, installing, isFavo
                     }}
                   >
                     {tag}
-                  </span>
+                  </button>
                 ))}
               </div>
             )}

@@ -70,6 +70,12 @@ pub struct MarketplaceFavoriteMeta {
     pub install_count: Option<u64>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub clawhub_slug: Option<String>,
+    #[serde(default)]
+    pub clawhub_owner: Option<String>,
+    #[serde(default)]
+    pub clawhub_version: Option<String>,
 }
 
 fn default_theme() -> String {
@@ -94,26 +100,15 @@ fn default_false() -> bool {
     false
 }
 fn default_marketplace_sources() -> Vec<MarketplaceSource> {
-    vec![
-        MarketplaceSource {
-            id: "src_skills_sh_home".to_string(),
-            name: "skills.sh Homepage".to_string(),
-            url: "https://skills.sh".to_string(),
-            source_type: SourceType::Crawler,
-            enabled: true,
-            builtin: true,
-            api_key: None,
-        },
-        MarketplaceSource {
-            id: "src_composio_awesome_claude_skills".to_string(),
-            name: "awesome-claude-skills".to_string(),
-            url: "https://github.com/ComposioHQ/awesome-claude-skills".to_string(),
-            source_type: SourceType::Crawler,
-            enabled: true,
-            builtin: true,
-            api_key: None,
-        },
-    ]
+    vec![MarketplaceSource {
+        id: "src_clawhub".to_string(),
+        name: "ClawHub".to_string(),
+        url: "https://clawhub.ai".to_string(),
+        source_type: SourceType::ClawhubApi,
+        enabled: true,
+        builtin: true,
+        api_key: None,
+    }]
 }
 
 impl Default for UserPreferences {
@@ -245,7 +240,7 @@ pub struct ToolConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            version: "2.1.2".to_string(),
+            version: "2.1.3".to_string(),
             skills_dir: Self::default_skills_dir(),
             tools: HashMap::new(),
             custom_tools: HashMap::new(),
@@ -333,11 +328,9 @@ mod tests {
     #[test]
     fn default_marketplace_sources_matches_remote_source_ids() {
         let sources = default_marketplace_sources();
-        assert_eq!(sources.len(), 2);
-        assert_eq!(sources[0].id, "src_skills_sh_home");
-        assert_eq!(sources[0].source_type, SourceType::Crawler);
-        assert_eq!(sources[1].id, "src_composio_awesome_claude_skills");
-        assert_eq!(sources[1].source_type, SourceType::Crawler);
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].id, "src_clawhub");
+        assert_eq!(sources[0].source_type, SourceType::ClawhubApi);
     }
 
     #[test]

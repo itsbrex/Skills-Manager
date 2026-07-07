@@ -8,7 +8,6 @@ import {
   UserPreferences,
   DetectedEditor,
   UpdateInfo,
-  MarketplaceSource,
   LlmProvider,
 } from "@/types";
 import { defaultPreferences } from "@/constants/preferences";
@@ -160,25 +159,6 @@ export function Settings() {
     void autoSaveConfig(newConfig);
   };
 
-  const updateMarketplaceSource = (
-    sourceId: string,
-    updates: Partial<MarketplaceSource>
-  ) => {
-    if (!config) return;
-    const sources = config.marketplace_sources || [];
-    const updatedSources = sources.map((source) =>
-      source.id === sourceId ? { ...source, ...updates } : source
-    );
-    const newConfig = {
-      ...config,
-      marketplace_sources: updatedSources,
-    };
-    setConfig(newConfig);
-
-    // Auto-save to disk (debounced)
-    void autoSaveConfig(newConfig);
-  };
-
   // Debounced auto-save function
   const autoSaveTimeoutRef = useRef<number | null>(null);
   const saveStatusTimeoutRef = useRef<number | null>(null);
@@ -308,8 +288,6 @@ export function Settings() {
   const prefs = config.preferences || defaultPreferences;
   const selectedEditor = availableEditors.find(e => e.id === prefs.default_editor) || availableEditors[0];
   const FallbackEditorIcon = selectedEditor ? getEditorIcon(selectedEditor.id) : null;
-  const marketplaceSources = config.marketplace_sources || [];
-  const marketplaceRows = marketplaceSources;
 
   return (
     <div style={{
@@ -573,7 +551,7 @@ export function Settings() {
             <SettingsRow
               label={t("settings.githubToken")}
               description={t("settings.githubTokenDesc")}
-              isLast={marketplaceRows.length === 0}
+              isLast
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <PasswordInput
@@ -595,36 +573,6 @@ export function Settings() {
                 </span>
               </div>
             </SettingsRow>
-
-            {marketplaceRows.length === 0 ? (
-              <div style={{
-                padding: '16px 0',
-                fontSize: '13px',
-                color: 'var(--muted-foreground)',
-              }}>
-                {t("settings.marketplaceEmpty")}
-              </div>
-            ) : (
-              marketplaceRows.map((source, index) => {
-                const isLast = index === marketplaceRows.length - 1;
-                const typeLabel = source.source_type === "github_repo"
-                  ? t("settings.marketplaceSourceTypeGithub")
-                  : t("settings.marketplaceSourceTypeApi");
-                return (
-                  <SettingsRow
-                    key={`${source.id}-source`}
-                    label={source.name}
-                    description={`${typeLabel} · ${source.url}`}
-                    isLast={isLast}
-                  >
-                    <Toggle
-                      checked={source.enabled}
-                      onChange={(v) => updateMarketplaceSource(source.id, { enabled: v })}
-                    />
-                  </SettingsRow>
-                );
-              })
-            )}
           </SettingsCard>
 
           {/* Appearance Section */}

@@ -71,6 +71,9 @@ export interface MarketplaceFavoriteMeta {
   external_url?: string | null;
   install_count?: number | null;
   tags: string[];
+  clawhub_slug?: string | null;
+  clawhub_owner?: string | null;
+  clawhub_version?: string | null;
 }
 
 export type MarketplaceFavoriteMap = Record<string, MarketplaceFavoriteMeta>;
@@ -339,7 +342,7 @@ export interface MarketplaceSource {
   id: string;
   name: string;
   url: string;
-  source_type: "github_repo" | "api" | "crawler" | "manual" | "unknown";
+  source_type: "github_repo" | "api" | "crawler" | "manual" | "unknown" | "clawhub_api";
   enabled: boolean;
   builtin: boolean;
   api_key?: string | null;
@@ -362,6 +365,9 @@ export interface MarketplaceSkill {
   remote_revision?: string | null;
   tags: string[];
   install_status: "not_installed" | "installed" | "update_available";
+  clawhub_slug?: string | null;
+  clawhub_owner?: string | null;
+  clawhub_version?: string | null;
 }
 
 export interface MarketplaceSkillsResponse {

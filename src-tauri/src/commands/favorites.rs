@@ -62,6 +62,9 @@ pub fn toggle_marketplace_favorite(
             external_url: skill.external_url,
             install_count: skill.install_count,
             tags: skill.tags,
+            clawhub_slug: skill.clawhub_slug,
+            clawhub_owner: skill.clawhub_owner,
+            clawhub_version: skill.clawhub_version,
         };
         config.marketplace_favorites.insert(skill.id.clone(), meta);
     } else {
@@ -104,6 +107,9 @@ mod tests {
             remote_revision: None,
             tags: vec!["t1".to_string()],
             install_status: InstallStatus::NotInstalled,
+            clawhub_slug: None,
+            clawhub_owner: None,
+            clawhub_version: None,
         }
     }
 
@@ -134,6 +140,9 @@ mod tests {
             external_url: skill.external_url.clone(),
             install_count: skill.install_count,
             tags: skill.tags.clone(),
+            clawhub_slug: skill.clawhub_slug.clone(),
+            clawhub_owner: skill.clawhub_owner.clone(),
+            clawhub_version: skill.clawhub_version.clone(),
         };
         assert_eq!(meta.favorited_at, 42);
         assert_eq!(meta.name, "My Skill");

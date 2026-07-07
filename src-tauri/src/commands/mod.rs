@@ -35,10 +35,10 @@ pub use llm::{
     translate_skill_files, translate_skills_batch, translate_text_content,
 };
 pub use marketplace::{
-    check_marketplace_updates_if_stale, fetch_marketplace_skill_descriptions,
-    fetch_marketplace_skills, fetch_skill_file_content, fetch_skill_files, get_marketplace_sources,
-    install_marketplace_skill, install_marketplace_skill_by_ref, sync_marketplace_installed_skills,
-    toggle_marketplace_source,
+    check_marketplace_updates_if_stale, fetch_clawhub_skill_files,
+    fetch_marketplace_skill_descriptions, fetch_marketplace_skills, fetch_skill_file_content,
+    fetch_skill_files, get_marketplace_sources, install_marketplace_skill,
+    install_marketplace_skill_by_ref, sync_marketplace_installed_skills, toggle_marketplace_source,
 };
 pub use skill_packages::{
     install_skill_package_from_path, list_skill_packages, remove_skill_package,
