@@ -762,6 +762,26 @@ export function Marketplace() {
     }
   }, [showMarketplaceError, t]);
 
+  // clawhub skill 文件预览解析出 owner/version 后，补全到 skills 列表和 selectedSkill，
+  // 使卡片列表和详情弹窗都能构造正确的外部链接 {origin}/{owner}/skills/{slug}
+  const handleResolveClawhubMeta = useCallback(
+    (skillId: string, owner: string, version: string) => {
+      setSkills((prev) =>
+        prev.map((skill) => {
+          if (skill.id !== skillId) return skill;
+          if (skill.clawhub_owner === owner && skill.clawhub_version === version) return skill;
+          return { ...skill, clawhub_owner: owner, clawhub_version: version };
+        }),
+      );
+      setSelectedSkill((current) => {
+        if (!current || current.id !== skillId) return current;
+        if (current.clawhub_owner === owner && current.clawhub_version === version) return current;
+        return { ...current, clawhub_owner: owner, clawhub_version: version };
+      });
+    },
+    [],
+  );
+
   const handleToggleFavorite = useCallback(async (skill: MarketplaceSkill, event?: MouseEvent) => {
     event?.stopPropagation();
     const willFavorite = !favorites.isMarketplaceFavorite(skill.id);
@@ -1414,7 +1434,11 @@ export function Marketplace() {
                 const isInstalling = installingSkill === skill.id;
                 const isUninstalling = uninstallingSkillId === skill.id;
                 const actionBusy = isInstalling || updatingAll || isUninstalling;
-                const externalUrl = skill.external_url || skill.repo_url;
+                // clawhub skill 的 owner 需打开详情弹窗后从详情端点解析，
+                // 列表阶段无 owner 无法构造正确链接，因此不在卡片上显示链接入口。
+                const externalUrl = skill.clawhub_slug
+                  ? null
+                  : (skill.external_url || skill.repo_url);
                 const installCountLabel = formatInstallCountLabel(skill.install_count);
                 const metaChipStyle = getMarketplaceMetaChipStyle("compact");
                 const translationKey = makeTranslationKey(skill.id, language);
@@ -1773,6 +1797,7 @@ export function Marketplace() {
             setSelectedSkill(null);
             toggleTagSelection(tag);
           }}
+          onResolveClawhubMeta={handleResolveClawhubMeta}
         />
       )}
 

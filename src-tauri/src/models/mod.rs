@@ -14,9 +14,9 @@ pub use config::{
 };
 pub use editor::{DetectedEditor, EDITOR_DEFINITIONS};
 pub use marketplace::{
-    GitHubContent, InstallResult, InstallStatus, MarketplaceSkill, MarketplaceSkillsResponse,
-    MarketplaceSource, MarketplaceSyncResult, MarketplaceUpdateCheckResult, SkillFileNode,
-    SourceType,
+    ClawhubSkillFilesResponse, GitHubContent, InstallResult, InstallStatus, MarketplaceSkill,
+    MarketplaceSkillsResponse, MarketplaceSource, MarketplaceSyncResult,
+    MarketplaceUpdateCheckResult, SkillFileNode, SourceType,
 };
 pub use skill::{MarketplaceMeta, Skill, SkillScope, SkillSource, VaultMeta};
 pub use skill_package::{InstalledSkillPackage, SkillPackageMeta};

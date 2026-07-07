@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::models::{
-    GitHubContent, InstallResult, InstallStatus, MarketplaceSkill, MarketplaceSkillsResponse,
-    MarketplaceSource, SkillFileNode,
+    ClawhubSkillFilesResponse, GitHubContent, InstallResult, InstallStatus, MarketplaceSkill,
+    MarketplaceSkillsResponse, MarketplaceSource, SkillFileNode,
 };
 
 const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -672,7 +672,6 @@ fn map_clawhub_list_item_to_skill(item: ClawhubListItem) -> MarketplaceSkill {
         .and_then(|version| version.version.clone())
         .filter(|value| !value.trim().is_empty());
     let tags = item.topics.unwrap_or_default();
-    let external_url = format!("{}/{}", CLAWHUB_SITE_ORIGIN, slug);
 
     MarketplaceSkill {
         id: format!("{}::{}", CLAWHUB_SOURCE_ID, slug),
@@ -687,7 +686,9 @@ fn map_clawhub_list_item_to_skill(item: ClawhubListItem) -> MarketplaceSkill {
         created_at: None,
         repo_url: None,
         skill_path: Some(slug.clone()),
-        external_url: Some(external_url),
+        // 列表端点不返回 owner，无法构造正确的外部链接（需 {origin}/{owner}/skills/{slug}）。
+        // external_url 留空，待详情端点解析出 owner 后由前端补全。
+        external_url: None,
         remote_revision: clawhub_version.clone(),
         tags,
         install_status: InstallStatus::NotInstalled,
@@ -1040,11 +1041,13 @@ impl MarketplaceService {
     /// 下载 clawhub 技能归档并构建文件树，用于详情弹窗预览。
     /// 若 owner/version 缺失，会先拉取详情端点补全。
     /// 归档会缓存 10 分钟，供后续文件内容请求复用。
+    /// 返回的 ClawhubSkillFilesResponse 携带解析出的 owner/version，
+    /// 供前端补全 skill 元数据并构造正确的外部链接。
     pub async fn fetch_clawhub_skill_files(
         slug: &str,
         owner: Option<&str>,
         version: Option<&str>,
-    ) -> Result<SkillFileNode, String> {
+    ) -> Result<ClawhubSkillFilesResponse, String> {
         let mut resolved_owner = owner.map(|o| o.to_string());
         let mut resolved_version = version.map(|v| v.to_string());
 
@@ -1081,12 +1084,18 @@ impl MarketplaceService {
             downloaded
         };
 
-        Ok(build_clawhub_skill_tree(
+        let tree = build_clawhub_skill_tree(
             &files,
             slug,
             resolved_owner.as_deref(),
             &version_str,
-        ))
+        );
+
+        Ok(ClawhubSkillFilesResponse {
+            tree,
+            resolved_owner,
+            resolved_version: Some(version_str),
+        })
     }
 
     #[allow(dead_code)]

@@ -384,6 +384,13 @@ export interface SkillFileNode {
   children?: SkillFileNode[];
 }
 
+/** fetch_clawhub_skill_files 返回结构：文件树 + 解析出的 owner/version */
+export interface ClawhubSkillFilesResponse {
+  tree: SkillFileNode;
+  resolved_owner?: string | null;
+  resolved_version?: string | null;
+}
+
 export interface InstallResult {
   success: boolean;
   skill_id: string;

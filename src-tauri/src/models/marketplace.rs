@@ -81,6 +81,18 @@ pub struct SkillFileNode {
     pub children: Option<Vec<SkillFileNode>>,
 }
 
+/// fetch_clawhub_skill_files 的返回结构。
+/// 除文件树外，还携带从详情端点解析出的 owner/version，
+/// 供前端补全 skill 元数据并构造正确的外部链接。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClawhubSkillFilesResponse {
+    pub tree: SkillFileNode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_owner: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_version: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstallResult {
     pub success: bool,

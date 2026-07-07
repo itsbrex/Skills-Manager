@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::models::{
-    AppConfig, InstallResult, InstallStatus, MarketplaceSkill, MarketplaceSkillsResponse,
-    MarketplaceSource, MarketplaceSyncResult, MarketplaceUpdateCheckResult, Skill, SkillFileNode,
-    SkillSource,
+    AppConfig, ClawhubSkillFilesResponse, InstallResult, InstallStatus, MarketplaceSkill,
+    MarketplaceSkillsResponse, MarketplaceSource, MarketplaceSyncResult,
+    MarketplaceUpdateCheckResult, Skill, SkillFileNode, SkillSource,
 };
 use crate::services::marketplace::{
     derive_github_repo_and_skill_path, DIRECT_GITHUB_SOURCE_ID, DIRECT_GITHUB_SOURCE_NAME,
@@ -653,7 +653,7 @@ pub async fn fetch_clawhub_skill_files(
     slug: String,
     owner: Option<String>,
     version: Option<String>,
-) -> Result<SkillFileNode, String> {
+) -> Result<ClawhubSkillFilesResponse, String> {
     MarketplaceService::fetch_clawhub_skill_files(&slug, owner.as_deref(), version.as_deref()).await
 }
 
