@@ -34,6 +34,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { FavoriteIconButton } from "@/components/favorites/FavoriteIconButton";
 import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
 import { SkillDetailModal } from "@/components/marketplace/SkillDetailModal";
+import { highlightMatch } from "@/components/marketplace/highlightMatch";
 import { formatInstallCountLabel } from "@/pages/marketplace/formatInstallCount";
 import { buildMarketplaceMetaItems } from "@/pages/marketplace/buildMarketplaceMetaItems";
 import { sortMarketplaceSkillsByInstallStatus } from "@/pages/marketplace/sortMarketplaceSkillsByInstallStatus";
@@ -46,6 +47,30 @@ const marketplaceDescriptionCache = new Map<string, string | null>();
 const MARKETPLACE_SORT_STORAGE_KEY = "marketplace.sortMode";
 const MARKETPLACE_SORT_MODES = ["default", "newest", "popular", "name"] as const;
 type MarketplaceSortMode = typeof MARKETPLACE_SORT_MODES[number];
+
+/**
+ * 前端本地查询匹配（与后端 filter_marketplace_skills_by_query 逻辑一致）：
+ * - 按空白分词，每个 token 必须命中至少一个字段（AND between tokens, OR between fields）
+ * - 大小写不敏感的子串包含
+ * - 匹配字段：name / slug / description / author / source_name / tags
+ * 用于收藏模式下对本地快照的搜索过滤（不触发远程请求）。
+ */
+function skillMatchesLocalQuery(skill: MarketplaceSkill, query: string): boolean {
+  const tokens = query.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+  return tokens.every((token) => {
+    const t = token.toLowerCase();
+    if (!t) return true;
+    return (
+      skill.name.toLowerCase().includes(t)
+      || (skill.slug?.toLowerCase().includes(t) ?? false)
+      || (skill.description?.toLowerCase().includes(t) ?? false)
+      || (skill.author?.toLowerCase().includes(t) ?? false)
+      || skill.source_name.toLowerCase().includes(t)
+      || skill.tags.some((tag) => tag.toLowerCase().includes(t))
+    );
+  });
+}
 
 // 模块级内存缓存：保存上次成功加载的市场列表首屏数据，
 // 让再次进入市场页时能立即渲染，避免每次都显示全屏 loader。
@@ -188,11 +213,11 @@ export function Marketplace() {
   );
   const [hasMore, setHasMore] = useState(() => marketplaceSnapshot?.hasMore ?? false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [sourceDropdownOpen, setSourceDropdownOpen] = useState(false);
+  const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
   const [githubInstallDialogOpen, setGithubInstallDialogOpen] = useState(false);
   // Page-level search query is shared with the TopBar scope field via context,
   // so the Marketplace page no longer renders its own search input.
-  const { query: searchQuery } = usePageSearch(t("marketplace.searchPlaceholder"));
+  const { query: searchQuery, setQuery: setSearchQuery } = usePageSearch(t("marketplace.searchPlaceholder"));
   const [githubInstallUrl, setGithubInstallUrl] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<MarketplaceSkill | null>(null);
@@ -523,7 +548,8 @@ export function Marketplace() {
   ]);
 
   const handleLoadMore = useCallback(async () => {
-    if (favoritesOnly || loadingMore || refreshing || initialLoading || !hasMore) {
+    // 标签筛选为纯前端过滤，加载更多无意义且会与新页数据错配
+    if (favoritesOnly || selectedTags.length > 0 || loadingMore || refreshing || initialLoading || !hasMore) {
       return;
     }
     setLoadingMore(true);
@@ -815,7 +841,7 @@ export function Marketplace() {
   }, []);
 
   useEffect(() => {
-    if (favoritesOnly || !hasMore || initialLoading || refreshing) {
+    if (favoritesOnly || selectedTags.length > 0 || !hasMore || initialLoading || refreshing) {
       return;
     }
     const target = loadMoreRef.current;
@@ -834,7 +860,7 @@ export function Marketplace() {
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [favoritesOnly, handleLoadMore, hasMore, initialLoading, refreshing, skills.length]);
+  }, [favoritesOnly, handleLoadMore, hasMore, initialLoading, refreshing, selectedTags.length, skills.length]);
 
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -855,7 +881,10 @@ export function Marketplace() {
       const filtered = list.filter((skill) => {
         const matchesTags = selectedTags.length === 0
           || selectedTags.some((tag) => skill.tags.includes(tag));
-        return matchesTags;
+        // 收藏模式也支持搜索词过滤（本地匹配，不触发远程请求）
+        const matchesQuery = !normalizedRemoteQuery
+          || skillMatchesLocalQuery(skill, normalizedRemoteQuery);
+        return matchesTags && matchesQuery;
       });
       if (sortMode === "default") {
         // 默认按收藏时间倒序（最新收藏在前）
@@ -892,7 +921,7 @@ export function Marketplace() {
       sorted.sort((a, b) => (b.install_count ?? 0) - (a.install_count ?? 0));
     }
     return sorted;
-  }, [selectedTags, skills, sortMode, favoritesOnly, favoriteSnapshot]);
+  }, [selectedTags, skills, sortMode, favoritesOnly, favoriteSnapshot, normalizedRemoteQuery]);
 
   useEffect(() => {
     persistSortMode(sortMode);
@@ -1006,7 +1035,7 @@ export function Marketplace() {
             >
               <Link2 size={14} />
             </button>
-            <RefreshButton onClick={handleRefresh} loading={refreshing || updatingAll} iconOnly />
+            <RefreshButton onClick={handleRefresh} loading={refreshing || updatingAll || searching} iconOnly />
             <div style={{ position: 'relative' }}>
               <button
                 type="button"
@@ -1183,7 +1212,7 @@ export function Marketplace() {
             {showTagFilter && (
               <div style={{ position: 'relative' }}>
                 <button
-                  onClick={() => setSourceDropdownOpen((v) => !v)}
+                  onClick={() => setTagDropdownOpen((v) => !v)}
                   title={t("marketplace.tagFilter")}
                   aria-label={t("marketplace.tagFilter")}
                   style={{
@@ -1193,21 +1222,21 @@ export function Marketplace() {
                     width: 32,
                     height: 32,
                     padding: 0,
-                    color: selectedTags.length > 0 ? 'var(--primary)' : (sourceDropdownOpen ? 'var(--foreground)' : 'var(--muted-foreground)'),
-                    backgroundColor: selectedTags.length > 0 ? 'var(--primary-tint)' : (sourceDropdownOpen ? 'var(--secondary)' : 'transparent'),
+                    color: selectedTags.length > 0 ? 'var(--primary)' : (tagDropdownOpen ? 'var(--foreground)' : 'var(--muted-foreground)'),
+                    backgroundColor: selectedTags.length > 0 ? 'var(--primary-tint)' : (tagDropdownOpen ? 'var(--secondary)' : 'transparent'),
                     border: selectedTags.length > 0 ? '1px solid var(--primary-tint-border)' : '1px solid transparent',
                     borderRadius: '6px',
                     cursor: 'pointer',
                     transition: 'color 0.15s, background-color 0.15s, border-color 0.15s',
                   }}
                   onMouseEnter={(e) => {
-                    if (selectedTags.length === 0 && !sourceDropdownOpen) {
+                    if (selectedTags.length === 0 && !tagDropdownOpen) {
                       e.currentTarget.style.color = 'var(--foreground)';
                       e.currentTarget.style.backgroundColor = 'var(--secondary)';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (selectedTags.length === 0 && !sourceDropdownOpen) {
+                    if (selectedTags.length === 0 && !tagDropdownOpen) {
                       e.currentTarget.style.color = 'var(--muted-foreground)';
                       e.currentTarget.style.backgroundColor = 'transparent';
                     }
@@ -1243,11 +1272,11 @@ export function Marketplace() {
                   )}
                 </button>
 
-                {sourceDropdownOpen && (
+                {tagDropdownOpen && (
                   <>
                     <div
                       style={{ position: 'fixed', inset: 0, zIndex: MODAL_LAYER_Z_INDEX - 1 }}
-                      onClick={() => setSourceDropdownOpen(false)}
+                      onClick={() => setTagDropdownOpen(false)}
                     />
                     <div
                       style={{
@@ -1268,7 +1297,7 @@ export function Marketplace() {
                       <button
                         onClick={() => {
                           setSelectedTags([]);
-                          setSourceDropdownOpen(false);
+                          setTagDropdownOpen(false);
                         }}
                         onMouseEnter={(e) => {
                           if (selectedTags.length > 0) {
@@ -1357,42 +1386,6 @@ export function Marketplace() {
                 )}
               </div>
             )}
-            {searching && !initialLoading && (
-              <span
-                aria-label={t("loading.default")}
-                title={t("loading.default")}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 32,
-                  height: 32,
-                  color: "var(--muted-foreground)",
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24">
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="8"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeDasharray="30 22"
-                  >
-                    <animateTransform
-                      attributeName="transform"
-                      type="rotate"
-                      from="0 12 12"
-                      to="360 12 12"
-                      dur="0.8s"
-                      repeatCount="indefinite"
-                    />
-                  </circle>
-                </svg>
-              </span>
-            )}
           </>
         }
       />
@@ -1424,8 +1417,64 @@ export function Marketplace() {
                       ? t("marketplace.noSkills")
                       : t("marketplace.noMatch")}
               </div>
+              {/* 空结果引导：有搜索词或标签筛选时，提供清除按钮 */}
+              {!searching && (normalizedRemoteQuery || selectedTags.length > 0) && (
+                <>
+                  <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
+                    {t("marketplace.noMatchHint")}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                    {normalizedRemoteQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery("")}
+                        style={{
+                          padding: '6px 12px',
+                          fontSize: 12,
+                          fontWeight: 500,
+                          color: 'var(--primary)',
+                          backgroundColor: 'var(--primary-tint)',
+                          border: '1px solid var(--primary-tint-border)',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {t("marketplace.clearSearch")}
+                      </button>
+                    )}
+                    {selectedTags.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTags([])}
+                        style={{
+                          padding: '6px 12px',
+                          fontSize: 12,
+                          fontWeight: 500,
+                          color: 'var(--primary)',
+                          backgroundColor: 'var(--primary-tint)',
+                          border: '1px solid var(--primary-tint-border)',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {t("marketplace.clearTags")}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           ) : (
+            <>
+            {(normalizedRemoteQuery || selectedTags.length > 0) && !favoritesOnly && (
+              <div style={{
+                fontSize: 12,
+                color: 'var(--muted-foreground)',
+                padding: '8px 2px 12px',
+              }}>
+                {t("marketplace.resultsCount").replace("{count}", String(filteredSkills.length))}
+              </div>
+            )}
             <div className="marketplace-grid">
               {filteredSkills.map((skill) => {
                 const color = getSkillColor(skill.name);
@@ -1451,6 +1500,10 @@ export function Marketplace() {
                 const displayedDescription = showingTranslation && cachedTranslation
                   ? cachedTranslation.description
                   : skill.description;
+                // 搜索时高亮匹配子串；翻译展示时不重复高亮（避免翻译后文本与 query 不对应）
+                const highlightQuery = normalizedRemoteQuery && !showingTranslation
+                  ? normalizedRemoteQuery
+                  : null;
                 const isTranslating = translatingMarketIds.has(skill.id);
                 const isDescriptionLoading = !showingTranslation
                   && !skill.description
@@ -1516,7 +1569,9 @@ export function Marketplace() {
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
                             }}>
-                              {displayedName}
+                              {highlightQuery
+                                ? highlightMatch(displayedName, highlightQuery)
+                                : displayedName}
                             </span>
                             {externalUrl && (
                               <span
@@ -1582,7 +1637,11 @@ export function Marketplace() {
                               WebkitBoxOrient: 'vertical',
                               overflow: 'hidden',
                             }}>
-                              {displayedDescription || t("skills.noDescription")}
+                              {displayedDescription
+                                ? (highlightQuery
+                                  ? highlightMatch(displayedDescription, highlightQuery)
+                                  : displayedDescription)
+                                : t("skills.noDescription")}
                             </p>
                           )}
                         </div>
@@ -1713,7 +1772,9 @@ export function Marketplace() {
                                     border: '1px solid var(--primary-tint-border)',
                                   }}
                                 >
-                                  {tag}
+                                  {highlightQuery
+                                    ? highlightMatch(tag, highlightQuery)
+                                    : tag}
                                 </button>
                               );
                             })}
@@ -1724,9 +1785,10 @@ export function Marketplace() {
                 );
               })}
             </div>
+            </>
           )}
 
-          {hasMore && !favoritesOnly && (
+          {hasMore && !favoritesOnly && selectedTags.length === 0 && (
             <>
               <div ref={loadMoreRef} style={{ height: '1px' }} />
               {loadingMore && (

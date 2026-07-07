@@ -445,6 +445,35 @@ struct ClawhubListResponse {
     next_cursor: Option<String>,
 }
 
+/// clawhub /api/v1/search?q= 搜索端点的 item
+/// 字段比列表端点少：缺少 topics/stats.installs/latestVersion，
+/// 多出 score/version/downloads/ownerHandle/owner。
+/// 缺失字段在 map 时给默认值，必要时由前端拉详情补全。
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClawhubSearchItem {
+    #[allow(dead_code)]
+    score: Option<f64>,
+    slug: String,
+    #[serde(rename = "displayName")]
+    display_name: Option<String>,
+    summary: Option<String>,
+    #[serde(default)]
+    version: Option<String>,
+    #[serde(default)]
+    downloads: Option<u64>,
+    #[serde(rename = "ownerHandle", default)]
+    owner_handle: Option<String>,
+}
+
+/// clawhub /api/v1/search 响应：不支持 cursor 分页，只返回单页 results
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClawhubSearchResponse {
+    #[serde(default)]
+    results: Vec<ClawhubSearchItem>,
+}
+
 /// clawhub /api/v1/skills/{slug}?owner= 详情响应
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -698,6 +727,57 @@ fn map_clawhub_list_item_to_skill(item: ClawhubListItem) -> MarketplaceSkill {
     }
 }
 
+/// 将 clawhub 搜索 item 转换为 MarketplaceSkill。
+/// 搜索端点不返回 topics/stats.installs/latestVersion，缺失字段给默认值。
+/// 返回 owner_handle（列表端点没有），可用于直接构造 external_url。
+fn map_clawhub_search_item_to_skill(item: ClawhubSearchItem) -> MarketplaceSkill {
+    let slug = item.slug.clone();
+    let name = item
+        .display_name
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| slug.clone());
+    let description = item
+        .summary
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let clawhub_owner = item
+        .owner_handle
+        .filter(|value| !value.trim().is_empty());
+    let clawhub_version = item
+        .version
+        .filter(|value| !value.trim().is_empty());
+    // 搜索端点的 downloads 近似为 install_count（端点不返回 installs）
+    let install_count = item.downloads;
+    // external_url 需要 owner；有 owner 时直接构造，避免前端再拉详情
+    let external_url = clawhub_owner.as_ref().map(|owner| {
+        format!("{}/{}/skills/{}", CLAWHUB_SITE_ORIGIN, owner, slug)
+    });
+
+    MarketplaceSkill {
+        id: format!("{}::{}", CLAWHUB_SOURCE_ID, slug),
+        slug: Some(slug.clone()),
+        name,
+        description,
+        // 用 owner 作为 author 显示（搜索端点不单独返回 author）
+        author: clawhub_owner.clone(),
+        source_id: CLAWHUB_SOURCE_ID.to_string(),
+        source_name: CLAWHUB_SOURCE_NAME.to_string(),
+        install_count,
+        install_url: None,
+        created_at: None,
+        repo_url: None,
+        skill_path: Some(slug.clone()),
+        external_url,
+        remote_revision: clawhub_version.clone(),
+        // 搜索端点不返回 topics，tags 暂为空，详情端点可补全
+        tags: Vec::new(),
+        install_status: InstallStatus::NotInstalled,
+        clawhub_slug: Some(slug),
+        clawhub_owner,
+        clawhub_version,
+    }
+}
+
 pub struct MarketplaceService;
 
 fn normalize_marketplace_query(query: Option<&str>) -> Option<String> {
@@ -708,23 +788,40 @@ fn normalize_marketplace_query(query: Option<&str>) -> Option<String> {
 }
 
 fn marketplace_skill_matches_query(skill: &MarketplaceSkill, query: &str) -> bool {
-    skill.name.to_lowercase().contains(query)
+    // 分词 AND 匹配：query 按空白拆分为多个 token，每个 token 必须命中至少一个字段。
+    // 这样 "email gmail" 能匹配 name="Email" + description="...Gmail..."，
+    // 同时兼容单 token 场景（退化为原 OR 字段匹配）。
+    let tokens: Vec<&str> = query.split_whitespace().collect();
+    if tokens.is_empty() {
+        return true;
+    }
+    tokens.iter().all(|token| skill_matches_token(skill, token))
+}
+
+/// 单个 token 是否命中 skill 的任意字段（大小写不敏感的子串包含）。
+fn skill_matches_token(skill: &MarketplaceSkill, token: &str) -> bool {
+    let token = token.to_lowercase();
+    if token.is_empty() {
+        return true;
+    }
+    skill.name.to_lowercase().contains(&token)
         || skill
             .slug
             .as_ref()
-            .map(|slug| slug.to_lowercase().contains(query))
+            .map(|slug| slug.to_lowercase().contains(&token))
             .unwrap_or(false)
         || skill
             .description
             .as_ref()
-            .map(|d| d.to_lowercase().contains(query))
+            .map(|d| d.to_lowercase().contains(&token))
             .unwrap_or(false)
         || skill
             .author
             .as_ref()
-            .map(|a| a.to_lowercase().contains(query))
+            .map(|a| a.to_lowercase().contains(&token))
             .unwrap_or(false)
-        || skill.source_name.to_lowercase().contains(query)
+        || skill.source_name.to_lowercase().contains(&token)
+        || skill.tags.iter().any(|tag| tag.to_lowercase().contains(&token))
 }
 
 fn filter_marketplace_skills_by_query(
@@ -754,12 +851,9 @@ impl MarketplaceService {
     /// 当请求的 page 在缓存中没有 cursor 时，会从最近已知的页开始向后逐页推进，
     /// 直到拿到目标页的数据。
     pub async fn fetch_marketplace_skills_page(
-        _sources: &[MarketplaceSource],
         skills_dir: &Path,
         query: Option<String>,
-        _github_token: Option<&str>,
         page: u32,
-        _source_filter: Option<Vec<String>>,
     ) -> Result<MarketplaceSkillsResponse, String> {
         let page = page.max(1);
         let trimmed_query = query
@@ -767,6 +861,13 @@ impl MarketplaceService {
             .map(str::trim)
             .filter(|q| !q.is_empty())
             .map(|q| q.to_string());
+
+        // 有搜索词时走 /api/v1/search 真搜索（可搜全库，不受分页限制），
+        // 无搜索词时走 /api/v1/skills 列表分页（按 installs 排序）。
+        if let Some(q) = &trimmed_query {
+            return Self::fetch_clawhub_search_page(q, skills_dir).await;
+        }
+
         let sort = Some("installs");
 
         // 1. 拿到目标 page 的 cursor（必要时逐页推进）
@@ -804,20 +905,53 @@ impl MarketplaceService {
             .map(map_clawhub_list_item_to_skill)
             .collect::<Vec<_>>();
 
-        // 5. 本地搜索过滤（clawhub 列表端点的 search 参数无效，需要在客户端过滤）
-        let skills = if let Some(q) = &trimmed_query {
-            filter_marketplace_skills_by_query(skills, Some(q.as_str()))
-        } else {
-            skills
-        };
-
-        // 6. 标记安装状态
+        // 5. 标记安装状态
         let mut skills = skills;
         for skill in skills.iter_mut() {
             skill.install_status = Self::check_install_status(skill, skills_dir);
         }
 
         Ok(MarketplaceSkillsResponse { skills, has_more })
+    }
+
+    /// 通过 Clawhub /api/v1/search?q= 端点搜索全库。
+    /// 该端点不支持 cursor 分页，单次返回所有命中结果（按 score 排序），
+    /// 因此 has_more 永远为 false，前端不应在搜索模式下显示"加载更多"。
+    async fn fetch_clawhub_search_page(
+        query: &str,
+        skills_dir: &Path,
+    ) -> Result<MarketplaceSkillsResponse, String> {
+        let client = clawhub_client()?;
+        let resp = client
+            .get(format!("{}/search", CLAWHUB_API_BASE))
+            .query(&[("q", query)])
+            .send()
+            .await
+            .map_err(|e| format!("技能市场搜索请求失败: {}", e))?;
+        let status = resp.status();
+        if !status.is_success() {
+            return Err(format!("技能市场搜索请求失败: HTTP {status}"));
+        }
+        let body: ClawhubSearchResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("技能市场搜索响应解析失败: {}", e))?;
+
+        let mut skills: Vec<MarketplaceSkill> = body
+            .results
+            .into_iter()
+            .map(map_clawhub_search_item_to_skill)
+            .collect();
+
+        for skill in skills.iter_mut() {
+            skill.install_status = Self::check_install_status(skill, skills_dir);
+        }
+
+        // 搜索端点不分页，无更多页
+        Ok(MarketplaceSkillsResponse {
+            skills,
+            has_more: false,
+        })
     }
 
     /// 解析 page N 对应的 cursor。如果缓存中没有，从最近已知的 page 开始向后逐页推进，
@@ -4071,6 +4205,64 @@ description: "来自 frontmatter 的描述"
 
         let filtered_none = super::filter_marketplace_skills_by_query(skills.clone(), None);
         assert_eq!(filtered_none.len(), skills.len());
+    }
+
+    #[test]
+    fn filter_marketplace_skills_by_query_matches_tags() {
+        let mut alpha = sample_marketplace_skill("source-a", "alpha-skill");
+        alpha.tags = vec!["email".to_string(), "gmail".to_string()];
+        let mut beta = sample_marketplace_skill("source-b", "beta-tool");
+        beta.tags = vec!["calendar".to_string()];
+
+        let skills = vec![alpha.clone(), beta];
+
+        let by_tag = super::filter_marketplace_skills_by_query(skills, Some("email"));
+        assert_eq!(by_tag.len(), 1);
+        assert_eq!(by_tag[0].id, alpha.id);
+    }
+
+    #[test]
+    fn filter_marketplace_skills_by_query_supports_token_and_matching() {
+        // 分词 AND：两个 token 都要命中（可在不同字段）
+        let mut alpha = sample_marketplace_skill("source-a", "alpha-skill");
+        alpha.name = "Email Manager".to_string();
+        alpha.description = Some("Gmail integration".to_string());
+
+        let mut beta = sample_marketplace_skill("source-b", "beta-tool");
+        beta.name = "Email Tool".to_string();
+        beta.description = Some("Calendar integration".to_string());
+
+        let skills = vec![alpha.clone(), beta];
+
+        // "email gmail" → alpha 命中（name 有 email，description 有 gmail）
+        // beta 只有 email 没有 gmail → 不命中
+        let filtered = super::filter_marketplace_skills_by_query(skills, Some("email gmail"));
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].id, alpha.id);
+    }
+
+    #[test]
+    fn map_clawhub_search_item_to_skill_maps_fields_and_owner() {
+        let item = super::ClawhubSearchItem {
+            score: Some(2.5),
+            slug: "email-skill".to_string(),
+            display_name: Some("Email".to_string()),
+            summary: Some("  Email management  ".to_string()),
+            version: Some("1.2.0".to_string()),
+            downloads: Some(8905),
+            owner_handle: Some("porteden".to_string()),
+        };
+        let skill = super::map_clawhub_search_item_to_skill(item);
+        assert_eq!(skill.slug.as_deref(), Some("email-skill"));
+        assert_eq!(skill.name, "Email");
+        assert_eq!(skill.description.as_deref(), Some("Email management"));
+        assert_eq!(skill.author.as_deref(), Some("porteden"));
+        assert_eq!(skill.clawhub_owner.as_deref(), Some("porteden"));
+        assert_eq!(skill.clawhub_version.as_deref(), Some("1.2.0"));
+        assert_eq!(skill.install_count, Some(8905));
+        assert!(skill.external_url.as_deref().unwrap().contains("porteden"));
+        assert!(skill.external_url.as_deref().unwrap().contains("email-skill"));
+        assert!(skill.tags.is_empty(), "tags should default to empty");
     }
 
     fn sample_marketplace_skill(source_id: &str, slug: &str) -> MarketplaceSkill {

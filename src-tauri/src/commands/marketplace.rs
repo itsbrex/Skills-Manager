@@ -562,12 +562,9 @@ pub async fn fetch_marketplace_skills(
         resolve_cache_source_scope(&normalized_source_filter, &sources);
 
     let result = match MarketplaceService::fetch_marketplace_skills_page(
-        &sources,
         &config.skills_dir,
         normalized_query.clone(),
-        None,
         page,
-        normalized_source_filter.clone(),
     )
     .await
     {
@@ -783,12 +780,9 @@ pub async fn sync_marketplace_installed_skills(
     let sources = config.marketplace_sources.clone().unwrap_or_default();
 
     let listing = MarketplaceService::fetch_marketplace_skills_page(
-        &sources,
         &config.skills_dir,
         None,
-        None,
         1,
-        normalized_source_filter.clone(),
     )
     .await?;
     let installed_skills = load_cached_or_scanned_skills(app_cache.inner(), &config.skills_dir)?;
@@ -857,12 +851,9 @@ pub async fn check_marketplace_updates_if_stale(
     let sources = config.marketplace_sources.clone().unwrap_or_default();
 
     let listing = MarketplaceService::fetch_marketplace_skills_page(
-        &sources,
         &config.skills_dir,
         None,
-        None,
         1,
-        None,
     )
     .await?;
     let installed_skills = load_cached_or_scanned_skills(app_cache.inner(), &config.skills_dir)?;
