@@ -278,6 +278,10 @@ export const zh = {
     githubInstallRequired: "请输入 GitHub 技能链接",
     noSkills: "暂无可用的 Skill",
     noMatch: "没有匹配的 Skill",
+    resultsCount: "找到 {count} 个 Skill",
+    noMatchHint: "试试更简短的关键词，或清除当前筛选条件。",
+    clearSearch: "清除搜索",
+    clearTags: "清除标签",
     author: "作者: {author}",
     source: "来源: {source}",
     sourceFilter: "来源筛选",
@@ -450,11 +454,7 @@ export const zh = {
     cloudSyncInterval: "同步间隔",
     cloudSyncIntervalDesc: "设置自动同步的时间间隔",
     cloudSyncIntervalOption: "{minutes} 分钟",
-    // Marketplace
-    marketplace: "市场",
-    marketplaceEmpty: "暂无可配置的市场源",
-    marketplaceSourceTypeGithub: "GitHub 仓库",
-    marketplaceSourceTypeApi: "第三方 API",
+    // GitHub Token
     githubToken: "GitHub Token",
     githubTokenDesc:
       "可选：提高 GitHub API 限额，减少刷新与预览失败",
@@ -738,7 +738,7 @@ export const zh = {
     navFeedback: "前往反馈",
     settingGeneral: "通用设置",
     settingAppearance: "外观",
-    settingMarketplace: "市场源",
+    settingGithubToken: "GitHub Token",
     settingLlm: "AI 翻译",
     settingAccount: "账号",
     settingAbout: "关于",

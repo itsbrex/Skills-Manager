@@ -45,7 +45,6 @@ export function Settings() {
 
   const SETTINGS_SECTIONS = [
     { id: "settings-general", label: t("settings.general") },
-    { id: "settings-marketplace", label: t("settings.marketplace") },
     { id: "settings-appearance", label: t("settings.appearance") },
     { id: "settings-llm", label: t("settings.llmTitle") },
     { id: "settings-account", label: t("settings.account") },
@@ -536,22 +535,18 @@ export function Settings() {
             <SettingsRow
               label={t("settings.syncNotifications")}
               description={t("settings.syncNotificationsDesc")}
-              isLast={true}
+              isLast={false}
             >
               <Toggle
                 checked={prefs.show_sync_notifications}
                 onChange={(v) => updatePreference("show_sync_notifications", v)}
               />
             </SettingsRow>
-          </SettingsCard>
 
-          {/* Marketplace Section */}
-          <SectionTitle id="settings-marketplace">{t("settings.marketplace")}</SectionTitle>
-          <SettingsCard>
             <SettingsRow
               label={t("settings.githubToken")}
               description={t("settings.githubTokenDesc")}
-              isLast
+              isLast={true}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <PasswordInput
