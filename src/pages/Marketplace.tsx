@@ -31,6 +31,7 @@ import {
 import { useTranslation } from "@/i18n";
 import { useSkillTranslation, makeTranslationKey } from "@/hooks/useSkillTranslation";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useClickOutside } from "@/hooks/useClickOutside";
 import { FavoriteIconButton } from "@/components/favorites/FavoriteIconButton";
 import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
 import { SkillDetailModal } from "@/components/marketplace/SkillDetailModal";
@@ -214,6 +215,8 @@ export function Marketplace() {
   const [hasMore, setHasMore] = useState(() => marketplaceSnapshot?.hasMore ?? false);
   const [currentPage, setCurrentPage] = useState(1);
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
+  const tagDropdownRef = useRef<HTMLDivElement>(null);
+  useClickOutside(tagDropdownRef, tagDropdownOpen, () => setTagDropdownOpen(false));
   const [githubInstallDialogOpen, setGithubInstallDialogOpen] = useState(false);
   // Page-level search query is shared with the TopBar scope field via context,
   // so the Marketplace page no longer renders its own search input.
@@ -233,6 +236,8 @@ export function Marketplace() {
   const [descriptionHydrationTick, setDescriptionHydrationTick] = useState(0);
   const [sortMode, setSortMode] = useState<MarketplaceSortMode>(() => loadSortModeFromStorage());
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const sortDropdownRef = useRef<HTMLDivElement>(null);
+  useClickOutside(sortDropdownRef, sortDropdownOpen, () => setSortDropdownOpen(false));
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const listRequestSeqRef = useRef(0);
   const remoteLoadSeqRef = useRef(0);
@@ -1036,7 +1041,7 @@ export function Marketplace() {
               <Link2 size={14} />
             </button>
             <RefreshButton onClick={handleRefresh} loading={refreshing || updatingAll || searching} iconOnly />
-            <div style={{ position: 'relative' }}>
+            <div ref={sortDropdownRef} style={{ position: 'relative' }}>
               <button
                 type="button"
                 onClick={() => setSortDropdownOpen((v) => !v)}
@@ -1092,25 +1097,20 @@ export function Marketplace() {
                 )}
               </button>
               {sortDropdownOpen && (
-                <>
-                  <div
-                    style={{ position: 'fixed', inset: 0, zIndex: MODAL_LAYER_Z_INDEX - 1 }}
-                    onClick={() => setSortDropdownOpen(false)}
-                  />
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 'calc(100% + 6px)',
-                      right: 0,
-                      minWidth: '172px',
-                      backgroundColor: 'var(--popover)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-md)',
-                      boxShadow: 'var(--shadow-lg)',
-                      zIndex: MODAL_LAYER_Z_INDEX,
-                      padding: '6px',
-                    }}
-                  >
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    right: 0,
+                    minWidth: '172px',
+                    backgroundColor: 'var(--popover)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: 'var(--shadow-lg)',
+                    zIndex: MODAL_LAYER_Z_INDEX,
+                    padding: '6px',
+                  }}
+                >
                     {MARKETPLACE_SORT_MODES.map((mode) => {
                       const active = mode === sortMode;
                       return (
@@ -1159,8 +1159,7 @@ export function Marketplace() {
                         </button>
                       );
                     })}
-                  </div>
-                </>
+                </div>
               )}
             </div>
             <button
@@ -1210,7 +1209,7 @@ export function Marketplace() {
               </svg>
             </button>
             {showTagFilter && (
-              <div style={{ position: 'relative' }}>
+              <div ref={tagDropdownRef} style={{ position: 'relative' }}>
                 <button
                   onClick={() => setTagDropdownOpen((v) => !v)}
                   title={t("marketplace.tagFilter")}
@@ -1273,27 +1272,22 @@ export function Marketplace() {
                 </button>
 
                 {tagDropdownOpen && (
-                  <>
-                    <div
-                      style={{ position: 'fixed', inset: 0, zIndex: MODAL_LAYER_Z_INDEX - 1 }}
-                      onClick={() => setTagDropdownOpen(false)}
-                    />
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 'calc(100% + 6px)',
-                        right: 0,
-                        minWidth: '220px',
-                        maxHeight: '320px',
-                        overflowY: 'auto',
-                        backgroundColor: 'var(--popover)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-md)',
-                        boxShadow: 'var(--shadow-lg)',
-                        zIndex: MODAL_LAYER_Z_INDEX,
-                        padding: '6px',
-                      }}
-                    >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 6px)',
+                      right: 0,
+                      minWidth: '220px',
+                      maxHeight: '320px',
+                      overflowY: 'auto',
+                      backgroundColor: 'var(--popover)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-md)',
+                      boxShadow: 'var(--shadow-lg)',
+                      zIndex: MODAL_LAYER_Z_INDEX,
+                      padding: '6px',
+                    }}
+                  >
                       <button
                         onClick={() => {
                           setSelectedTags([]);
@@ -1382,7 +1376,6 @@ export function Marketplace() {
                         );
                       })}
                     </div>
-                  </>
                 )}
               </div>
             )}

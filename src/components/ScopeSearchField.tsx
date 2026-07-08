@@ -78,6 +78,19 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
     inputRef.current?.blur();
   }
 
+  function handleBlur() {
+    // 延迟检查，让点击下拉框选项或清除按钮的 click 事件先触发并可能
+    // 重新聚焦 input。若焦点移到了搜索框之外（例如点击了 TopBar
+    // 拖拽区域或页面其他位置），则关闭下拉框。这补充了 mousedown
+    // handler，后者无法捕获 Tauri 拖拽区域上的点击。
+    setTimeout(() => {
+      if (dropdownRef.current && !dropdownRef.current.contains(document.activeElement)) {
+        setSwitcherOpen(false);
+        setSwitcherQuery("");
+      }
+    }, 0);
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (switcherOpen) {
       if (e.key === "Escape") {
@@ -182,6 +195,7 @@ export function ScopeSearchField({ onOpenPalette }: ScopeSearchFieldProps) {
           value={inputValue}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
+          onBlur={handleBlur}
           placeholder={placeholder}
           style={{
             flex: 1,

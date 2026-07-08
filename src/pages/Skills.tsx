@@ -31,6 +31,7 @@ import {
 } from "@/hooks/useSkillTranslation";
 import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useClickOutside } from "@/hooks/useClickOutside";
 import { FavoriteIconButton } from "@/components/favorites/FavoriteIconButton";
 import {
   applyTagFilterAction,
@@ -278,13 +279,15 @@ function SkillsHeaderMoreMenu({
   items: SkillsHeaderMoreMenuItem[];
 }) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  useClickOutside(containerRef, open, () => setOpen(false));
 
   if (items.length === 0) {
     return null;
   }
 
   return (
-    <div style={{ position: "relative", flexShrink: 0 }}>
+    <div ref={containerRef} style={{ position: "relative", flexShrink: 0 }}>
       <button
         type="button"
         aria-label={label}
@@ -323,33 +326,24 @@ function SkillsHeaderMoreMenu({
       </button>
 
       {open && (
-        <>
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: MODAL_LAYER_Z_INDEX - 1,
-            }}
-            onClick={() => setOpen(false)}
-          />
-          <div
-            className="glass-elevated animate-popover"
-            style={{
-              position: "absolute",
-              top: "calc(100% + 6px)",
-              right: 0,
-              display: "flex",
-              flexDirection: "column",
-              gap: "2px",
-              minWidth: "120px",
-              maxHeight: "320px",
-              overflow: "auto",
-              padding: "8px",
-              borderRadius: "var(--radius-lg)",
-              zIndex: MODAL_LAYER_Z_INDEX,
-              background: "var(--background)",
-            }}
-          >
+        <div
+          className="glass-elevated animate-popover"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            right: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: "2px",
+            minWidth: "120px",
+            maxHeight: "320px",
+            overflow: "auto",
+            padding: "8px",
+            borderRadius: "var(--radius-lg)",
+            zIndex: MODAL_LAYER_Z_INDEX,
+            background: "var(--background)",
+          }}
+        >
             {items.map((item) => (
               <button
                 key={item.id}
@@ -379,8 +373,7 @@ function SkillsHeaderMoreMenu({
                 {item.label}
               </button>
             ))}
-          </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -630,6 +623,8 @@ export function Skills() {
   const [creating, setCreating] = useState(false);
   const [projectBindingsSaving, setProjectBindingsSaving] = useState(false);
   const [showTagFilterMenu, setShowTagFilterMenu] = useState(false);
+  const tagFilterMenuRef = useRef<HTMLDivElement>(null);
+  useClickOutside(tagFilterMenuRef, showTagFilterMenu, () => setShowTagFilterMenu(false));
   const [skillEditorTab, setSkillEditorTab] = useState<SkillEditorTab>("tools");
   const [tagDraft, setTagDraft] = useState("");
   const [savingTagsSkillId, setSavingTagsSkillId] = useState<string | null>(null);
@@ -2417,7 +2412,7 @@ export function Skills() {
             </button>
 
             {showTagFilterControl && (
-              <div style={{ position: "relative" }}>
+              <div ref={tagFilterMenuRef} style={{ position: "relative" }}>
                 <button
                   type="button"
                   onClick={() => setShowTagFilterMenu((current) => !current)}
@@ -2480,30 +2475,21 @@ export function Skills() {
                 </button>
 
                 {showTagFilterMenu && (
-                  <>
-                    <div
-                      style={{
-                        position: "fixed",
-                        inset: 0,
-                        zIndex: MODAL_LAYER_Z_INDEX - 1,
-                      }}
-                      onClick={() => setShowTagFilterMenu(false)}
-                    />
-                    <div
-                      className="glass-elevated animate-popover"
-                      style={{
-                        position: "absolute",
-                        top: "calc(100% + 6px)",
-                        right: 0,
-                        width: "280px",
-                        maxHeight: "420px",
-                        overflow: "auto",
-                        padding: "8px",
-                        borderRadius: "var(--radius-lg)",
-                        zIndex: MODAL_LAYER_Z_INDEX,
-                        background: "var(--background)",
-                      }}
-                    >
+                  <div
+                    className="glass-elevated animate-popover"
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      width: "280px",
+                      maxHeight: "420px",
+                      overflow: "auto",
+                      padding: "8px",
+                      borderRadius: "var(--radius-lg)",
+                      zIndex: MODAL_LAYER_Z_INDEX,
+                      background: "var(--background)",
+                    }}
+                  >
                       <div style={{
                         display: "flex",
                         alignItems: "flex-start",
@@ -2678,8 +2664,7 @@ export function Skills() {
                           );
                         })}
                       </div>
-                    </div>
-                  </>
+                  </div>
                 )}
               </div>
             )}
