@@ -7,6 +7,46 @@
 
 ## [Unreleased]
 
+## [2.1.4] - 2026-07-10
+
+### 中文
+
+#### Added
+- 新增 Skill 收藏功能：支持本地与市场 Skill 收藏，市场收藏保存快照支持断网展示，已收藏置顶排序与"仅看收藏"筛选
+- 市场源切换为 clawhub.ai：后端改用 clawhub.ai 公开 API，支持 ZIP 归档内存预览与标签筛选
+- 优化市场搜索体验：Clawhub 专用搜索端点支持全库搜索，分词 AND 匹配扩展至 tags 字段，搜索结果高亮匹配子串并显示计数
+- 新增 WorkBuddy 工具支持
+
+#### Changed
+- 设置页"市场"区块合并到"通用"区块，命令面板对应命令更新为 set-github-token
+- 清理 Rust 编译警告：移除未使用的 re-export，为 clawhub 响应结构体补充 #[allow(dead_code)]
+- 版本号统一升级至 2.1.4
+
+#### Fixed
+- 修正 clawhub 市场 Skill 外部链接 URL 构造（补全 owner 与 /skills/ 段）
+- 修复下拉菜单点击外部空白区域无法收起的问题（backdrop-filter 导致 fixed 遮罩失效，改用 useClickOutside hook）
+- 修复切换市场源后旧源已安装 Skill 混入当前源列表的问题
+- 修复选中标签后底部无限显示"加载中"的问题
+
+### English
+
+#### Added
+- Skill favorites: supports favoriting local and marketplace skills; marketplace favorites store snapshots for offline display; favorited items pinned to top with "favorites only" filter
+- Marketplace source switched to clawhub.ai: backend now uses clawhub.ai public API with in-memory ZIP archive preview and tag filtering
+- Improved marketplace search: dedicated Clawhub search endpoint enables full-library search; token-based AND matching extended to tags; search results highlight matched substrings with result count
+- Added WorkBuddy tool support
+
+#### Changed
+- Merged the "Marketplace" settings section into "General"; command palette command updated to set-github-token
+- Cleaned up Rust compile warnings: removed unused re-exports, added #[allow(dead_code)] to clawhub response structs
+- Bumped version to 2.1.4 across the board
+
+#### Fixed
+- Fixed clawhub marketplace skill external link URL construction (missing owner and /skills/ segment)
+- Fixed dropdown menus not closing when clicking outside (backdrop-filter broke the fixed overlay; replaced with useClickOutside hook)
+- Fixed installed skills from a previous marketplace source leaking into the current source list after switching sources
+- Fixed infinite "loading" indicator at the bottom when a tag filter was selected
+
 ## [2.1.2] - 2026-06-23
 
 ### 中文
@@ -107,7 +147,8 @@
 - Rust 后端
 - 跨平台支持（macOS/Windows/Linux）
 
-[Unreleased]: https://github.com/jiweiyeah/Skills-Manager/compare/v2.1.2...HEAD
+[Unreleased]: https://github.com/jiweiyeah/Skills-Manager/compare/v2.1.4...HEAD
+[2.1.4]: https://github.com/jiweiyeah/Skills-Manager/releases/tag/v2.1.4
 [2.1.2]: https://github.com/jiweiyeah/Skills-Manager/releases/tag/v2.1.2
 [2.1.0]: https://github.com/jiweiyeah/Skills-Manager/releases/tag/v2.1.0
 [2.0.3]: https://github.com/jiweiyeah/Skills-Manager/releases/tag/v2.0.3
