@@ -249,6 +249,13 @@ pub const SUPPORTED_TOOLS: &[ToolDefinition] = &[
         alt_config_dirs: &[],
         cli_command: "hermes",
     },
+    ToolDefinition {
+        id: "workbuddy",
+        name: "WorkBuddy",
+        config_dir: ".workbuddy",
+        alt_config_dirs: &[],
+        cli_command: "workbuddy",
+    },
 ];
 
 #[cfg(test)]
@@ -279,6 +286,7 @@ mod tests {
         assert!(ids.contains(&"pi"));
         assert!(ids.contains(&"trae-cn"));
         assert!(ids.contains(&"hermes"));
+        assert!(ids.contains(&"workbuddy"));
     }
 
     #[test]
