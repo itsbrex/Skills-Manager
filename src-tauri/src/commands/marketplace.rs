@@ -550,7 +550,7 @@ pub async fn fetch_marketplace_skills(
                 &installed_skills,
                 &sources,
                 normalized_query.as_deref(),
-                &normalized_source_filter,
+                &cache_source_scope,
                 &config.skills_dir,
                 github_token.as_deref(),
             )
@@ -602,7 +602,7 @@ pub async fn fetch_marketplace_skills(
                         &installed_skills,
                         &sources,
                         normalized_query.as_deref(),
-                        &normalized_source_filter,
+                        &runtime_cache_source_scope,
                         &config.skills_dir,
                         github_token.as_deref(),
                     )
@@ -627,7 +627,7 @@ pub async fn fetch_marketplace_skills(
         &installed_skills,
         &sources,
         normalized_query.as_deref(),
-        &normalized_source_filter,
+        &runtime_cache_source_scope,
         &config.skills_dir,
         github_token.as_deref(),
     )
