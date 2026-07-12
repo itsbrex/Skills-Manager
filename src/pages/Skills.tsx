@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties, type MouseEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { confirm, open } from "@tauri-apps/plugin-dialog";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { RefreshButton } from "@/components/ui/refresh-button";
@@ -21,6 +22,7 @@ import {
   InstalledSkillPackage,
   ProjectBinding,
   Skill,
+  SkillUsageStats,
   Tool,
 } from "@/types";
 import { useTranslation, TranslationPath } from "@/i18n";
@@ -638,6 +640,7 @@ export function Skills() {
   const [expandedCardKeys, setExpandedCardKeys] = useState<Set<string>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
+  const [usageStats, setUsageStats] = useState<Record<string, SkillUsageStats>>({});
   const [searchParams, setSearchParams] = useSearchParams();
   const { toasts, addToast, updateToast, removeToast } = useToast();
   const skillMetadata = config?.skill_metadata;
@@ -689,9 +692,10 @@ export function Skills() {
       invoke<InstalledSkillPackage[]>("list_skill_packages"),
       invoke<AppConfig>("get_config"),
       invoke<Tool[]>("detect_tools"),
+      invoke<Record<string, SkillUsageStats>>("get_skill_usage_stats"),
     ]);
 
-    const [skillsR, packagesR, configR, toolsR] = settled;
+    const [skillsR, packagesR, configR, toolsR, usageR] = settled;
     const failures: string[] = [];
     for (const r of settled) {
       if (r.status === "rejected") {
@@ -703,6 +707,7 @@ export function Skills() {
       if (skillsR.status === "fulfilled") setSkills(skillsR.value);
       if (packagesR.status === "fulfilled") setSkillPackages(packagesR.value);
       if (toolsR.status === "fulfilled") setTools(toolsR.value);
+      if (usageR.status === "fulfilled") setUsageStats(usageR.value);
 
       if (configR.status === "fulfilled") {
         const configResult = configR.value;
@@ -735,16 +740,18 @@ export function Skills() {
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [skillsResult, skillPackagesResult, configResult, toolsResult] = await Promise.all([
+      const [skillsResult, skillPackagesResult, configResult, toolsResult, usageResult] = await Promise.all([
         invoke<Skill[]>("refresh_skills"),
         invoke<InstalledSkillPackage[]>("list_skill_packages"),
         invoke<AppConfig>("get_config"),
         invoke<Tool[]>("detect_tools"),
+        invoke<Record<string, SkillUsageStats>>("get_skill_usage_stats"),
       ]);
       setSkills(skillsResult);
       setSkillPackages(skillPackagesResult);
       setConfig(configResult);
       setTools(toolsResult);
+      setUsageStats(usageResult);
       addToast(t("common.refreshSuccess"), "success");
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
@@ -781,6 +788,27 @@ export function Skills() {
     if (hadCacheOnMountRef.current) return;
     loadData();
   }, [loadData]);
+
+  // 监听 usage-stats-updated 事件，自动刷新调用次数统计
+  useEffect(() => {
+    let unlisten: UnlistenFn | null = null;
+    let cancelled = false;
+    listen("usage-stats-updated", () => {
+      invoke<Record<string, SkillUsageStats>>("get_skill_usage_stats")
+        .then(setUsageStats)
+        .catch(() => {});
+    }).then((stop) => {
+      if (cancelled) {
+        stop();
+      } else {
+        unlisten = stop;
+      }
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   // Keep the module-level cache in sync with the latest loaded data so the
   // next mount can render immediately without a PageLoader flash.
@@ -1970,6 +1998,7 @@ export function Skills() {
       return [];
     }
 
+    const skillStats = usageStats[toolEditorSkill.id];
     return toolEditorFilteredToolIds.map((toolId) => {
       const isEnabled = toolEditorSkill.enabled[toolId] ?? false;
       const toggleKey = `${toolEditorSkill.instance_id}:${toolId}`;
@@ -1986,9 +2015,10 @@ export function Skills() {
         disabled: isDisabled,
         tooltip: !isDetected ? t("skills.toolNotDetected") : undefined,
         dimmed: !isDetected,
+        callCount: skillStats?.by_tool[toolId] ?? 0,
       };
     });
-  }, [toolEditorFilteredToolIds, toolEditorIsBulkToggling, toolEditorSkill, togglingSkill, tools, t]);
+  }, [toolEditorFilteredToolIds, toolEditorIsBulkToggling, toolEditorSkill, togglingSkill, tools, t, usageStats]);
 
   const toolEditorTags = useMemo(
     () => (toolEditorSkill ? getSkillTagsForSkill(toolEditorSkill, skillMetadata) : []),
@@ -3188,8 +3218,33 @@ export function Skills() {
                         fontSize: "12px",
                         color: "var(--muted-foreground)",
                         lineHeight: 1.5,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        flexWrap: "wrap",
                       }}>
-                        {getUnifiedItemMetaLabel(item, t)}
+                        <span>{getUnifiedItemMetaLabel(item, t)}</span>
+                        {item.kind === "skill" && item.skill && (() => {
+                          const stats = usageStats[item.skill.id];
+                          if (!stats || stats.total === 0) return null;
+                          return (
+                            <span style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "3px",
+                              padding: "1px 7px",
+                              borderRadius: "6px",
+                              backgroundColor: "var(--background)",
+                              border: "1px solid var(--border)",
+                              color: "var(--muted-foreground)",
+                              fontSize: "11px",
+                              fontWeight: 500,
+                              whiteSpace: "nowrap",
+                            }}>
+                              {t("skills.callsCount").replace("{count}", String(stats.total))}
+                            </span>
+                          );
+                        })()}
                       </div>
                       {item.kind === "skill" && item.toolSummary?.state === "partial" && item.toolSummary.visibleEnabledToolIds.length > 0 && (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
@@ -3586,6 +3641,7 @@ function SkillManageDialog({
     disabled: boolean;
     tooltip?: string;
     dimmed?: boolean;
+    callCount?: number;
   }>;
   emptyLabel: string;
   onQueryChange: (query: string) => void;
@@ -3991,6 +4047,21 @@ function SkillManageDialog({
                         >
                           {item.label}
                         </div>
+                        {item.callCount != null && item.callCount > 0 && (
+                          <span style={{
+                            fontSize: "11px",
+                            fontWeight: 500,
+                            padding: "1px 7px",
+                            borderRadius: "6px",
+                            backgroundColor: "var(--background)",
+                            border: "1px solid var(--border)",
+                            color: "var(--muted-foreground)",
+                            whiteSpace: "nowrap",
+                            flexShrink: 0,
+                          }}>
+                            {t("skills.callsCount").replace("{count}", String(item.callCount))}
+                          </span>
+                        )}
                       </div>
                       <div onClick={(e) => e.stopPropagation()}>
                         <Toggle

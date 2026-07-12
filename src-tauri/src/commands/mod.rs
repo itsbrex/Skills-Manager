@@ -11,6 +11,7 @@ pub mod skills;
 pub mod sync;
 pub mod tools;
 pub mod updater;
+pub mod usage;
 
 pub use auth::{
     exchange_github_auth, exchange_google_auth, get_auth_profile, logout_auth, start_github_auth,
@@ -53,3 +54,7 @@ pub use tools::{
     set_tool_enabled, update_custom_tool, update_tool_paths,
 };
 pub use updater::check_update;
+pub use usage::{
+    clear_usage_stats, get_skill_usage_stats, get_usage_hook_status, install_usage_hook,
+    sync_usage_hook_with_config, uninstall_usage_hook,
+};

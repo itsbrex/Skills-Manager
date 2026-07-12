@@ -7,7 +7,7 @@ mod test_support;
 use commands::{
     batch_set_skill_tools, check_marketplace_updates_if_stale,
     check_sync_status, check_update, clear_llm_provider, clear_translation_cache,
-    create_custom_tool, create_directory, create_file, create_skill,
+    clear_usage_stats, create_custom_tool, create_directory, create_file, create_skill,
     delete_custom_tool, delete_path, delete_skill,
     detect_available_editors, detect_tools, disable_skill, enable_skill, exchange_github_auth,
     exchange_google_auth, fetch_clawhub_skill_files, fetch_marketplace_skill_descriptions,
@@ -15,16 +15,16 @@ use commands::{
     get_auth_profile,
     get_available_editors, get_cached_marketplace_translations, get_cached_skill_translations,
     get_cached_text_translation, get_config, get_llm_provider, get_marketplace_sources,
-    get_tool_status, import_skills_to_hub, install_marketplace_skill,
-    install_marketplace_skill_by_ref, install_skill_package_from_path, is_initialized,
-    list_marketplace_favorites, list_skill_packages, list_skills, logout_auth, mark_initialized,
-    open_in_editor, read_directory_tree, read_file, refresh_editors, refresh_skills,
-    refresh_tools, remove_skill_package, rename_path, save_config, save_llm_provider,
-    scan_existing_skills, set_tool_enabled, start_github_auth, start_google_auth,
-    submit_feedback, sync_marketplace_installed_skills, test_llm_provider,
+    get_skill_usage_stats, get_tool_status, get_usage_hook_status, import_skills_to_hub,
+    install_marketplace_skill, install_marketplace_skill_by_ref, install_skill_package_from_path,
+    install_usage_hook, is_initialized, list_marketplace_favorites, list_skill_packages,
+    list_skills, logout_auth, mark_initialized, open_in_editor, read_directory_tree, read_file,
+    refresh_editors, refresh_skills, refresh_tools, remove_skill_package, rename_path,
+    save_config, save_llm_provider, scan_existing_skills, set_tool_enabled, start_github_auth,
+    start_google_auth, submit_feedback, sync_marketplace_installed_skills, test_llm_provider,
     toggle_marketplace_favorite, toggle_marketplace_source, toggle_skill_favorite,
-    translate_marketplace_skill, translate_skill, translate_skill_files,
-    translate_skills_batch, translate_text_content, update_custom_tool, update_tool_paths,
+    translate_marketplace_skill, translate_skill, translate_skill_files, translate_skills_batch,
+    translate_text_content, uninstall_usage_hook, update_custom_tool, update_tool_paths,
     write_file,
 };
 use services::{AppCache, MarketplaceCache};
@@ -62,6 +62,10 @@ pub fn run() {
                     }
                 }
             }
+            // Sync usage hook state with config on startup
+            commands::sync_usage_hook_with_config();
+            // Start watching for usage events and emit updates to frontend
+            commands::usage::start_usage_watcher(app.handle().clone());
             Ok(())
         })
         .manage(AppCache::default())
@@ -139,6 +143,11 @@ pub fn run() {
             exchange_google_auth,
             get_auth_profile,
             logout_auth,
+            get_skill_usage_stats,
+            install_usage_hook,
+            uninstall_usage_hook,
+            get_usage_hook_status,
+            clear_usage_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -37,6 +37,7 @@ sha2 = "0.10"
 zip = "0.6.6"
 toml = "0.8"
 futures-util = "0.3"
+notify = "6"
 
 [dev-dependencies]
 mockito = "1.4.0"

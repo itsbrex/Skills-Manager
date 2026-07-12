@@ -120,9 +120,16 @@ export interface UserPreferences {
   remove_links_when_disabling_tool: boolean;
   vault_backup_consent: VaultBackupConsent;
   telemetry_consent: TelemetryConsent;
+  skill_usage_monitor: boolean;
 
   // Marketplace auth
   github_token?: string | null;
+}
+
+export interface SkillUsageStats {
+  total: number;
+  by_tool: Record<string, number>;
+  last_called_at: number | null;
 }
 
 export interface AuthProfile {

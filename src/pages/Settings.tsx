@@ -41,6 +41,7 @@ export function Settings() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [usageHookLoading, setUsageHookLoading] = useState(false);
   const { toasts, addToast, removeToast } = useToast();
 
   const SETTINGS_SECTIONS = [
@@ -209,6 +210,31 @@ export function Settings() {
       }
     }, 800);
   }, [addToast, t]);
+
+  const handleSkillUsageMonitorChange = async (enabled: boolean) => {
+    if (!config) return;
+    setUsageHookLoading(true);
+    const prev = config.preferences?.skill_usage_monitor ?? true;
+    // Optimistically update UI
+    updatePreference("skill_usage_monitor", enabled);
+    try {
+      if (enabled) {
+        await invoke("install_usage_hook");
+      } else {
+        await invoke("uninstall_usage_hook");
+      }
+      addToast(
+        enabled ? t("settings.skillUsageMonitorEnabled") : t("settings.skillUsageMonitorDisabled"),
+        "success",
+      );
+    } catch (err) {
+      // Revert on failure
+      updatePreference("skill_usage_monitor", prev);
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setUsageHookLoading(false);
+    }
+  };
 
   const handleCheckUpdate = async () => {
     if (updateInfo) {
@@ -540,6 +566,18 @@ export function Settings() {
               <Toggle
                 checked={prefs.show_sync_notifications}
                 onChange={(v) => updatePreference("show_sync_notifications", v)}
+              />
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.skillUsageMonitor")}
+              description={t("settings.skillUsageMonitorDesc")}
+              isLast={false}
+            >
+              <Toggle
+                checked={prefs.skill_usage_monitor}
+                disabled={usageHookLoading}
+                onChange={handleSkillUsageMonitorChange}
               />
             </SettingsRow>
 

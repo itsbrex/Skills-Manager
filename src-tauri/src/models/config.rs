@@ -24,6 +24,8 @@ pub struct UserPreferences {
     pub show_sync_notifications: bool,
     #[serde(default = "default_false")]
     pub remove_links_when_disabling_tool: bool,
+    #[serde(default = "default_true")]
+    pub skill_usage_monitor: bool,
     #[serde(default)]
     pub github_token: Option<String>,
 }
@@ -123,6 +125,7 @@ impl Default for UserPreferences {
             tab_size: default_tab_size(),
             show_sync_notifications: true,
             remove_links_when_disabling_tool: false,
+            skill_usage_monitor: true,
             github_token: None,
         }
     }
