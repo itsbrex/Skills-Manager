@@ -7,6 +7,34 @@
 
 ## [Unreleased]
 
+## [2.1.5] - 2026-07-12
+
+### 中文
+
+#### Added
+- Skill 使用统计改用本地 SQLite 数据库（~/.skills-manager/usage.db），支持从旧 usage-events.log 自动迁移
+- 新增 Codex 调用统计支持：安装/卸载 Codex hook，与 Claude Code 共用同一 pending 目录与数据表，通过 tool_id 区分
+- Codex 自然语言技能调用统计：当未使用 $skill-name 语法时，通过整词匹配已安装技能 ID（大小写不敏感、长度 ≥3、最长 ID 优先）作为兜底
+- 后端文件系统监听（notify crate）~/.skills-manager/usage-pending/ 目录，技能调用后自动推送 'usage-stats-updated' 事件刷新前端
+
+#### Changed
+- Hook 脚本改为 OS 专用：Unix 使用 bash、Windows 使用 PowerShell，通过 build_hook_command() 按目标平台生成
+- Hook 事件改用独立文件写入（{ts}-{pid}-{rand}.json）以处理并发
+- 版本号统一升级至 2.1.5
+
+### English
+
+#### Added
+- Skill usage tracking now uses a local SQLite database (~/.skills-manager/usage.db) with automatic migration from the old usage-events.log
+- Added Codex usage statistics: installs/uninstalls Codex hooks, shares the same pending directory and table as Claude Code, differentiated by tool_id
+- Codex natural-language skill usage tracking: when $skill-name syntax is not used, falls back to whole-word matching of installed skill IDs (case-insensitive, length ≥3, longest ID first)
+- Backend file system watcher (notify crate) on ~/.skills-manager/usage-pending/ directory; automatically emits 'usage-stats-updated' events to refresh the frontend after skill calls
+
+#### Changed
+- Hook scripts are now OS-specific: bash for Unix, PowerShell for Windows, generated via build_hook_command() based on the target platform
+- Hook events now use per-event files ({ts}-{pid}-{rand}.json) to handle concurrency
+- Bumped version to 2.1.5 across the board
+
 ## [2.1.4] - 2026-07-10
 
 ### 中文
@@ -147,7 +175,8 @@
 - Rust 后端
 - 跨平台支持（macOS/Windows/Linux）
 
-[Unreleased]: https://github.com/jiweiyeah/Skills-Manager/compare/v2.1.4...HEAD
+[Unreleased]: https://github.com/jiweiyeah/Skills-Manager/compare/v2.1.5...HEAD
+[2.1.5]: https://github.com/jiweiyeah/Skills-Manager/releases/tag/v2.1.5
 [2.1.4]: https://github.com/jiweiyeah/Skills-Manager/releases/tag/v2.1.4
 [2.1.2]: https://github.com/jiweiyeah/Skills-Manager/releases/tag/v2.1.2
 [2.1.0]: https://github.com/jiweiyeah/Skills-Manager/releases/tag/v2.1.0
