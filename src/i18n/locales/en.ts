@@ -413,7 +413,7 @@ export const en = {
     syncNotifications: "Sync Notifications",
     syncNotificationsDesc: "Show notifications after sync",
     skillUsageMonitor: "Skill Usage Monitor",
-    skillUsageMonitorDesc: "Track Skill invocations via Claude Code Hook and show counts on cards",
+    skillUsageMonitorDesc: "Track Skill invocations via Claude Code and Codex Hooks, show counts on cards",
     skillUsageMonitorEnabled: "Skill usage monitor enabled",
     skillUsageMonitorDisabled: "Skill usage monitor disabled",
     clearUsageStats: "Clear Usage Stats",

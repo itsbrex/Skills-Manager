@@ -413,7 +413,7 @@ export const zh = {
     syncNotifications: "同步通知",
     syncNotificationsDesc: "同步完成后显示通知提示",
     skillUsageMonitor: "Skill 调用监控",
-    skillUsageMonitorDesc: "通过 Claude Code Hook 记录 Skill 调用次数，在卡片上展示统计",
+    skillUsageMonitorDesc: "通过 Claude Code 和 Codex Hook 记录 Skill 调用次数，在卡片上展示统计",
     skillUsageMonitorEnabled: "已启用 Skill 调用监控",
     skillUsageMonitorDisabled: "已关闭 Skill 调用监控",
     clearUsageStats: "清除调用统计",
