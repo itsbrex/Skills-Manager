@@ -382,6 +382,8 @@ export const en = {
     bulkToggleSkillsPartialFailed: "{count} skill(s) failed to toggle",
     bulkConfirmEnableSkills: "Enable {count} skill(s) for this tool?",
     bulkConfirmDisableSkills: "Disable {count} skill(s) for this tool?",
+    tagBulkToggleEnable: "Click to enable skills tagged #{tag} ({enabled}/{total} enabled)",
+    tagBulkToggleDisable: "Click to disable skills tagged #{tag} ({enabled}/{total} enabled)",
     noSkillsInFilter: "No skills match the current filter",
     manageSkills: "Manage skills",
     skillsManageDisabled: "Enable this tool first",

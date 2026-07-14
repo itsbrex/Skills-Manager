@@ -382,6 +382,8 @@ export const zh = {
     bulkToggleSkillsPartialFailed: "有 {count} 个 Skills 切换失败",
     bulkConfirmEnableSkills: "将为当前工具开启 {count} 个 Skills，是否继续？",
     bulkConfirmDisableSkills: "将为当前工具关闭 {count} 个 Skills，是否继续？",
+    tagBulkToggleEnable: "点击启用 #{tag} 标签下的 Skills（已启用 {enabled}/{total}）",
+    tagBulkToggleDisable: "点击禁用 #{tag} 标签下的 Skills（已启用 {enabled}/{total}）",
     noSkillsInFilter: "当前筛选下没有可显示 Skills",
     manageSkills: "管理 Skills",
     skillsManageDisabled: "请先启用该工具",
