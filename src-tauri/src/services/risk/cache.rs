@@ -1,7 +1,7 @@
 //! 风险报告缓存
 //!
 //! 缓存 key: instance_id + path + mtime + scanner_version + mode
-//! 缓存位置: ~/.skills-manager/risk-cache/<instance_id>.json
+//! 缓存位置: ~/.skills-manager/cache/risk/<instance_id>.json
 //!
 //! 当 path+mtime 相同且 scanner_version 与 mode 也匹配时复用缓存，避开 24h TTL 的不精确
 
@@ -22,6 +22,8 @@ pub struct RiskCache {
 impl RiskCache {
     pub fn new() -> Self {
         let cache_dir = default_cache_dir();
+        // 迁移旧目录 ~/.skills-manager/risk-cache → ~/.skills-manager/cache/risk
+        migrate_legacy_cache_dir(&cache_dir);
         // 启动时尝试创建目录
         let _ = fs::create_dir_all(&cache_dir);
         Self {
@@ -131,7 +133,42 @@ fn default_cache_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".skills-manager")
-        .join("risk-cache")
+        .join("cache")
+        .join("risk")
+}
+
+/// 将旧目录 ~/.skills-manager/risk-cache 迁移到新位置 ~/.skills-manager/cache/risk
+/// - 若旧目录不存在或新目录已存在，跳过
+/// - rename 失败（跨文件系统）时尝试复制后删除
+fn migrate_legacy_cache_dir(new_dir: &Path) {
+    let old_dir = match dirs::home_dir() {
+        Some(h) => h.join(".skills-manager").join("risk-cache"),
+        None => return,
+    };
+    if !old_dir.exists() || new_dir.exists() {
+        return;
+    }
+    if let Err(_) = fs::rename(&old_dir, new_dir) {
+        // rename 失败（可能跨文件系统），回退到复制后删除
+        if copy_dir_recursive(&old_dir, new_dir).is_ok() {
+            let _ = fs::remove_dir_all(&old_dir);
+        }
+    }
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let target = dst.join(entry.file_name());
+        if path.is_dir() {
+            copy_dir_recursive(&path, &target)?;
+        } else {
+            fs::copy(&path, &target)?;
+        }
+    }
+    Ok(())
 }
 
 fn cache_key_matches(report: &SkillRiskReport, key: &RiskCacheKey) -> bool {
