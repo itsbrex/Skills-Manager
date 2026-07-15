@@ -98,6 +98,37 @@ export interface Tool {
 export type VaultBackupConsent = "unknown" | "granted" | "denied";
 export type TelemetryConsent = "unknown" | "granted" | "denied";
 
+// Risk scan
+export type RiskScanMode = "off" | "basic" | "deep";
+export type RiskLevel = "safe" | "low" | "medium" | "high" | "critical";
+export type RiskCategory = "destructive" | "network" | "privilege" | "payload";
+
+export interface RiskLocation {
+  file: string;
+  line: number;
+}
+
+export interface RiskFinding {
+  rule_id: string;
+  category: RiskCategory;
+  level: RiskLevel;
+  confidence: number;
+  message: string;
+  evidence: string;
+  location: RiskLocation;
+  source: "rule" | "llm";
+}
+
+export interface SkillRiskReport {
+  instance_id: string;
+  level: RiskLevel;
+  findings: RiskFinding[];
+  scanned_at: number;
+  scanner_version: string;
+  mode: RiskScanMode;
+  llm_reviewed: boolean;
+}
+
 // User preferences for the application
 export interface UserPreferences {
   // Appearance
@@ -121,6 +152,7 @@ export interface UserPreferences {
   vault_backup_consent: VaultBackupConsent;
   telemetry_consent: TelemetryConsent;
   skill_usage_monitor: boolean;
+  risk_scan_mode: RiskScanMode;
 
   // Marketplace auth
   github_token?: string | null;

@@ -22,6 +22,7 @@ import {
   InstalledSkillPackage,
   ProjectBinding,
   Skill,
+  SkillRiskReport,
   SkillUsageStats,
   Tool,
 } from "@/types";
@@ -238,7 +239,7 @@ function TagFilterCheck({ active }: { active: boolean }) {
   );
 }
 
-type SkillEditorTab = "tools" | "tags";
+type SkillEditorTab = "tools" | "tags" | "risk";
 
 type SkillCardActionMenuProps = {
   deleting: boolean;
@@ -605,6 +606,7 @@ export function Skills() {
   const { query: searchQuery } = usePageSearch(t("skills.searchPlaceholder"));
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [untaggedOnly, setUntaggedOnly] = useState(false);
+  const [riskOnly, setRiskOnly] = useState(false);
   const [scopeFilter, setScopeFilter] = useState<"all" | "global" | "project">("all");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
@@ -641,6 +643,7 @@ export function Skills() {
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
   const [usageStats, setUsageStats] = useState<Record<string, SkillUsageStats>>({});
+  const [riskReports, setRiskReports] = useState<Record<string, SkillRiskReport>>({});
   const [searchParams, setSearchParams] = useSearchParams();
   const { toasts, addToast, updateToast, removeToast } = useToast();
   const skillMetadata = config?.skill_metadata;
@@ -685,6 +688,12 @@ export function Skills() {
       addToast(err instanceof Error ? err.message : String(err), "error");
     }
   }, [config, navigate, addToast]);
+
+  const loadRiskReports = useCallback(() => {
+    invoke<Record<string, SkillRiskReport>>("get_risk_reports_batch")
+      .then(setRiskReports)
+      .catch(() => {});
+  }, []);
 
   const loadData = useCallback(async () => {
     const settled = await Promise.allSettled([
@@ -734,8 +743,10 @@ export function Skills() {
       }
     } finally {
       setInitialLoading(false);
+      // 后台异步加载风险报告，不阻塞页面首屏
+      void loadRiskReports();
     }
-  }, [addToast]);
+  }, [addToast, loadRiskReports]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -753,12 +764,14 @@ export function Skills() {
       setTools(toolsResult);
       setUsageStats(usageResult);
       addToast(t("common.refreshSuccess"), "success");
+      // 后台异步刷新风险报告
+      void loadRiskReports();
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
       setRefreshing(false);
     }
-  }, [addToast, t]);
+  }, [addToast, t, loadRiskReports]);
 
   const reloadData = useCallback(async () => {
     try {
@@ -796,6 +809,27 @@ export function Skills() {
     listen("usage-stats-updated", () => {
       invoke<Record<string, SkillUsageStats>>("get_skill_usage_stats")
         .then(setUsageStats)
+        .catch(() => {});
+    }).then((stop) => {
+      if (cancelled) {
+        stop();
+      } else {
+        unlisten = stop;
+      }
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  // 监听 risk-scan-completed 事件，自动刷新风险报告
+  useEffect(() => {
+    let unlisten: UnlistenFn | null = null;
+    let cancelled = false;
+    listen("risk-scan-completed", () => {
+      invoke<Record<string, SkillRiskReport>>("get_risk_reports_batch")
+        .then(setRiskReports)
         .catch(() => {});
     }).then((stop) => {
       if (cancelled) {
@@ -890,8 +924,16 @@ export function Skills() {
     );
     setSelectedTags(next.selectedTags);
     setUntaggedOnly(next.untaggedOnly);
+    setRiskOnly(false);
     setShowTagFilterMenu(false);
   }, [selectedTags, untaggedOnly]);
+
+  const handleToggleRiskOnly = useCallback(() => {
+    setRiskOnly((prev) => !prev);
+    // 风险筛选与未标记筛选互斥
+    setUntaggedOnly(false);
+    setShowTagFilterMenu(false);
+  }, []);
 
   const handleResetTagFilters = useCallback(() => {
     const next = applyTagFilterAction(
@@ -900,6 +942,7 @@ export function Skills() {
     );
     setSelectedTags(next.selectedTags);
     setUntaggedOnly(next.untaggedOnly);
+    setRiskOnly(false);
     setScopeFilter("all");
     setShowTagFilterMenu(false);
   }, [selectedTags, untaggedOnly]);
@@ -1324,12 +1367,13 @@ export function Skills() {
     return projects.find((project) => project.id === activeId)?.name ?? null;
   }, [config?.active_project_id, config?.projects]);
 
-  const hasActiveSkillFilters = Boolean(searchQuery.trim()) || selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all";
+  const hasActiveSkillFilters = Boolean(searchQuery.trim()) || selectedTags.length > 0 || untaggedOnly || riskOnly || scopeFilter !== "all";
 
   // Active tag-filter conditions shown as a numeric badge on the filter icon.
   const tagFilterActiveCount =
     (scopeFilter !== "all" ? 1 : 0) +
     (untaggedOnly ? 1 : 0) +
+    (riskOnly ? 1 : 0) +
     selectedTags.length;
 
   const scopeFilterCounts = useMemo(() => {
@@ -1338,6 +1382,14 @@ export function Skills() {
     return { global: globalCount, project: projectCount };
   }, [unifiedItems]);
 
+  const riskMarkedCount = useMemo(() => {
+    return unifiedItems.filter((item) =>
+      item.kind === "skill" && item.skill
+        ? riskReports[item.skill.instance_id]?.level !== "safe" && riskReports[item.skill.instance_id]?.level !== undefined
+        : false,
+    ).length;
+  }, [unifiedItems, riskReports]);
+
   const filteredUnifiedItems = useMemo(() => {
     const base = filterUnifiedSkillItems(unifiedItems, {
       searchQuery,
@@ -1345,14 +1397,22 @@ export function Skills() {
       untaggedOnly,
       scopeFilter,
     });
-    if (!favoritesOnly) return base;
+    let result = base;
+    if (riskOnly) {
+      result = base.filter((item) =>
+        item.kind === "skill" && item.skill
+          ? riskReports[item.skill.instance_id]?.level !== "safe" && riskReports[item.skill.instance_id]?.level !== undefined
+          : false,
+      );
+    }
+    if (!favoritesOnly) return result;
     // 仅看收藏：只保留已收藏的 skill（group 项不参与）
-    return base.filter((item) =>
+    return result.filter((item) =>
       item.kind === "skill" && item.skill
         ? favorites.isSkillFavorite(item.skill.instance_id)
         : false,
     );
-  }, [searchQuery, selectedTags, unifiedItems, untaggedOnly, scopeFilter, favoritesOnly, favorites]);
+  }, [searchQuery, selectedTags, unifiedItems, untaggedOnly, riskOnly, scopeFilter, riskReports, favoritesOnly, favorites]);
 
   const sortedUnifiedItems = useMemo(() => {
     const sorted = sortUnifiedSkillItems(filteredUnifiedItems, searchQuery);
@@ -2537,7 +2597,7 @@ export function Skills() {
                             {t("skills.tagFilterHintCompact")}
                           </div>
                         </div>
-                        {(selectedTags.length > 0 || untaggedOnly || scopeFilter !== "all") && (
+                        {(selectedTags.length > 0 || untaggedOnly || riskOnly || scopeFilter !== "all") && (
                           <button
                             type="button"
                             onClick={handleResetTagFilters}
@@ -2630,6 +2690,41 @@ export function Skills() {
                             fontVariantNumeric: "tabular-nums",
                           }}>
                             {skills.length}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleToggleRiskOnly}
+                          onMouseEnter={(e) => {
+                            if (!riskOnly) {
+                              e.currentTarget.style.backgroundColor = "var(--surface-hover)";
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = riskOnly ? "var(--primary-tint)" : "transparent";
+                          }}
+                          style={buildTagFilterMenuItemStyle(riskOnly)}
+                        >
+                          <TagFilterCheck active={riskOnly} />
+                          <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: "50%",
+                              backgroundColor: riskMarkedCount > 0 ? "#f59e0b" : "var(--muted-foreground)",
+                              flexShrink: 0,
+                            }} />
+                            {t("skills.riskMarked")}
+                          </span>
+                          <span style={{
+                            fontSize: "11px",
+                            fontWeight: 500,
+                            color: riskOnly ? "var(--primary)" : "var(--muted-foreground)",
+                            flexShrink: 0,
+                            fontVariantNumeric: "tabular-nums",
+                          }}>
+                            {riskMarkedCount}
                           </span>
                         </button>
 
@@ -3052,6 +3147,46 @@ export function Skills() {
                               {item.badgeLabel}
                             </span>
                           )}
+                          {(() => {
+                            const instanceId = item.skill?.instance_id;
+                            if (!instanceId) return null;
+                            const report = riskReports[instanceId];
+                            if (!report || report.level === "safe") return null;
+                            const levelColors: Record<string, { fg: string; bg: string }> = {
+                              low: { fg: "#2563eb", bg: "rgba(37,99,235,0.12)" },
+                              medium: { fg: "#ca8a04", bg: "rgba(202,138,4,0.12)" },
+                              high: { fg: "#ea580c", bg: "rgba(234,88,12,0.12)" },
+                              critical: { fg: "#dc2626", bg: "rgba(220,38,38,0.12)" },
+                            };
+                            const colors = levelColors[report.level] ?? levelColors.low;
+                            return (
+                              <span
+                                title={report.findings.length > 0 ? report.findings[0].message : ""}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  height: "20px",
+                                  padding: "0 7px",
+                                  fontSize: "10px",
+                                  fontWeight: 700,
+                                  color: colors.fg,
+                                  backgroundColor: colors.bg,
+                                  border: "none",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setToolEditorSkillId(instanceId);
+                                  setSkillEditorTab("risk" as SkillEditorTab);
+                                }}
+                              >
+                                <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: colors.fg }} />
+                                {t(`settings.riskLevel${report.level.charAt(0).toUpperCase() + report.level.slice(1)}` as any)}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <p style={{
                           fontSize: "13px",
@@ -3426,6 +3561,11 @@ export function Skills() {
           skillName={toolEditorSkill.name}
           skillDescription={toolEditorSkill.description || t("skills.noDescription")}
           activeTab={skillEditorTab}
+          availableTabs={
+            riskReports[toolEditorSkill.instance_id]
+              ? (["tools", "tags", "risk"] as SkillEditorTab[])
+              : (["tools", "tags"] as SkillEditorTab[])
+          }
           onTabChange={setSkillEditorTab}
           onClose={closeSkillEditor}
           doneLabel={t("common.done")}
@@ -3455,6 +3595,7 @@ export function Skills() {
           tagSuggestions={toolEditorTagSuggestions}
           onSelectTagSuggestion={(tag) => void persistSkillTags(toolEditorSkill, [...toolEditorTags, tag])}
           savingTags={savingTagsSkillId === getSkillMetadataKey(toolEditorSkill)}
+          riskReport={riskReports[toolEditorSkill.instance_id] ?? null}
           t={t}
         />
       )}
@@ -3616,6 +3757,7 @@ function SkillManageDialog({
   tagSuggestions,
   onSelectTagSuggestion,
   savingTags,
+  riskReport,
   t,
 }: {
   skillName: string;
@@ -3656,6 +3798,7 @@ function SkillManageDialog({
   tagSuggestions: string[];
   onSelectTagSuggestion: (tag: string) => void;
   savingTags: boolean;
+  riskReport?: SkillRiskReport | null;
   t: (key: TranslationPath) => string;
 }) {
   const canAddTag = normalizeSkillTags([tagDraft]).length > 0;
@@ -3791,7 +3934,7 @@ function SkillManageDialog({
                     transition: "background-color 0.15s, color 0.15s",
                   }}
                 >
-                  {tab === "tools" ? t("skills.manageToolsTab") : t("skills.manageTagsTab")}
+                  {tab === "tools" ? t("skills.manageToolsTab") : tab === "tags" ? t("skills.manageTagsTab") : t("settings.riskScanTitle")}
                 </button>
               );
             })}
@@ -4075,7 +4218,7 @@ function SkillManageDialog({
                 )}
               </div>
             </>
-          ) : (
+          ) : activeTab === "tags" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
               <div style={{ fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
                 {t("skills.tagEditorHint")}
@@ -4202,6 +4345,95 @@ function SkillManageDialog({
                 </div>
               )}
             </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {(!riskReport || riskReport.findings.length === 0) ? (
+                <div style={{ fontSize: "13px", color: "var(--muted-foreground)", padding: "24px 0", textAlign: "center" }}>
+                  {t("settings.riskNoFindings")}
+                  {riskReport?.llm_reviewed && (
+                    <span style={{ display: "block", marginTop: 6, fontSize: 11, color: "var(--muted-foreground)" }}>
+                      {t("settings.riskBadgeLlmReviewed")}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {(() => {
+                      const levelColors: Record<string, { fg: string; bg: string }> = {
+                        low: { fg: "#2563eb", bg: "rgba(37,99,235,0.12)" },
+                        medium: { fg: "#ca8a04", bg: "rgba(202,138,4,0.12)" },
+                        high: { fg: "#ea580c", bg: "rgba(234,88,12,0.12)" },
+                        critical: { fg: "#dc2626", bg: "rgba(220,38,38,0.12)" },
+                      };
+                      const colors = levelColors[riskReport.level] ?? levelColors.low;
+                      return (
+                        <span style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          height: "22px",
+                          padding: "0 8px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          color: colors.fg,
+                          backgroundColor: colors.bg,
+                          borderRadius: "4px",
+                        }}>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: colors.fg }} />
+                          {t(`settings.riskLevel${riskReport.level.charAt(0).toUpperCase() + riskReport.level.slice(1)}` as any)}
+                        </span>
+                      );
+                    })()}
+                    {riskReport.llm_reviewed && (
+                      <span style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+                        {t("settings.riskBadgeLlmReviewed")}
+                      </span>
+                    )}
+                  </div>
+                  {riskReport.findings.map((finding, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        padding: "10px 12px",
+                        backgroundColor: "var(--secondary)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        fontSize: "12px",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+                        <span style={{ fontWeight: 700, color: "var(--foreground)" }}>{finding.message}</span>
+                        <span style={{
+                          fontSize: "10px",
+                          padding: "1px 5px",
+                          borderRadius: "3px",
+                          backgroundColor: "var(--muted)",
+                          color: "var(--muted-foreground)",
+                        }}>
+                          {t(`settings.riskCategory${finding.category.charAt(0).toUpperCase() + finding.category.slice(1)}` as any)}
+                        </span>
+                        <span style={{
+                          fontSize: "10px",
+                          padding: "1px 5px",
+                          borderRadius: "3px",
+                          backgroundColor: finding.source === "llm" ? "var(--primary)" : "var(--muted)",
+                          color: finding.source === "llm" ? "var(--primary-foreground)" : "var(--muted-foreground)",
+                        }}>
+                          {finding.source === "llm" ? t("settings.riskSourceLlm") : t("settings.riskSourceRule")}
+                        </span>
+                      </div>
+                      <div style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--muted-foreground)", backgroundColor: "var(--background)", padding: "6px 8px", borderRadius: "4px", border: "1px solid var(--border)", overflow: "auto" }}>
+                        {finding.evidence}
+                      </div>
+                      <div style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "4px" }}>
+                        {t("settings.riskLocationLabel")}: {finding.location.file}:{finding.location.line}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
           )}
         </div>
 
@@ -4224,7 +4456,7 @@ function SkillManageDialog({
               letterSpacing: "0.02em",
             }}
           >
-            {activeTab === "tools" ? `${enabledCount}/${items.length}` : `${tags.length}`}
+            {activeTab === "tools" ? `${enabledCount}/${items.length}` : activeTab === "tags" ? `${tags.length}` : `${riskReport?.findings.length ?? 0}`}
           </div>
           <button
             onClick={onClose}

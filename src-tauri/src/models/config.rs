@@ -1,5 +1,6 @@
 use crate::models::auth::AuthSession;
 use crate::models::marketplace::{MarketplaceSource, SourceType};
+use crate::models::RiskScanMode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -28,6 +29,8 @@ pub struct UserPreferences {
     pub skill_usage_monitor: bool,
     #[serde(default)]
     pub github_token: Option<String>,
+    #[serde(default)]
+    pub risk_scan_mode: RiskScanMode,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -127,6 +130,7 @@ impl Default for UserPreferences {
             remove_links_when_disabling_tool: false,
             skill_usage_monitor: true,
             github_token: None,
+            risk_scan_mode: RiskScanMode::Off,
         }
     }
 }

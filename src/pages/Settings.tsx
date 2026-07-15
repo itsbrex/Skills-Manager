@@ -24,6 +24,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
+import { usePageHeaderState } from "@/components/PageHeaderContext";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { SunIcon, MoonIcon, MonitorIcon } from "@/components/icons/theme-icons";
 import { resolveActiveProjectId } from "./projectBindings";
@@ -42,6 +43,7 @@ export function Settings() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [resetting, setResetting] = useState(false);
   const [usageHookLoading, setUsageHookLoading] = useState(false);
+  const { riskScanning, setRiskScanning } = usePageHeaderState();
   const { toasts, addToast, removeToast } = useToast();
 
   const SETTINGS_SECTIONS = [
@@ -51,6 +53,7 @@ export function Settings() {
     { id: "settings-account", label: t("settings.account") },
     { id: "settings-shortcuts", label: t("shortcuts.title") },
     { id: "settings-advanced", label: t("settings.advanced") },
+    { id: "settings-risk", label: t("settings.riskScanTitle") },
     { id: "settings-about", label: t("settings.about") },
     { id: "settings-support", label: t("settings.support") },
   ] as const;
@@ -233,6 +236,27 @@ export function Settings() {
       addToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
       setUsageHookLoading(false);
+    }
+  };
+
+  const handleRescanAllRisks = async () => {
+    setRiskScanning(true);
+    try {
+      await invoke("scan_all_risks");
+      addToast(t("settings.riskScanRescanDone"), "success");
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setRiskScanning(false);
+    }
+  };
+
+  const handleClearRiskCache = async () => {
+    try {
+      await invoke("clear_risk_cache_command");
+      addToast(t("settings.riskScanCacheCleared"), "success");
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
     }
   };
 
@@ -760,6 +784,95 @@ export function Settings() {
                 {resetting ? t("common.checking") : t("settings.resetSettings")}
               </button>
             </SettingsRow>
+          </SettingsCard>
+
+          {/* Risk Scan Section */}
+          <SectionTitle id="settings-risk">{t("settings.riskScanTitle")}</SectionTitle>
+          <SettingsCard>
+            <SettingsRow
+              label={t("settings.riskScanTitle")}
+              description={t("settings.riskScanDesc")}
+              isLast={false}
+            >
+              <div style={{ display: 'flex', gap: '4px', padding: '3px', backgroundColor: 'var(--muted)', borderRadius: '8px' }}>
+                {(["off", "basic", "deep"] as const).map((mode) => {
+                  const active = prefs.risk_scan_mode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => updatePreference("risk_scan_mode", mode)}
+                      style={{
+                        padding: '6px 14px',
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        color: active ? 'var(--background)' : 'var(--foreground)',
+                        backgroundColor: active ? 'var(--foreground)' : 'transparent',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {t(`settings.riskScanMode${mode.charAt(0).toUpperCase() + mode.slice(1)}` as any)}
+                    </button>
+                  );
+                })}
+              </div>
+            </SettingsRow>
+
+            {prefs.risk_scan_mode === "deep" && !config?.llm_provider && (
+              <div style={{ padding: '0 16px 12px', fontSize: '12px', color: 'var(--warning, #e8a317)' }}>
+                {t("settings.riskScanDeepNoLlmHint")}
+              </div>
+            )}
+
+            {prefs.risk_scan_mode !== "off" && (
+              <SettingsRow
+                label={t("settings.riskScanRescanAll")}
+                description={t(`settings.riskScanMode${prefs.risk_scan_mode.charAt(0).toUpperCase() + prefs.risk_scan_mode.slice(1)}Desc` as any)}
+                isLast={true}
+              >
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={handleRescanAllRisks}
+                    disabled={riskScanning}
+                    style={{
+                      padding: '8px 14px',
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      color: 'var(--foreground)',
+                      backgroundColor: 'var(--background)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      cursor: riskScanning ? 'not-allowed' : 'pointer',
+                      opacity: riskScanning ? 0.6 : 1,
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {riskScanning ? t("settings.riskScanRescanning") : t("settings.riskScanRescanAll")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearRiskCache}
+                    style={{
+                      padding: '8px 14px',
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      color: 'var(--foreground)',
+                      backgroundColor: 'var(--background)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {t("settings.riskScanClearCache")}
+                  </button>
+                </div>
+              </SettingsRow>
+            )}
           </SettingsCard>
 
           {/* About Section */}

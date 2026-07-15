@@ -6,6 +6,7 @@ pub mod feedback;
 pub mod files;
 pub mod llm;
 pub mod marketplace;
+pub mod risk;
 pub mod skill_packages;
 pub mod skills;
 pub mod sync;
@@ -34,6 +35,10 @@ pub use llm::{
     get_cached_skill_translations, get_cached_text_translation, get_llm_provider,
     save_llm_provider, test_llm_provider, translate_marketplace_skill, translate_skill,
     translate_skill_files, translate_skills_batch, translate_text_content,
+};
+pub use risk::{
+    clear_risk_cache_command, get_risk_report, get_risk_reports_batch, get_risk_scanner_version,
+    rescan_skill, scan_all_risks, start_background_scan,
 };
 pub use marketplace::{
     check_marketplace_updates_if_stale, fetch_clawhub_skill_files,
