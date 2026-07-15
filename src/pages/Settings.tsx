@@ -52,8 +52,8 @@ export function Settings() {
     { id: "settings-llm", label: t("settings.llmTitle") },
     { id: "settings-account", label: t("settings.account") },
     { id: "settings-shortcuts", label: t("shortcuts.title") },
-    { id: "settings-advanced", label: t("settings.advanced") },
     { id: "settings-risk", label: t("settings.riskScanTitle") },
+    { id: "settings-advanced", label: t("settings.advanced") },
     { id: "settings-about", label: t("settings.about") },
     { id: "settings-support", label: t("settings.support") },
   ] as const;
@@ -748,44 +748,6 @@ export function Settings() {
             />
           </SettingsCard>
 
-          {/* Advanced Section */}
-          <SectionTitle id="settings-advanced">{t("settings.advanced")}</SectionTitle>
-          <SettingsCard>
-            <SettingsRow
-              label={t("settings.resetSettings")}
-              description={t("settings.resetSettingsDesc")}
-              isLast={true}
-            >
-              <button
-                type="button"
-                onClick={handleResetSettings}
-                disabled={resetting}
-                style={{
-                  padding: '8px 14px',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  color: 'var(--foreground)',
-                  backgroundColor: 'var(--background)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  cursor: resetting ? 'not-allowed' : 'pointer',
-                  opacity: resetting ? 0.6 : 1,
-                  transition: 'all 0.15s',
-                }}
-                onMouseEnter={(e) => {
-                  if (!resetting) {
-                    e.currentTarget.style.backgroundColor = 'var(--muted)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--background)';
-                }}
-              >
-                {resetting ? t("common.checking") : t("settings.resetSettings")}
-              </button>
-            </SettingsRow>
-          </SettingsCard>
-
           {/* Risk Scan Section */}
           <SectionTitle id="settings-risk">{t("settings.riskScanTitle")}</SectionTitle>
           <SettingsCard>
@@ -873,6 +835,44 @@ export function Settings() {
                 </div>
               </SettingsRow>
             )}
+          </SettingsCard>
+
+          {/* Advanced Section */}
+          <SectionTitle id="settings-advanced">{t("settings.advanced")}</SectionTitle>
+          <SettingsCard>
+            <SettingsRow
+              label={t("settings.resetSettings")}
+              description={t("settings.resetSettingsDesc")}
+              isLast={true}
+            >
+              <button
+                type="button"
+                onClick={handleResetSettings}
+                disabled={resetting}
+                style={{
+                  padding: '8px 14px',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  color: 'var(--foreground)',
+                  backgroundColor: 'var(--background)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  cursor: resetting ? 'not-allowed' : 'pointer',
+                  opacity: resetting ? 0.6 : 1,
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  if (!resetting) {
+                    e.currentTarget.style.backgroundColor = 'var(--muted)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--background)';
+                }}
+              >
+                {resetting ? t("common.checking") : t("settings.resetSettings")}
+              </button>
+            </SettingsRow>
           </SettingsCard>
 
           {/* About Section */}
