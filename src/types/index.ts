@@ -516,3 +516,65 @@ export interface PollClientState {
   voterId: string | null;
   votedOptions: Record<string, string>;
 }
+
+// Skill import/export (cross-device sync)
+export interface ExportedSkillMeta {
+  id: string;
+  name: string;
+  description: string | null;
+  version: string;
+  folder: string;
+  enabled_tools: string[];
+  tags: string[];
+  favorited_at: number | null;
+}
+
+export interface ExportManifest {
+  format_version: number;
+  exported_at: number;
+  app_version: string;
+  skills: ExportedSkillMeta[];
+}
+
+export interface ImportConflict {
+  skill_id: string;
+  skill_name: string;
+  local_path: string;
+}
+
+export interface ImportPreview {
+  manifest: ExportManifest;
+  conflicts: ImportConflict[];
+}
+
+export type ConflictStrategy = "skip" | "overwrite" | "rename";
+
+export interface ImportResolution {
+  skill_id: string;
+  strategy: ConflictStrategy;
+}
+
+export interface ImportedSkillRecord {
+  original_id: string;
+  final_id: string;
+  name: string;
+}
+
+export interface RenamedSkillRecord {
+  original_id: string;
+  new_id: string;
+  name: string;
+}
+
+export interface ImportFailure {
+  skill_id: string;
+  message: string;
+}
+
+export interface ImportResult {
+  imported: ImportedSkillRecord[];
+  skipped: string[];
+  overwritten: string[];
+  renamed: RenamedSkillRecord[];
+  failed: ImportFailure[];
+}

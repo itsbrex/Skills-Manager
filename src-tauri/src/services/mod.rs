@@ -10,6 +10,7 @@ pub mod marketplace;
 pub mod risk;
 pub mod scanner;
 pub mod skill_packages;
+pub mod skill_transfer;
 pub mod translation;
 pub mod translation_cache;
 pub mod updater;

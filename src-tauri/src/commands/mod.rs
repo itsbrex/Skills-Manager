@@ -8,6 +8,7 @@ pub mod llm;
 pub mod marketplace;
 pub mod risk;
 pub mod skill_packages;
+pub mod skill_transfer;
 pub mod skills;
 pub mod sync;
 pub mod tools;
@@ -49,6 +50,7 @@ pub use marketplace::{
 pub use skill_packages::{
     install_skill_package_from_path, list_skill_packages, remove_skill_package,
 };
+pub use skill_transfer::{export_skills, import_skills, preview_import_skills};
 pub use skills::{
     batch_set_skill_tools, create_skill, delete_skill, disable_skill, enable_skill,
     import_skills_to_hub, list_skills, refresh_skills, scan_existing_skills,

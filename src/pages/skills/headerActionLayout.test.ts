@@ -2,16 +2,23 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildSkillsHeaderActionLayout } from "./headerActionLayout.ts";
 
-test("buildSkillsHeaderActionLayout keeps project bindings between batch and create actions in normal mode", () => {
+test("buildSkillsHeaderActionLayout exposes import/export in the more menu during normal mode", () => {
   assert.deepEqual(buildSkillsHeaderActionLayout(false), {
-    primaryActionIds: ["batch-manage", "project-bindings"],
+    primaryActionIds: [],
+    moreActionIds: [
+      "batch-manage",
+      "project-bindings",
+      "import-skills",
+      "export-skills",
+    ],
     secondaryActionIds: ["create-skill"],
   });
 });
 
-test("buildSkillsHeaderActionLayout keeps project bindings adjacent to batch actions in batch mode", () => {
+test("buildSkillsHeaderActionLayout surfaces export-skills as a primary action in batch mode", () => {
   assert.deepEqual(buildSkillsHeaderActionLayout(true), {
-    primaryActionIds: ["batch-manage", "batch-configure", "project-bindings"],
-    secondaryActionIds: ["create-skill"],
+    primaryActionIds: ["batch-manage", "batch-configure", "export-skills"],
+    moreActionIds: [],
+    secondaryActionIds: [],
   });
 });

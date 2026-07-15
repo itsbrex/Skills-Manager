@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties, 
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { confirm, open } from "@tauri-apps/plugin-dialog";
+import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -19,6 +19,9 @@ import {
   AppConfig,
   BatchSetSkillToolsRequest,
   BatchSetSkillToolsResponse,
+  ImportPreview,
+  ImportResolution,
+  ImportResult,
   InstalledSkillPackage,
   ProjectBinding,
   Skill,
@@ -64,6 +67,7 @@ import {
   buildUnifiedItemTagSummaries,
   filterUnifiedSkillItems,
   getGroupBulkModeState,
+  getGroupMemberSkills,
   getGroupToolLabel,
   getGroupToolVisualState,
   removeGroupSkillMetadataEntries,
@@ -85,6 +89,7 @@ import {
 } from "./skills/batchManageSelection";
 import { getActionableToolIds } from "./skills/getActionableToolIds";
 import { BatchManageToolsDialog } from "./skills/BatchManageToolsDialog";
+import { ImportConflictDialog } from "./skills/ImportConflictDialog";
 import { buildBatchToolStateSummaries } from "./skills/buildBatchToolStates";
 import {
   buildGroupBulkToolActionPlan,
@@ -622,6 +627,10 @@ export function Skills() {
   const [bulkTogglingGroupId, setBulkTogglingGroupId] = useState<string | null>(null);
   const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importProcessing, setImportProcessing] = useState(false);
+  const importZipPathRef = useRef("");
   const [showProjectBindingsDialog, setShowProjectBindingsDialog] = useState(false);
   const [pendingProjectBinding, setPendingProjectBinding] = useState<ProjectBinding | null>(null);
   const [creating, setCreating] = useState(false);
@@ -1495,6 +1504,25 @@ export function Skills() {
     [isBatchManageMode],
   );
 
+  // In batch mode, compute the set of skill instance_ids to export based on
+  // current selection (expands group selections to their member skills).
+  const selectedExportInstanceIds = useMemo(() => {
+    if (!isBatchManageMode || selectedBatchItems.length === 0) {
+      return undefined;
+    }
+    const ids = new Set<string>();
+    selectedBatchItems.forEach((item) => {
+      if (item.kind === "skill" && item.skill) {
+        ids.add(item.skill.instance_id);
+      } else if (item.kind === "group" && item.skillPackage) {
+        getGroupMemberSkills(item.skillPackage, skills).forEach((s) =>
+          ids.add(s.instance_id),
+        );
+      }
+    });
+    return ids.size > 0 ? Array.from(ids) : undefined;
+  }, [isBatchManageMode, selectedBatchItems, skills]);
+
   const enterBatchManageMode = useCallback(() => {
     setIsBatchManageMode(true);
   }, []);
@@ -1530,6 +1558,131 @@ export function Skills() {
   const handleClearBatchSelection = useCallback(() => {
     setSelectedBatchItemKeys(new Set());
   }, []);
+
+  const handleExportSkills = useCallback(async (instanceIds?: string[]) => {
+    // Filter to global-scope, local/imported source skills (matches backend rule).
+    const eligibleInstanceIds = skills
+      .filter((skill) => skill.scope === "global"
+        && (skill.source === "local" || skill.source === "imported"))
+      .map((skill) => skill.instance_id);
+
+    if (eligibleInstanceIds.length === 0) {
+      addToast(t("skills.exportNoSkills"), "error");
+      return;
+    }
+
+    // If caller passed explicit ids (batch mode), intersect with eligible.
+    const targetIds = instanceIds
+      ? instanceIds.filter((id) => eligibleInstanceIds.includes(id))
+      : undefined;
+
+    if (targetIds && targetIds.length === 0) {
+      addToast(t("skills.exportNoSkills"), "error");
+      return;
+    }
+
+    const defaultName = `skills-export-${new Date().toISOString().slice(0, 10)}.zip`;
+    const outputPath = await save({
+      defaultPath: defaultName,
+      filters: [{ name: "ZIP", extensions: ["zip"] }],
+    });
+
+    if (!outputPath || typeof outputPath !== "string") {
+      return;
+    }
+
+    try {
+      const exportedCount = await invoke<number>("export_skills", {
+        instanceIds: targetIds,
+        outputPath,
+      });
+      addToast(
+        t("skills.exportSuccess").replace("{count}", String(exportedCount)),
+        "success",
+      );
+    } catch (err) {
+      addToast(
+        t("skills.exportFailed").replace(
+          "{error}",
+          err instanceof Error ? err.message : String(err),
+        ),
+        "error",
+      );
+    }
+  }, [addToast, skills, t]);
+
+  const handleImportSkills = useCallback(async () => {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: "ZIP", extensions: ["zip"] }],
+      title: t("skills.importSelectFile"),
+    });
+
+    if (!selected || Array.isArray(selected)) {
+      return;
+    }
+
+    const zipPath = selected as string;
+    try {
+      const preview = await invoke<ImportPreview>("preview_import_skills", { zipPath });
+      importZipPathRef.current = zipPath;
+      setImportPreview(preview);
+      setImportDialogOpen(true);
+    } catch (err) {
+      addToast(
+        t("skills.importFailed").replace(
+          "{error}",
+          err instanceof Error ? err.message : String(err),
+        ),
+        "error",
+      );
+    }
+  }, [addToast, t]);
+
+  const handleConfirmImport = useCallback(async (resolutions: ImportResolution[]) => {
+    if (!importPreview) {
+      return;
+    }
+
+    setImportProcessing(true);
+    try {
+      const result = await invoke<ImportResult>("import_skills", {
+        zipPath: importZipPathRef.current,
+        resolutions,
+      });
+
+      const importedCount = result.imported.length + result.renamed.length;
+      const failedCount = result.failed.length;
+      addToast(
+        t("skills.importResultSummary")
+          .replace("{imported}", String(importedCount))
+          .replace("{failed}", String(failedCount)),
+        failedCount > 0 ? "error" : "success",
+      );
+
+      setImportDialogOpen(false);
+      setImportPreview(null);
+      await reloadData();
+    } catch (err) {
+      addToast(
+        t("skills.importFailed").replace(
+          "{error}",
+          err instanceof Error ? err.message : String(err),
+        ),
+        "error",
+      );
+    } finally {
+      setImportProcessing(false);
+    }
+  }, [addToast, importPreview, reloadData, t]);
+
+  const handleCloseImportDialog = useCallback(() => {
+    if (importProcessing) {
+      return;
+    }
+    setImportDialogOpen(false);
+    setImportPreview(null);
+  }, [importProcessing]);
 
   const handleOpenBatchToolDialog = useCallback(() => {
     if (selectedBatchItems.length === 0) {
@@ -1615,6 +1768,32 @@ export function Skills() {
             {t("settings.projectBindings")}
           </button>
         );
+      case "export-skills":
+        // Primary action in batch mode: export selection if any, else all.
+        return (
+          <button
+            key={actionId}
+            type="button"
+            onClick={() => void handleExportSkills(selectedExportInstanceIds)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: "var(--foreground)",
+              backgroundColor: "var(--secondary)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              cursor: "pointer",
+            }}
+          >
+            {selectedExportInstanceIds && selectedExportInstanceIds.length > 0
+              ? t("skills.exportSelectedSkills")
+              : t("skills.exportAllSkills")}
+          </button>
+        );
       case "create-skill":
         return (
           <button
@@ -1660,9 +1839,11 @@ export function Skills() {
   }, [
     enterBatchManageMode,
     exitBatchManageMode,
+    handleExportSkills,
     handleOpenBatchToolDialog,
     isBatchManageMode,
     selectedBatchItems.length,
+    selectedExportInstanceIds,
     t,
   ]);
 
@@ -2819,6 +3000,18 @@ export function Skills() {
                         label: t("settings.projectBindings"),
                         onClick: handleOpenProjectBindingsDialog,
                       };
+                    case "import-skills":
+                      return {
+                        id: actionId,
+                        label: t("skills.importSkillsMenu"),
+                        onClick: handleImportSkills,
+                      };
+                    case "export-skills":
+                      return {
+                        id: actionId,
+                        label: t("skills.exportSkillsMenu"),
+                        onClick: () => void handleExportSkills(),
+                      };
                     default:
                       return null;
                   }
@@ -3689,6 +3882,15 @@ export function Skills() {
             .replace("{affected}", String(batchSelectionSummary.affectedSkillCount)),
         )}
         onClose={handleCloseBatchToolDialog}
+        t={t}
+      />
+
+      <ImportConflictDialog
+        open={importDialogOpen}
+        preview={importPreview}
+        isProcessing={importProcessing}
+        onCancel={handleCloseImportDialog}
+        onConfirm={(resolutions) => void handleConfirmImport(resolutions)}
         t={t}
       />
 
