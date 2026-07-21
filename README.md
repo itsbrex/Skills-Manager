@@ -11,7 +11,7 @@
 
 **Skills Manager** is a modern desktop application designed to solve the fragmentation of AI assistant skills configurations. Instead of managing skills and prompts separately for different tools, Skills Manager provides a central hub.
 
-It uses a powerful **symlink synchronization mechanism**, allowing you to write a skill once and instantly use it across 29+ supported AI tools including Claude Code, Codex, Cursor, Gemini CLI, Windsurf, Trae, and more.
+It uses a powerful **symlink synchronization mechanism**, allowing you to write a skill once and instantly use it across 30+ supported AI tools including Claude Code, Codex, Cursor, Gemini CLI, Windsurf, Trae, and more.
 
 ## ✨ Key Features
 
@@ -24,7 +24,7 @@ It uses a powerful **symlink synchronization mechanism**, allowing you to write 
 - **🌍 Bilingual UI**: Full English and Chinese interface support.
 - **⚡ High Performance**: Built with **Rust** and **Tauri 2.0** for a lightweight, blazing-fast experience.
 - **🛡️ Cross-Platform**: Native support for macOS, Windows, and Linux.
-- **🔌 Multi-Tool Support**: Out-of-the-box support for 29+ AI tools (Claude Code, Codex, Cursor, Gemini CLI, Windsurf, Trae, Cline, Augment, Goose, and many more), extensible via custom tools.
+- **🔌 Multi-Tool Support**: Out-of-the-box support for 30+ AI tools (Claude Code, Codex, Cursor, Gemini CLI, Windsurf, Trae, Cline, Augment, Goose, and many more), extensible via custom tools.
 - **🧩 Custom Tools**: Add your own tools with custom paths and optional icons.
 - **🎨 Modern UI**: Beautiful Raycast-style interface built with React 19, Tailwind CSS v4, and Radix UI.
 

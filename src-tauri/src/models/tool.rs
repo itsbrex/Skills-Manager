@@ -256,6 +256,13 @@ pub const SUPPORTED_TOOLS: &[ToolDefinition] = &[
         alt_config_dirs: &[],
         cli_command: "workbuddy",
     },
+    ToolDefinition {
+        id: "qoderwork-cn",
+        name: "QoderWork CN",
+        config_dir: ".qoderworkcn",
+        alt_config_dirs: &[],
+        cli_command: "qoderworkcn",
+    },
 ];
 
 #[cfg(test)]
@@ -287,6 +294,7 @@ mod tests {
         assert!(ids.contains(&"trae-cn"));
         assert!(ids.contains(&"hermes"));
         assert!(ids.contains(&"workbuddy"));
+        assert!(ids.contains(&"qoderwork-cn"));
     }
 
     #[test]
