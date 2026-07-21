@@ -3148,6 +3148,7 @@ fn normalize_local_path(path: &str, skill_path: &str) -> String {
 /// clawhub ZIP 归档内的文件可能带顶层目录（如 "my-skill/SKILL.md"），
 /// 也可能直接是文件（如 "SKILL.md"）。如果路径以 "<slug>/" 开头则剥离该前缀，
 /// 否则原样返回。slug 中的 '/' 不会被作为目录分隔符处理。
+/// 重复前缀（如 "my-skill/my-skill/SKILL.md"）会被全部剥离。
 fn strip_archive_top_level_prefix(path: &str, slug: &str) -> String {
     let path = path.trim_start_matches("./");
     let slug = slug.trim_end_matches('/');
@@ -3155,10 +3156,11 @@ fn strip_archive_top_level_prefix(path: &str, slug: &str) -> String {
         return path.to_string();
     }
     let prefix = format!("{}/", slug);
-    if let Some(stripped) = path.strip_prefix(&prefix) {
-        return stripped.to_string();
+    let mut result = path;
+    while let Some(stripped) = result.strip_prefix(&prefix) {
+        result = stripped;
     }
-    path.to_string()
+    result.to_string()
 }
 
 /// 递归地将文件路径插入到 SkillFileNode 树中。
@@ -4303,5 +4305,36 @@ description: "来自 frontmatter 的描述"
             .as_ref()
             .map(|children| children.iter().map(count_files).sum())
             .unwrap_or(0)
+    }
+
+    #[test]
+    fn strip_archive_top_level_prefix_removes_repeated_slug_prefixes() {
+        use super::strip_archive_top_level_prefix;
+
+        // Single prefix
+        assert_eq!(
+            strip_archive_top_level_prefix("my-skill/SKILL.md", "my-skill"),
+            "SKILL.md"
+        );
+        // Repeated prefix (the #49 bug)
+        assert_eq!(
+            strip_archive_top_level_prefix("my-skill/my-skill/SKILL.md", "my-skill"),
+            "SKILL.md"
+        );
+        // Triple prefix
+        assert_eq!(
+            strip_archive_top_level_prefix("a/a/a/file.txt", "a"),
+            "file.txt"
+        );
+        // No prefix match — unchanged
+        assert_eq!(
+            strip_archive_top_level_prefix("other/SKILL.md", "my-skill"),
+            "other/SKILL.md"
+        );
+        // Leading ./ is trimmed first
+        assert_eq!(
+            strip_archive_top_level_prefix("./my-skill/SKILL.md", "my-skill"),
+            "SKILL.md"
+        );
     }
 }
