@@ -93,7 +93,9 @@ impl ConfigManager {
             }
 
             let tags = Self::normalize_skill_tags(&item.tags);
-            if tags.is_empty() {
+            // 只有当 tags 为空且 favorited_at 也为 None 时才丢弃 entry，
+            // 避免丢失只有 favorited_at 没有 tags 的收藏状态
+            if tags.is_empty() && item.favorited_at.is_none() {
                 changed = true;
                 continue;
             }
@@ -109,7 +111,13 @@ impl ConfigManager {
             };
 
             if normalized
-                .insert(normalized_id, SkillMetadata { tags, favorited_at: None })
+                .insert(
+                    normalized_id,
+                    SkillMetadata {
+                        tags,
+                        favorited_at: item.favorited_at,
+                    },
+                )
                 .is_some()
             {
                 changed = true;
@@ -1040,6 +1048,78 @@ mod tests {
                 restored.initialized,
                 "updated config should persist after save"
             );
+        });
+    }
+
+    #[test]
+    fn save_and_load_preserves_favorited_at_with_tags() {
+        with_temp_home(|_home_dir| {
+            let manager = ConfigManager::new();
+            let mut config = manager.init_default().expect("init default config");
+            config.skill_metadata.insert(
+                "global:skill-a".to_string(),
+                SkillMetadata {
+                    tags: vec!["tag1".to_string()],
+                    favorited_at: Some(1700000000),
+                },
+            );
+
+            manager.save(&config).expect("save config");
+
+            let loaded = manager.load().expect("load config");
+            assert_eq!(
+                loaded.skill_metadata.get("global:skill-a"),
+                Some(&SkillMetadata {
+                    tags: vec!["tag1".to_string()],
+                    favorited_at: Some(1700000000),
+                })
+            );
+        });
+    }
+
+    #[test]
+    fn save_and_load_preserves_favorited_at_without_tags() {
+        with_temp_home(|_home_dir| {
+            let manager = ConfigManager::new();
+            let mut config = manager.init_default().expect("init default config");
+            config.skill_metadata.insert(
+                "global:skill-b".to_string(),
+                SkillMetadata {
+                    tags: vec![],
+                    favorited_at: Some(1700000000),
+                },
+            );
+
+            manager.save(&config).expect("save config");
+
+            let loaded = manager.load().expect("load config");
+            assert_eq!(
+                loaded.skill_metadata.get("global:skill-b"),
+                Some(&SkillMetadata {
+                    tags: vec![],
+                    favorited_at: Some(1700000000),
+                })
+            );
+        });
+    }
+
+    #[test]
+    fn save_drops_metadata_entry_with_no_tags_and_no_favorite() {
+        with_temp_home(|_home_dir| {
+            let manager = ConfigManager::new();
+            let mut config = manager.init_default().expect("init default config");
+            config.skill_metadata.insert(
+                "global:skill-c".to_string(),
+                SkillMetadata {
+                    tags: vec![],
+                    favorited_at: None,
+                },
+            );
+
+            manager.save(&config).expect("save config");
+
+            let loaded = manager.load().expect("load config");
+            assert_eq!(loaded.skill_metadata.get("global:skill-c"), None);
         });
     }
 }
