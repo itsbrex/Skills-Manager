@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { Check, ChevronRight, ExternalLink, Layers3, List, Minus, Sparkles } from "lucide-react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { confirm, open, save } from "@tauri-apps/plugin-dialog";
@@ -96,6 +98,10 @@ import {
   buildGroupSingleToolActionRequest,
 } from "./skills/groupToolBatchActions";
 import {
+  buildGroupedSkillSections,
+  type GroupedSkillSection,
+} from "./skills/buildGroupedSkillSections";
+import {
   buildSkillsHeaderActionLayout,
   type SkillsHeaderActionId,
 } from "./skills/headerActionLayout";
@@ -108,6 +114,34 @@ import {
 } from "./projectBindings";
 import { ProjectBindingsDialog } from "./ProjectBindingsDialog";
 import { getToolIconUrl } from "@/assets/tools";
+
+type SkillsListViewMode = "grouped" | "flat";
+
+const SKILLS_LIST_VIEW_MODE_KEY = "skills-manager:skills-list-view-mode:v2";
+const EXPANDED_SKILL_GROUPS_KEY = "skills-manager:expanded-skill-groups:v1";
+
+function loadSkillsListViewMode(): SkillsListViewMode {
+  try {
+    return window.localStorage.getItem(SKILLS_LIST_VIEW_MODE_KEY) === "grouped" ? "grouped" : "flat";
+  } catch {
+    return "flat";
+  }
+}
+
+function loadExpandedSkillGroups(): Set<string> {
+  try {
+    const stored = window.localStorage.getItem(EXPANDED_SKILL_GROUPS_KEY);
+    if (!stored) {
+      return new Set();
+    }
+    const parsed: unknown = JSON.parse(stored);
+    return Array.isArray(parsed)
+      ? new Set(parsed.filter((item): item is string => typeof item === "string"))
+      : new Set();
+  } catch {
+    return new Set();
+  }
+}
 
 function getToolDisplayName(toolId: string, tools: Tool[]): string {
   const tool = tools.find((t) => t.id === toolId);
@@ -430,6 +464,34 @@ function renderPreviewChips(chips: string[], overflowCount: number) {
   );
 }
 
+function SelectionIndicator({
+  checked,
+  indeterminate = false,
+  label,
+  onToggle,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="skills-selection-indicator"
+      data-state={checked ? "checked" : indeterminate ? "mixed" : "unchecked"}
+      aria-label={label}
+      aria-pressed={checked}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+    >
+      {checked ? <Check size={13} strokeWidth={3} /> : indeterminate ? <Minus size={13} strokeWidth={3} /> : null}
+    </button>
+  );
+}
+
 function getUnifiedItemMetaLabel(item: UnifiedSkillListItem, t: (key: TranslationPath) => string) {
   if (item.kind === "group") {
     return t("skills.groupMembersCount").replace("{count}", String(item.memberCount ?? 0));
@@ -456,6 +518,37 @@ function SkillCardActionMenu({
   onDelete,
 }: SkillCardActionMenuProps) {
   const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{
+    top?: number;
+    bottom?: number;
+    right: number;
+  } | null>(null);
+
+  const closeMenu = useCallback(() => {
+    setOpen(false);
+    setMenuPosition(null);
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    };
+
+    window.addEventListener("resize", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeMenu, open]);
 
   return (
     <div style={{ position: "relative", flexShrink: 0 }}>
@@ -464,7 +557,20 @@ function SkillCardActionMenu({
         aria-label={moreActionsLabel}
         onClick={(e) => {
           e.stopPropagation();
-          setOpen((current) => !current);
+          if (open) {
+            closeMenu();
+            return;
+          }
+
+          const triggerRect = e.currentTarget.getBoundingClientRect();
+          const gap = 6;
+          const menuHeight = 96;
+          const right = Math.max(8, window.innerWidth - triggerRect.right);
+          const hasRoomBelow = triggerRect.bottom + gap + menuHeight <= window.innerHeight - 8;
+          setMenuPosition(hasRoomBelow
+            ? { top: triggerRect.bottom + gap, right }
+            : { bottom: window.innerHeight - triggerRect.top + gap, right });
+          setOpen(true);
         }}
         disabled={deleting}
         style={{
@@ -498,18 +604,19 @@ function SkillCardActionMenu({
         </svg>
       </button>
 
-      {open && (
+      {open && menuPosition && createPortal(
         <>
           <button
             type="button"
             aria-label={moreActionsLabel}
             onClick={(e) => {
               e.stopPropagation();
-              setOpen(false);
+              closeMenu();
             }}
             style={{
               position: "fixed",
               inset: 0,
+              zIndex: MODAL_LAYER_Z_INDEX - 1,
               background: "transparent",
               border: "none",
               padding: 0,
@@ -521,9 +628,10 @@ function SkillCardActionMenu({
             className="glass-elevated animate-popover"
             onClick={(e) => e.stopPropagation()}
             style={{
-              position: "absolute",
-              top: "calc(100% + 6px)",
-              right: 0,
+              position: "fixed",
+              top: menuPosition.top,
+              bottom: menuPosition.bottom,
+              right: menuPosition.right,
               display: "flex",
               flexDirection: "column",
               gap: "2px",
@@ -539,7 +647,7 @@ function SkillCardActionMenu({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setOpen(false);
+                closeMenu();
                 onEdit();
               }}
               style={menuItemBaseStyle}
@@ -556,7 +664,7 @@ function SkillCardActionMenu({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setOpen(false);
+                closeMenu();
                 onDelete();
               }}
               disabled={deleting}
@@ -578,7 +686,8 @@ function SkillCardActionMenu({
               {deleteLabel}
             </button>
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </div>
   );
@@ -648,6 +757,8 @@ export function Skills() {
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const [initialLoading, setInitialLoading] = useState(() => skillsPageCache === null);
   const [refreshing, setRefreshing] = useState(false);
+  const [skillListViewMode, setSkillListViewMode] = useState<SkillsListViewMode>(loadSkillsListViewMode);
+  const [expandedSkillGroups, setExpandedSkillGroups] = useState<Set<string>>(loadExpandedSkillGroups);
   const [expandedCardKeys, setExpandedCardKeys] = useState<Set<string>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
@@ -660,6 +771,22 @@ export function Skills() {
   const listContainerRef = useRef<HTMLElement | null>(null);
   const hasRestoredScrollRef = useRef(false);
   const highlightTargetRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SKILLS_LIST_VIEW_MODE_KEY, skillListViewMode);
+    } catch {
+      // Local storage is optional; the in-memory preference still works.
+    }
+  }, [skillListViewMode]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(EXPANDED_SKILL_GROUPS_KEY, JSON.stringify([...expandedSkillGroups]));
+    } catch {
+      // Local storage is optional; the in-memory expansion state still works.
+    }
+  }, [expandedSkillGroups]);
 
   const handleToggleFavorite = useCallback(async (instanceId: string, skillName: string, event: MouseEvent) => {
     event.stopPropagation();
@@ -1438,6 +1565,22 @@ export function Skills() {
     });
   }, [filteredUnifiedItems, searchQuery, favorites.skillFavoriteTimestamps]);
 
+  const groupedSkillCollection = useMemo(
+    () => buildGroupedSkillSections(unifiedItems, sortedUnifiedItems),
+    [sortedUnifiedItems, unifiedItems],
+  );
+
+  const flatSkillItems = useMemo(
+    () => sortedUnifiedItems.filter((item) => item.kind === "skill"),
+    [sortedUnifiedItems],
+  );
+
+  const hasVisibleSkillItems = skillListViewMode === "grouped"
+    ? groupedSkillCollection.groups.length > 0 || groupedSkillCollection.standaloneSkills.length > 0
+    : flatSkillItems.length > 0;
+
+  const forceExpandFilteredGroups = hasActiveSkillFilters;
+
   useEffect(() => {
     const highlight = searchParams.get("highlight");
     if (!highlight || initialLoading) return;
@@ -1474,10 +1617,16 @@ export function Skills() {
     [tools],
   );
 
-  const visibleBatchItemKeys = useMemo(
-    () => sortedUnifiedItems.map((item) => item.key),
-    [sortedUnifiedItems],
-  );
+  const visibleBatchItemKeys = useMemo(() => {
+    if (skillListViewMode === "flat") {
+      return flatSkillItems.map((item) => item.key);
+    }
+
+    return [
+      ...groupedSkillCollection.groups.flatMap((section) => section.members.map((item) => item.key)),
+      ...groupedSkillCollection.standaloneSkills.map((item) => item.key),
+    ];
+  }, [flatSkillItems, groupedSkillCollection, skillListViewMode]);
 
   const allBatchItemKeys = useMemo(
     () => unifiedItems.map((item) => item.key),
@@ -1542,6 +1691,18 @@ export function Skills() {
         next.delete(itemKey);
       } else {
         next.add(itemKey);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleSkillGroup = useCallback((packageId: string) => {
+    setExpandedSkillGroups((current) => {
+      const next = new Set(current);
+      if (next.has(packageId)) {
+        next.delete(packageId);
+      } else {
+        next.add(packageId);
       }
       return next;
     });
@@ -2161,6 +2322,11 @@ export function Skills() {
     [tools],
   );
 
+  const toolsById = useMemo(
+    () => new Map(tools.map((tool) => [tool.id, tool])),
+    [tools],
+  );
+
   const toolEditorSkill = useMemo(
     () => skills.find((skill) => skill.instance_id === toolEditorSkillId) ?? null,
     [skills, toolEditorSkillId],
@@ -2620,6 +2786,340 @@ export function Skills() {
     );
   }
 
+  const renderSkillListRow = (
+    item: UnifiedSkillListItem,
+    parentGroup: UnifiedSkillListItem | null = null,
+  ) => {
+    if (item.kind !== "skill" || !item.skill) {
+      return null;
+    }
+
+    const skill = item.skill;
+    const translationKey = makeTranslationKey(skill.instance_id, language);
+    const translated = translation.getTranslation(translationKey);
+    const isTranslatedView = translation.getView(translationKey) === "translated" && translated != null;
+    const title = isTranslatedView && translated ? translated.name : item.title;
+    const description = isTranslatedView && translated
+      ? translated.description || t("skills.noDescription")
+      : item.description || t("skills.noDescription");
+    const isSelected = selectedBatchItemKeys.has(item.key);
+    const isExpanded = expandedCardKeys.has(item.key);
+    const isHighlighted = highlightKey === item.key;
+    const owningGroup = parentGroup ?? groupedSkillCollection.groupBySkillKey.get(item.key) ?? null;
+    const riskReport = riskReports[skill.instance_id];
+    const fileProgress = skillTranslationProgress[skill.instance_id];
+    const fileProgressText = fileProgress
+      ? t("editor.translateFilesCompact")
+          .replace("{current}", String(fileProgress.current))
+          .replace("{total}", String(fileProgress.total))
+          .replace("{path}", fileProgress.path)
+      : null;
+
+    return (
+      <div
+        key={item.key}
+        ref={isHighlighted ? highlightTargetRef : undefined}
+        className="skills-list-row-anchor"
+      >
+        <article
+          className={`skills-list-row${parentGroup ? " is-group-member" : ""}${isSelected ? " is-selected" : ""}${isHighlighted ? " is-highlighted" : ""}`}
+        >
+          <div className="skills-list-row-main">
+            {isBatchManageMode && (
+              <SelectionIndicator
+                checked={isSelected}
+                label={title}
+                onToggle={() => handleToggleBatchItemSelection(item.key)}
+              />
+            )}
+
+            <button
+              type="button"
+              className="skills-list-row-summary"
+              aria-expanded={isExpanded}
+              aria-label={t(isExpanded ? "skills.collapseSkillDetails" : "skills.expandSkillDetails")}
+              onClick={() => {
+                if (isBatchManageMode) {
+                  handleToggleBatchItemSelection(item.key);
+                  return;
+                }
+                handleToggleCardExpand(item.key);
+              }}
+            >
+              <span className="skills-list-row-icon" aria-hidden>
+                <Sparkles size={16} strokeWidth={1.8} />
+              </span>
+              <span className="skills-list-row-copy">
+                <span className="skills-list-row-title-line">
+                  <span className="skills-list-row-title">{title}</span>
+                  {skill.scope === "project" && (
+                    <span className="skills-scope-badge is-project">
+                      {activeProjectName ?? t("skills.scopeProject")}
+                    </span>
+                  )}
+                  {!parentGroup && owningGroup && (
+                    <span className="skills-membership-label">{owningGroup.title}</span>
+                  )}
+                </span>
+                <span className="skills-list-row-description">{description}</span>
+                {item.tags.length > 0 && (
+                  <span className="skills-list-row-tags">
+                    {item.tags.slice(0, 2).map((tag) => <span key={tag}>#{tag}</span>)}
+                    {item.tags.length > 2 && <span>+{item.tags.length - 2}</span>}
+                  </span>
+                )}
+              </span>
+
+              <span className="skills-list-row-tools">
+                {item.toolSummary?.state === "none" && <span>{t("skills.noToolsEnabled")}</span>}
+                {item.toolSummary?.state === "all" && <span>{t("skills.allEnabled")}</span>}
+                {item.toolSummary?.state === "partial" && (
+                  <>
+                    <span className="skills-list-row-tool-icons">
+                      {item.toolSummary.visibleEnabledToolIds.map((toolId) => (
+                        <ToolIconChip
+                          key={toolId}
+                          toolId={toolId}
+                          tools={tools}
+                          size={14}
+                          enabled
+                          detected={toolsById.get(toolId)?.detected ?? false}
+                        />
+                      ))}
+                    </span>
+                    <span className="skills-list-row-tool-count">
+                      {item.toolSummary.enabledCount}/{item.toolSummary.totalCount}
+                    </span>
+                  </>
+                )}
+              </span>
+
+              <ChevronRight
+                className={`skills-row-chevron${isExpanded ? " is-expanded" : ""}`}
+                size={16}
+                strokeWidth={2}
+                aria-hidden
+              />
+            </button>
+
+            {!isBatchManageMode && (
+              <div className="skills-list-row-actions">
+                {riskReport && riskReport.level !== "safe" && (
+                  <button
+                    type="button"
+                    className={`skills-risk-button risk-${riskReport.level}`}
+                    title={riskReport.findings[0]?.message ?? riskReport.level}
+                    onClick={() => {
+                      setToolEditorSkillId(skill.instance_id);
+                      setSkillEditorTab("risk");
+                    }}
+                  >
+                    {t(`settings.riskLevel${riskReport.level.charAt(0).toUpperCase() + riskReport.level.slice(1)}` as TranslationPath)}
+                  </button>
+                )}
+                {fileProgressText && <span className="skills-file-progress" title={fileProgressText}>{fileProgress.current}/{fileProgress.total}</span>}
+                <FavoriteIconButton
+                  favorited={favorites.isSkillFavorite(skill.instance_id)}
+                  onClick={(event) => void handleToggleFavorite(skill.instance_id, title, event)}
+                  favoriteLabel={t("skills.favoriteAction")}
+                  unfavoriteLabel={t("skills.unfavoriteAction")}
+                  size={28}
+                />
+                {item.openPath && (
+                  <button
+                    type="button"
+                    className="skills-row-icon-button"
+                    title={t("skills.openEditor")}
+                    aria-label={t("skills.openEditor")}
+                    onClick={() => void handleOpenUnifiedItem(item)}
+                  >
+                    <ExternalLink size={14} strokeWidth={2} />
+                  </button>
+                )}
+                <TranslateIconButton
+                  hasTranslation={translated != null}
+                  showingTranslation={isTranslatedView}
+                  translating={translatingIds.has(skill.instance_id)}
+                  translateLabel={t("skills.translateAction")}
+                  showOriginalLabel={t("skills.showOriginal")}
+                  showTranslationLabel={t("skills.showTranslated")}
+                  translatingLabel={t("skills.translating")}
+                  retranslateLabel={t("skills.retranslate")}
+                  onClick={() => {
+                    if (translated) {
+                      translation.setView(translationKey, isTranslatedView ? "original" : "translated");
+                    } else {
+                      void handleTranslateSkill(skill);
+                    }
+                  }}
+                  onRetranslate={() => void handleTranslateSkill(skill, true)}
+                />
+                <SkillCardActionMenu
+                  deleting={deletingSkill === skill.instance_id}
+                  editLabel={t("skills.configureTools")}
+                  deleteLabel={t("skills.delete")}
+                  moreActionsLabel={t("skills.moreActions")}
+                  onEdit={() => openSkillEditor(skill.instance_id, "tools")}
+                  onDelete={() => void handleDelete(skill)}
+                />
+              </div>
+            )}
+          </div>
+
+          {isExpanded && !isBatchManageMode && (
+            <div className="skills-list-row-details">
+              <div>
+                <span className="skills-detail-label">{t("skills.skillDescription")}</span>
+                <p>{skill.description || t("skills.noDescription")}</p>
+              </div>
+              {item.openPath && (
+                <div>
+                  <span className="skills-detail-label">{t("skills.skillPath")}</span>
+                  <code>{item.openPath}</code>
+                </div>
+              )}
+              {toolIds.length > 0 && (
+                <div>
+                  <span className="skills-detail-label">{t("skills.configureToolsTitle")}</span>
+                  <div className="skills-detail-tools">
+                    {toolIds.map((toolId) => (
+                      <ToolIconChip
+                        key={toolId}
+                        toolId={toolId}
+                        tools={tools}
+                        size={18}
+                        enabled={skill.enabled[toolId] ?? false}
+                        detected={toolsById.get(toolId)?.detected ?? false}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </article>
+      </div>
+    );
+  };
+
+  const renderGroupSection = (section: GroupedSkillSection) => {
+    const groupItem = section.group;
+    const skillPackage = groupItem.skillPackage;
+    if (!skillPackage) {
+      return null;
+    }
+
+    const isExpanded = forceExpandFilteredGroups || expandedSkillGroups.has(groupItem.id);
+    const isSelected = selectedBatchItemKeys.has(groupItem.key);
+    const selectedMemberCount = section.allMembers.filter((member) => selectedBatchItemKeys.has(member.key)).length;
+    const isPartiallySelected = !isSelected && selectedMemberCount > 0;
+    const enabledGroupTools = Object.values(groupItem.groupToolStateById ?? {})
+      .filter((state) => state.anyEnabled)
+      .sort((left, right) => Number(right.fullyEnabled) - Number(left.fullyEnabled));
+
+    return (
+      <section key={groupItem.key} className={`skills-group-section${isSelected ? " is-selected" : ""}`}>
+        <div className="skills-group-header">
+          {isBatchManageMode && (
+            <SelectionIndicator
+              checked={isSelected}
+              indeterminate={isPartiallySelected}
+              label={groupItem.title}
+              onToggle={() => handleToggleBatchItemSelection(groupItem.key)}
+            />
+          )}
+
+          <button
+            type="button"
+            className="skills-group-summary"
+            aria-expanded={isExpanded}
+            aria-label={t(isExpanded ? "skills.collapseGroup" : "skills.expandGroup")}
+            onClick={() => {
+              if (isBatchManageMode) {
+                handleToggleBatchItemSelection(groupItem.key);
+                return;
+              }
+              handleToggleSkillGroup(groupItem.id);
+            }}
+          >
+            <ChevronRight
+              className={`skills-group-chevron${isExpanded ? " is-expanded" : ""}`}
+              size={17}
+              strokeWidth={2.2}
+              aria-hidden
+            />
+            <span className="skills-group-icon" aria-hidden><Layers3 size={17} strokeWidth={1.8} /></span>
+            <span className="skills-group-copy">
+              <span className="skills-group-title-line">
+                <span className="skills-group-title">{groupItem.title}</span>
+                <span className="skills-group-count">
+                  {t("skills.groupMembersCount").replace("{count}", String(skillPackage.installed_members.length))}
+                </span>
+              </span>
+              <span className="skills-group-subline">
+                <span>{skillPackage.package_id}</span>
+                {groupItem.tags.slice(0, 2).map((tag) => <span key={tag}>#{tag}</span>)}
+                {section.missingMemberIds.length > 0 && (
+                  <span className="is-warning">
+                    {t("skills.missingGroupMembers").replace("{count}", String(section.missingMemberIds.length))}
+                  </span>
+                )}
+              </span>
+            </span>
+          </button>
+
+          <div className="skills-group-tool-summary">
+            {enabledGroupTools.length === 0 ? (
+              <span className="skills-group-no-tools">{t("skills.noToolsEnabled")}</span>
+            ) : (
+              <>
+                {enabledGroupTools.slice(0, 3).map((state) => (
+                  <span
+                    key={state.toolId}
+                    className={`skills-group-tool-coverage${state.fullyEnabled ? " is-full" : " is-partial"}`}
+                    title={`${getToolDisplayName(state.toolId, tools)} ${state.enabledMemberCount}/${state.memberCount}`}
+                  >
+                    <ToolIconChip
+                      toolId={state.toolId}
+                      tools={tools}
+                      size={13}
+                      enabled={state.anyEnabled}
+                      detected={toolsById.get(state.toolId)?.detected ?? false}
+                    />
+                    <span>{state.enabledMemberCount}/{state.memberCount}</span>
+                  </span>
+                ))}
+                {enabledGroupTools.length > 3 && <span className="skills-group-more-tools">+{enabledGroupTools.length - 3}</span>}
+              </>
+            )}
+          </div>
+
+          {!isBatchManageMode && (
+            <SkillCardActionMenu
+              deleting={deletingGroupId === groupItem.id}
+              editLabel={t("skills.configureTools")}
+              deleteLabel={t("skills.delete")}
+              moreActionsLabel={t("skills.moreActions")}
+              onEdit={() => openGroupEditor(groupItem.id)}
+              onDelete={() => void handleDeleteGroup(groupItem)}
+            />
+          )}
+        </div>
+
+        {isExpanded && (
+          <div className="skills-group-members">
+            {section.members.map((member) => renderSkillListRow(member, groupItem))}
+            {section.members.length === 0 && section.missingMemberIds.length > 0 && (
+              <div className="skills-group-empty-members">
+                {t("skills.missingGroupMembers").replace("{count}", String(section.missingMemberIds.length))}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+    );
+  };
+
   return (
     <div style={{
       flex: 1,
@@ -3040,6 +3540,36 @@ export function Skills() {
         }}
       >
         <div style={{ maxWidth: "1600px", margin: "0 auto" }}>
+          <div className="skills-view-toolbar">
+            <div className="skills-view-switch" role="group" aria-label={t("skills.title")}>
+              <button
+                type="button"
+                className={skillListViewMode === "flat" ? "is-active" : undefined}
+                aria-pressed={skillListViewMode === "flat"}
+                disabled={isBatchManageMode}
+                onClick={() => setSkillListViewMode("flat")}
+              >
+                <List size={15} strokeWidth={2} />
+                <span>{t("skills.flatView")}</span>
+              </button>
+              <button
+                type="button"
+                className={skillListViewMode === "grouped" ? "is-active" : undefined}
+                aria-pressed={skillListViewMode === "grouped"}
+                disabled={isBatchManageMode}
+                onClick={() => setSkillListViewMode("grouped")}
+              >
+                <Layers3 size={14} strokeWidth={2} />
+                <span>{t("skills.groupedView")}</span>
+              </button>
+            </div>
+            <div className="skills-view-summary" aria-live="polite">
+              {skillListViewMode === "grouped"
+                ? `${groupedSkillCollection.groups.length} ${t("skills.skillGroupsSection")} · ${groupedSkillCollection.standaloneSkills.length} ${t("skills.standaloneSkillsSection")}`
+                : `${flatSkillItems.length} Skills`}
+            </div>
+          </div>
+
           {isBatchManageMode && (
             <div
               style={{
@@ -3143,7 +3673,7 @@ export function Skills() {
               </div>
             </div>
           )}
-          {sortedUnifiedItems.length === 0 ? (
+          {!hasVisibleSkillItems ? (
             <div style={{
               display: 'flex',
               flexDirection: 'column',
@@ -3158,9 +3688,35 @@ export function Skills() {
                 {hasActiveSkillFilters ? t("skills.noMatch") : t("skills.noSkills")}
               </div>
             </div>
+          ) : skillListViewMode === "grouped" ? (
+            <div className="skills-grouped-list">
+              {groupedSkillCollection.groups.length > 0 && (
+                <section className="skills-list-section">
+                  <div className="skills-list-section-heading">
+                    <span>{t("skills.skillGroupsSection")}</span>
+                    <span>{groupedSkillCollection.groups.length}</span>
+                  </div>
+                  <div className="skills-groups-stack">
+                    {groupedSkillCollection.groups.map(renderGroupSection)}
+                  </div>
+                </section>
+              )}
+
+              {groupedSkillCollection.standaloneSkills.length > 0 && (
+                <section className="skills-list-section">
+                  <div className="skills-list-section-heading">
+                    <span>{t("skills.standaloneSkillsSection")}</span>
+                    <span>{groupedSkillCollection.standaloneSkills.length}</span>
+                  </div>
+                  <div className="skills-standalone-list">
+                    {groupedSkillCollection.standaloneSkills.map((item) => renderSkillListRow(item))}
+                  </div>
+                </section>
+              )}
+            </div>
           ) : (
             <div className="card-grid">
-              {sortedUnifiedItems.map((item) => {
+              {flatSkillItems.map((item) => {
                 const color = getSkillColor(item.title);
                 const canOpen = Boolean(item.openPath);
                 const translationKey = item.kind === "skill" && item.skill
@@ -3338,6 +3894,11 @@ export function Skills() {
                               borderRadius: "999px",
                             }}>
                               {item.badgeLabel}
+                            </span>
+                          )}
+                          {item.kind === "skill" && groupedSkillCollection.groupBySkillKey.get(item.key) && (
+                            <span className="skills-membership-label">
+                              {groupedSkillCollection.groupBySkillKey.get(item.key)?.title}
                             </span>
                           )}
                           {(() => {
