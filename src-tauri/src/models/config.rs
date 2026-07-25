@@ -247,7 +247,7 @@ pub struct ToolConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            version: "2.1.6".to_string(),
+            version: "2.1.7".to_string(),
             skills_dir: Self::default_skills_dir(),
             tools: HashMap::new(),
             custom_tools: HashMap::new(),
