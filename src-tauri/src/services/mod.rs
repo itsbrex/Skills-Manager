@@ -7,6 +7,7 @@ pub mod file_ops;
 pub mod linker;
 pub mod llm;
 pub mod marketplace;
+pub mod publish;
 pub mod risk;
 pub mod scanner;
 pub mod skill_packages;

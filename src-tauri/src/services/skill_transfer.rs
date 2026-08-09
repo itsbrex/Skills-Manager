@@ -439,10 +439,9 @@ pub fn import_skills_from_zip(
             let instance_id = Skill::global_instance_id(&final_id);
             let entry = updated_metadata
                 .entry(instance_id)
-                .or_insert_with(|| SkillMetadata {
-                    tags: Vec::new(),
-                    favorited_at: None,
-                });
+                // 导入的技能不继承发布记录：归档里没有这项，且新副本与
+                // 远端并无关联。已存在的 entry 会保留其原有记录。
+                .or_insert_with(SkillMetadata::default);
             // Merge tags (union, preserve case-insensitive uniqueness).
             for tag in &skill_meta.tags {
                 let lower = tag.to_lowercase();

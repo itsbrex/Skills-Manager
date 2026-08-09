@@ -5,6 +5,7 @@ import { Check, ChevronRight, ExternalLink, Layers3, List, Minus, Sparkles } fro
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { confirm, open, save } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -26,7 +27,9 @@ import {
   ImportResult,
   InstalledSkillPackage,
   ProjectBinding,
+  PublishResult,
   Skill,
+  SkillPublishRecord,
   SkillRiskReport,
   SkillUsageStats,
   Tool,
@@ -96,6 +99,7 @@ import {
 import { getActionableToolIds } from "./skills/getActionableToolIds";
 import { BatchManageToolsDialog } from "./skills/BatchManageToolsDialog";
 import { ImportConflictDialog } from "./skills/ImportConflictDialog";
+import { PublishToClawhubDialog } from "./skills/PublishToClawhubDialog";
 import { buildBatchToolStateSummaries } from "./skills/buildBatchToolStates";
 import {
   buildGroupBulkToolActionPlan,
@@ -291,6 +295,9 @@ type SkillCardActionMenuProps = {
   moreActionsLabel: string;
   onEdit: () => void;
   onDelete: () => void;
+  /** 只有单个技能能发布，技能组不传这两项即可隐藏该菜单项。 */
+  publishLabel?: string;
+  onPublish?: () => void;
 };
 
 const menuItemBaseStyle: CSSProperties = {
@@ -425,6 +432,60 @@ function SkillsHeaderMoreMenu({
   );
 }
 
+/** 已发布到 ClawHub 的标识芯片。悬停显示 slug@version，点击跳转技能页。 */
+function PublishedBadge({
+  record,
+  label,
+  title,
+}: {
+  record: SkillPublishRecord;
+  label: string;
+  title: string;
+}) {
+  const url = record.external_url;
+  const content = (
+    <>
+      <ExternalLink size={10} strokeWidth={2} />
+      {label}
+    </>
+  );
+  const baseStyle: CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "3px",
+    height: "22px",
+    padding: "0 8px",
+    fontSize: "11px",
+    fontWeight: 600,
+    color: "var(--color-success)",
+    backgroundColor: "color-mix(in srgb, var(--color-success) 12%, transparent)",
+    border: "1px solid color-mix(in srgb, var(--color-success) 35%, transparent)",
+    borderRadius: "999px",
+    flexShrink: 0,
+  };
+
+  if (!url) {
+    return <span style={baseStyle} title={title}>{content}</span>;
+  }
+
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={(event) => {
+        // 徽标嵌在可点击的行/卡片里，阻止冒泡以免同时触发展开。
+        event.stopPropagation();
+        void openUrl(url).catch(() => {
+          // 打不开外部浏览器不影响页面，静默忽略。
+        });
+      }}
+      style={{ ...baseStyle, cursor: "pointer" }}
+    >
+      {content}
+    </button>
+  );
+}
+
 function renderPreviewChips(chips: string[], overflowCount: number) {
   if (chips.length === 0 && overflowCount === 0) {
     return null;
@@ -520,6 +581,8 @@ function SkillCardActionMenu({
   moreActionsLabel,
   onEdit,
   onDelete,
+  publishLabel,
+  onPublish,
 }: SkillCardActionMenuProps) {
   const [open, setOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState<{
@@ -568,7 +631,8 @@ function SkillCardActionMenu({
 
           const triggerRect = e.currentTarget.getBoundingClientRect();
           const gap = 6;
-          const menuHeight = 96;
+          // 每项约 30px，容器上下 padding 共 16px；多一个发布项就多留一行。
+          const menuHeight = onPublish ? 126 : 96;
           const right = Math.max(8, window.innerWidth - triggerRect.right);
           const hasRoomBelow = triggerRect.bottom + gap + menuHeight <= window.innerHeight - 8;
           setMenuPosition(hasRoomBelow
@@ -664,6 +728,25 @@ function SkillCardActionMenu({
             >
               {editLabel}
             </button>
+            {publishLabel && onPublish && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeMenu();
+                  onPublish();
+                }}
+                style={menuItemBaseStyle}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "var(--surface-hover)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }}
+              >
+                {publishLabel}
+              </button>
+            )}
             <button
               type="button"
               onClick={(e) => {
@@ -734,6 +817,7 @@ export function Skills() {
   const [favoritesOnly, setFavoritesOnly] = useState(restoredFilterState.favoritesOnly);
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
   const [deletingSkill, setDeletingSkill] = useState<string | null>(null);
+  const [publishingSkill, setPublishingSkill] = useState<Skill | null>(null);
   const [toolEditorSkillId, setToolEditorSkillId] = useState<string | null>(null);
   const [toolEditorQuery, setToolEditorQuery] = useState("");
   const [toolEditorEnabledOnly, setToolEditorEnabledOnly] = useState(false);
@@ -777,6 +861,12 @@ export function Skills() {
   const { toasts, addToast, updateToast, removeToast } = useToast();
   const skillMetadata = config?.skill_metadata;
   const favorites = useFavorites(skillMetadata);
+  /** 取某个技能的 ClawHub 发布记录，未发布过返回 null。 */
+  const getPublishRecord = useCallback(
+    (instanceId: string | undefined) =>
+      (instanceId ? skillMetadata?.[instanceId]?.publish : null) ?? null,
+    [skillMetadata],
+  );
   const listContainerRef = useRef<HTMLElement | null>(null);
   const hasRestoredScrollRef = useRef(false);
   const highlightTargetRef = useRef<HTMLDivElement | null>(null);
@@ -1864,6 +1954,28 @@ export function Skills() {
     setImportPreview(null);
   }, [importProcessing]);
 
+  const handleSkillPublished = useCallback(
+    (result: PublishResult) => {
+      // pending 表示还在跑安全扫描，此时技能尚未公开可见，文案要说清楚。
+      const key =
+        result.publication_status === "pending"
+          ? "publish.successPending"
+          : "publish.successPublished";
+      const message = t(key)
+        .replace("{slug}", publishingSkill?.name ?? "")
+        .replace("{version}", result.version);
+      addToast(message, "success");
+      // 后端已把发布记录写进 config，重新拉一次让"已发布"徽标立刻出现。
+      void reloadData();
+      if (result.external_url) {
+        void openUrl(result.external_url).catch(() => {
+          // 打不开浏览器不影响发布结果，静默忽略。
+        });
+      }
+    },
+    [addToast, publishingSkill, reloadData, t],
+  );
+
   const handleOpenBatchToolDialog = useCallback(() => {
     if (selectedBatchItems.length === 0) {
       addToast(t("skills.batchNoSelection"), "error");
@@ -2879,6 +2991,18 @@ export function Skills() {
                   {!parentGroup && owningGroup && (
                     <span className="skills-membership-label">{owningGroup.title}</span>
                   )}
+                  {(() => {
+                    const record = getPublishRecord(skill.instance_id);
+                    return record ? (
+                      <PublishedBadge
+                        record={record}
+                        label={t("publish.publishedBadge")}
+                        title={t("publish.publishedBadgeTitle")
+                          .replace("{slug}", record.slug)
+                          .replace("{version}", record.version)}
+                      />
+                    ) : null;
+                  })()}
                 </span>
                 <span className="skills-list-row-description">{description}</span>
                 {item.tags.length > 0 && (
@@ -2980,6 +3104,8 @@ export function Skills() {
                   moreActionsLabel={t("skills.moreActions")}
                   onEdit={() => openSkillEditor(skill.instance_id, "tools")}
                   onDelete={() => void handleDelete(skill)}
+                  publishLabel={t("publish.menuLabel")}
+                  onPublish={() => setPublishingSkill(skill)}
                 />
               </div>
             )}
@@ -3921,6 +4047,18 @@ export function Skills() {
                             </span>
                           )}
                           {(() => {
+                            const record = getPublishRecord(item.skill?.instance_id);
+                            return record ? (
+                              <PublishedBadge
+                                record={record}
+                                label={t("publish.publishedBadge")}
+                                title={t("publish.publishedBadgeTitle")
+                                  .replace("{slug}", record.slug)
+                                  .replace("{version}", record.version)}
+                              />
+                            ) : null;
+                          })()}
+                          {(() => {
                             const instanceId = item.skill?.instance_id;
                             if (!instanceId) return null;
                             const report = riskReports[instanceId];
@@ -4094,6 +4232,8 @@ export function Skills() {
                             moreActionsLabel={t("skills.moreActions")}
                             onEdit={() => openSkillEditor(item.skill!.instance_id, "tools")}
                             onDelete={() => void handleDelete(item.skill!)}
+                            publishLabel={t("publish.menuLabel")}
+                            onPublish={() => setPublishingSkill(item.skill!)}
                           />
                         </div>
                       )}
@@ -4471,6 +4611,14 @@ export function Skills() {
         isProcessing={importProcessing}
         onCancel={handleCloseImportDialog}
         onConfirm={(resolutions) => void handleConfirmImport(resolutions)}
+        t={t}
+      />
+
+      <PublishToClawhubDialog
+        open={publishingSkill !== null}
+        skill={publishingSkill}
+        onClose={() => setPublishingSkill(null)}
+        onPublished={handleSkillPublished}
         t={t}
       />
 

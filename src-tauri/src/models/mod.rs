@@ -2,6 +2,7 @@ pub mod auth;
 pub mod config;
 pub mod editor;
 pub mod marketplace;
+pub mod publish;
 pub mod risk;
 pub mod skill;
 pub mod skill_package;
@@ -10,13 +11,16 @@ pub mod update;
 
 pub use config::{
     AppConfig, CustomToolConfig, LlmProvider, MarketplaceFavoriteMeta, ProjectBinding,
-    SkillMetadata, ToolConfig,
+    SkillMetadata, SkillPublishRecord, ToolConfig,
 };
 pub use editor::{DetectedEditor, EDITOR_DEFINITIONS};
 pub use marketplace::{
     ClawhubSkillFilesResponse, GitHubContent, InstallResult, InstallStatus, MarketplaceSkill,
     MarketplaceSkillsResponse, MarketplaceSource, MarketplaceSyncResult,
     MarketplaceUpdateCheckResult, SkillFileNode, SourceType,
+};
+pub use publish::{
+    ClawhubIdentity, PublishFile, PublishFileEntry, PublishPreview, PublishRequest, PublishResult,
 };
 pub use skill::{MarketplaceMeta, Skill, SkillScope, SkillSource, VaultMeta};
 pub use skill_package::{InstalledSkillPackage, SkillPackageMeta};

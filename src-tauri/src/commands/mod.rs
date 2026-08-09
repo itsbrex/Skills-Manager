@@ -6,6 +6,7 @@ pub mod feedback;
 pub mod files;
 pub mod llm;
 pub mod marketplace;
+pub mod publish;
 pub mod risk;
 pub mod skill_packages;
 pub mod skill_transfer;
@@ -46,6 +47,10 @@ pub use marketplace::{
     fetch_marketplace_skill_descriptions, fetch_marketplace_skills, fetch_skill_file_content,
     fetch_skill_files, get_marketplace_sources, install_marketplace_skill,
     install_marketplace_skill_by_ref, sync_marketplace_installed_skills, toggle_marketplace_source,
+};
+pub use publish::{
+    get_clawhub_categories, preview_clawhub_publish, publish_skill_to_clawhub,
+    verify_clawhub_token,
 };
 pub use skill_packages::{
     install_skill_package_from_path, list_skill_packages, remove_skill_package,

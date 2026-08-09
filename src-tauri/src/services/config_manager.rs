@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::{
-    AppConfig, ProjectBinding, SkillMetadata, SourceType, ToolConfig, SUPPORTED_TOOLS,
+    AppConfig, ProjectBinding, SkillMetadata, SkillPublishRecord, SourceType, ToolConfig,
+    SUPPORTED_TOOLS,
 };
 #[cfg(windows)]
 use crate::services::linker::LinkerService;
@@ -93,9 +94,9 @@ impl ConfigManager {
             }
 
             let tags = Self::normalize_skill_tags(&item.tags);
-            // 只有当 tags 为空且 favorited_at 也为 None 时才丢弃 entry，
-            // 避免丢失只有 favorited_at 没有 tags 的收藏状态
-            if tags.is_empty() && item.favorited_at.is_none() {
+            // tags、favorited_at、publish 三者全空才丢弃 entry，
+            // 避免丢失只有收藏状态或只有发布记录的条目
+            if tags.is_empty() && item.favorited_at.is_none() && item.publish.is_none() {
                 changed = true;
                 continue;
             }
@@ -116,6 +117,7 @@ impl ConfigManager {
                     SkillMetadata {
                         tags,
                         favorited_at: item.favorited_at,
+                        publish: item.publish.clone(),
                     },
                 )
                 .is_some()
@@ -618,7 +620,7 @@ impl Default for ConfigManager {
 #[cfg(test)]
 mod tests {
     use super::ConfigManager;
-    use crate::models::SkillMetadata;
+    use crate::models::{SkillMetadata, SkillPublishRecord};
     use crate::test_support::with_temp_home;
     use serde_json::json;
     use std::fs;
@@ -1061,6 +1063,7 @@ mod tests {
                 SkillMetadata {
                     tags: vec!["tag1".to_string()],
                     favorited_at: Some(1700000000),
+                    publish: None,
                 },
             );
 
@@ -1072,6 +1075,7 @@ mod tests {
                 Some(&SkillMetadata {
                     tags: vec!["tag1".to_string()],
                     favorited_at: Some(1700000000),
+                    publish: None,
                 })
             );
         });
@@ -1087,6 +1091,7 @@ mod tests {
                 SkillMetadata {
                     tags: vec![],
                     favorited_at: Some(1700000000),
+                    publish: None,
                 },
             );
 
@@ -1098,6 +1103,7 @@ mod tests {
                 Some(&SkillMetadata {
                     tags: vec![],
                     favorited_at: Some(1700000000),
+                    publish: None,
                 })
             );
         });
@@ -1113,6 +1119,7 @@ mod tests {
                 SkillMetadata {
                     tags: vec![],
                     favorited_at: None,
+                    publish: None,
                 },
             );
 
@@ -1120,6 +1127,43 @@ mod tests {
 
             let loaded = manager.load().expect("load config");
             assert_eq!(loaded.skill_metadata.get("global:skill-c"), None);
+        });
+    }
+
+    /// 归一化会丢弃"空"的元数据条目。发布记录必须算作非空，
+    /// 否则一个只发布过、没打标签也没收藏的技能会在保存时丢掉发布状态。
+    #[test]
+    fn save_and_load_preserves_publish_record_without_tags_or_favorite() {
+        with_temp_home(|_home_dir| {
+            let manager = ConfigManager::new();
+            let mut config = manager.init_default().expect("init default config");
+            let record = SkillPublishRecord {
+                slug: "my-skill".to_string(),
+                owner_handle: Some("my-org".to_string()),
+                version: "1.2.3".to_string(),
+                published_at: 1700000000,
+                publication_status: Some("published".to_string()),
+                external_url: Some("https://clawhub.ai/my-org/skills/my-skill".to_string()),
+            };
+            config.skill_metadata.insert(
+                "global:skill-d".to_string(),
+                SkillMetadata {
+                    tags: vec![],
+                    favorited_at: None,
+                    publish: Some(record.clone()),
+                },
+            );
+
+            manager.save(&config).expect("save config");
+
+            let loaded = manager.load().expect("load config");
+            assert_eq!(
+                loaded
+                    .skill_metadata
+                    .get("global:skill-d")
+                    .and_then(|meta| meta.publish.as_ref()),
+                Some(&record)
+            );
         });
     }
 }
