@@ -82,6 +82,10 @@ import {
   takeSkillsListScrollOffset,
 } from "./skills/skillsListScrollState";
 import {
+  loadSkillsListFilterState,
+  saveSkillsListFilterState,
+} from "./skills/skillsListFilterState";
+import {
   buildBatchTargets,
   getSelectedBatchItems,
   pruneBatchSelectionToAvailable,
@@ -718,11 +722,16 @@ export function Skills() {
   // Page-level search query is shared with the TopBar scope field via context,
   // so the Skills page no longer renders its own search input.
   const { query: searchQuery } = usePageSearch(t("skills.searchPlaceholder"));
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [untaggedOnly, setUntaggedOnly] = useState(false);
-  const [riskOnly, setRiskOnly] = useState(false);
-  const [scopeFilter, setScopeFilter] = useState<"all" | "global" | "project">("all");
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  // Filters are restored from session storage so opening a skill in the editor
+  // (or visiting another page) and coming back keeps the filtered view.
+  const [restoredFilterState] = useState(loadSkillsListFilterState);
+  const [selectedTags, setSelectedTags] = useState<string[]>(restoredFilterState.selectedTags);
+  const [untaggedOnly, setUntaggedOnly] = useState(restoredFilterState.untaggedOnly);
+  const [riskOnly, setRiskOnly] = useState(restoredFilterState.riskOnly);
+  const [scopeFilter, setScopeFilter] = useState<"all" | "global" | "project">(
+    restoredFilterState.scopeFilter,
+  );
+  const [favoritesOnly, setFavoritesOnly] = useState(restoredFilterState.favoritesOnly);
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
   const [deletingSkill, setDeletingSkill] = useState<string | null>(null);
   const [toolEditorSkillId, setToolEditorSkillId] = useState<string | null>(null);
@@ -787,6 +796,16 @@ export function Skills() {
       // Local storage is optional; the in-memory expansion state still works.
     }
   }, [expandedSkillGroups]);
+
+  useEffect(() => {
+    saveSkillsListFilterState({
+      selectedTags,
+      untaggedOnly,
+      riskOnly,
+      favoritesOnly,
+      scopeFilter,
+    });
+  }, [selectedTags, untaggedOnly, riskOnly, favoritesOnly, scopeFilter]);
 
   const handleToggleFavorite = useCallback(async (instanceId: string, skillName: string, event: MouseEvent) => {
     event.stopPropagation();
@@ -1503,7 +1522,7 @@ export function Skills() {
     return projects.find((project) => project.id === activeId)?.name ?? null;
   }, [config?.active_project_id, config?.projects]);
 
-  const hasActiveSkillFilters = Boolean(searchQuery.trim()) || selectedTags.length > 0 || untaggedOnly || riskOnly || scopeFilter !== "all";
+  const hasActiveSkillFilters = Boolean(searchQuery.trim()) || selectedTags.length > 0 || untaggedOnly || riskOnly || favoritesOnly || scopeFilter !== "all";
 
   // Active tag-filter conditions shown as a numeric badge on the filter icon.
   const tagFilterActiveCount =
