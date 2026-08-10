@@ -5,7 +5,7 @@
 
 ![Version](https://img.shields.io/badge/version-2.1.8-blue) ![Downloads](https://img.shields.io/github/downloads/jiweiyeah/skills-manager/total?color=brightgreen&label=downloads) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
 
-[中文说明](./README_CN.md)
+[**Website**](https://skillsmanager.freeourdays.com) · [中文说明](./README_CN.md)
 
 ## 📖 Introduction
 
@@ -38,7 +38,7 @@ It uses a powerful **symlink synchronization mechanism**, allowing you to write 
 
 ## 📥 Download
 
-Download the latest installer for your operating system from the **[Releases Page](../../releases)**.
+Get the build for your platform from the **[official website](https://skillsmanager.freeourdays.com/#download)**, which detects your OS and architecture automatically, or pick a file yourself on the **[Releases Page](../../releases)**.
 
 | OS | Installer Type |
 |----|----------------|
