@@ -35,6 +35,8 @@ pub struct ExportedSkillMeta {
     /// Tool IDs the user explicitly enabled for this skill on the source device.
     pub enabled_tools: Vec<String>,
     pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
     pub favorited_at: Option<i64>,
 }
 
@@ -126,10 +128,16 @@ fn build_manifest_entry(skill: &Skill, config: &AppConfig) -> ExportedSkillMeta 
         })
         .collect();
 
-    let (tags, favorited_at) = config
+    let (tags, note, favorited_at) = config
         .skill_metadata
         .get(&skill.instance_id)
-        .map(|metadata| (metadata.tags.clone(), metadata.favorited_at))
+        .map(|metadata| {
+            (
+                metadata.tags.clone(),
+                metadata.note.clone(),
+                metadata.favorited_at,
+            )
+        })
         .unwrap_or_default();
 
     ExportedSkillMeta {
@@ -140,6 +148,7 @@ fn build_manifest_entry(skill: &Skill, config: &AppConfig) -> ExportedSkillMeta 
         folder: format!("{}{}", SKILLS_PREFIX, skill.id),
         enabled_tools,
         tags,
+        note,
         favorited_at,
     }
 }
@@ -434,8 +443,11 @@ pub fn import_skills_from_zip(
             }
         }
 
-        // Merge metadata (tags + favorited_at) under the final instance id.
-        if !skill_meta.tags.is_empty() || skill_meta.favorited_at.is_some() {
+        // Merge user metadata under the final instance id.
+        if !skill_meta.tags.is_empty()
+            || skill_meta.note.is_some()
+            || skill_meta.favorited_at.is_some()
+        {
             let instance_id = Skill::global_instance_id(&final_id);
             let entry = updated_metadata
                 .entry(instance_id)
@@ -445,9 +457,16 @@ pub fn import_skills_from_zip(
             // Merge tags (union, preserve case-insensitive uniqueness).
             for tag in &skill_meta.tags {
                 let lower = tag.to_lowercase();
-                if !entry.tags.iter().any(|existing| existing.to_lowercase() == lower) {
+                if !entry
+                    .tags
+                    .iter()
+                    .any(|existing| existing.to_lowercase() == lower)
+                {
                     entry.tags.push(tag.clone());
                 }
+            }
+            if skill_meta.note.is_some() {
+                entry.note = skill_meta.note.clone();
             }
             // Only set favorited_at if not already set (don't unfavorite).
             if entry.favorited_at.is_none() {
@@ -490,7 +509,6 @@ fn chrono_now_secs() -> i64 {
 mod tests {
     use super::*;
     use crate::test_support::with_temp_home;
-    use std::collections::HashMap;
     use std::path::PathBuf;
 
     fn write_skill_md(dir: &Path, id: &str, body: &str) {
@@ -559,6 +577,36 @@ mod tests {
             assert_eq!(
                 fs::read_to_string(skills_dir.join("skill-a").join("extra.txt")).unwrap(),
                 "extra"
+            );
+        });
+    }
+
+    #[test]
+    fn export_manifest_preserves_custom_note() {
+        with_temp_home(|home| {
+            let skills_dir = home.join(".skills-manager").join("skills");
+            write_skill_md(&skills_dir.join("skill-note"), "skill-note", "Body\n");
+
+            let mut config = make_config(skills_dir);
+            config.skill_metadata.insert(
+                Skill::global_instance_id("skill-note"),
+                SkillMetadata {
+                    tags: vec!["qa".to_string()],
+                    note: Some("发布前检查链接".to_string()),
+                    favorited_at: None,
+                    publish: None,
+                },
+            );
+            let skills = ScannerService::scan_scoped_skills(&config).expect("scan");
+            let archive = home.join("export-with-note.zip");
+
+            export_skills_to_zip(&config, &skills, &archive).expect("export");
+            let preview = preview_import(&archive, &config).expect("preview");
+
+            assert_eq!(preview.manifest.skills.len(), 1);
+            assert_eq!(
+                preview.manifest.skills[0].note.as_deref(),
+                Some("发布前检查链接")
             );
         });
     }

@@ -55,6 +55,7 @@ export interface InstalledSkillPackage {
 
 export interface SkillMetadata {
   tags: string[];
+  note?: string | null;
   favorited_at?: number | null;
   /** 最近一次成功发布到 ClawHub 的记录；未发布过时缺省。 */
   publish?: SkillPublishRecord | null;
@@ -529,6 +530,7 @@ export interface ExportedSkillMeta {
   folder: string;
   enabled_tools: string[];
   tags: string[];
+  note?: string | null;
   favorited_at: number | null;
 }
 

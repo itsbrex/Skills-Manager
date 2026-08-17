@@ -61,6 +61,12 @@ import {
   migrateSkillMetadataToInstanceIds,
 } from "./skills/skillTags";
 import { orderToolIdsForSkill } from "./skills/orderToolIds";
+import {
+  getSkillNoteForSkill,
+  normalizeSkillNote,
+  SKILL_NOTE_MAX_LENGTH,
+  updateSkillNoteForSkill,
+} from "./skills/skillNotes";
 import { getEnabledToolIds } from "./skills/getEnabledToolIds";
 import {
   getSkillBulkToggleConfirmKey,
@@ -286,7 +292,7 @@ function TagFilterCheck({ active }: { active: boolean }) {
   );
 }
 
-type SkillEditorTab = "tools" | "tags" | "risk";
+type SkillEditorTab = "tools" | "notes" | "tags" | "risk";
 
 type SkillCardActionMenuProps = {
   deleting: boolean;
@@ -295,6 +301,8 @@ type SkillCardActionMenuProps = {
   moreActionsLabel: string;
   onEdit: () => void;
   onDelete: () => void;
+  noteLabel?: string;
+  onNote?: () => void;
   /** 只有单个技能能发布，技能组不传这两项即可隐藏该菜单项。 */
   publishLabel?: string;
   onPublish?: () => void;
@@ -581,6 +589,8 @@ function SkillCardActionMenu({
   moreActionsLabel,
   onEdit,
   onDelete,
+  noteLabel,
+  onNote,
   publishLabel,
   onPublish,
 }: SkillCardActionMenuProps) {
@@ -631,8 +641,9 @@ function SkillCardActionMenu({
 
           const triggerRect = e.currentTarget.getBoundingClientRect();
           const gap = 6;
-          // 每项约 30px，容器上下 padding 共 16px；多一个发布项就多留一行。
-          const menuHeight = onPublish ? 126 : 96;
+          // 每项约 30px，外加容器上下留白。
+          const menuItemCount = 2 + (onNote ? 1 : 0) + (onPublish ? 1 : 0);
+          const menuHeight = menuItemCount * 30 + 20;
           const right = Math.max(8, window.innerWidth - triggerRect.right);
           const hasRoomBelow = triggerRect.bottom + gap + menuHeight <= window.innerHeight - 8;
           setMenuPosition(hasRoomBelow
@@ -728,6 +739,25 @@ function SkillCardActionMenu({
             >
               {editLabel}
             </button>
+            {noteLabel && onNote && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeMenu();
+                  onNote();
+                }}
+                style={menuItemBaseStyle}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "var(--surface-hover)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }}
+              >
+                {noteLabel}
+              </button>
+            )}
             {publishLabel && onPublish && (
               <button
                 type="button"
@@ -843,6 +873,7 @@ export function Skills() {
   const [skillEditorTab, setSkillEditorTab] = useState<SkillEditorTab>("tools");
   const [tagDraft, setTagDraft] = useState("");
   const [savingTagsSkillId, setSavingTagsSkillId] = useState<string | null>(null);
+  const [savingNoteSkillId, setSavingNoteSkillId] = useState<string | null>(null);
   const [isBatchManageMode, setIsBatchManageMode] = useState(false);
   const [selectedBatchItemKeys, setSelectedBatchItemKeys] = useState<Set<string>>(new Set());
   const [isBatchToolDialogOpen, setIsBatchToolDialogOpen] = useState(false);
@@ -1151,6 +1182,32 @@ export function Skills() {
       setSavingTagsSkillId(null);
     }
   }, [addToast, config]);
+
+  const persistSkillNote = useCallback(async (skill: Skill, nextNote: string) => {
+    if (!config) {
+      return;
+    }
+
+    const previousConfig = config;
+    const nextSkillMetadata = updateSkillNoteForSkill(skill, nextNote, config.skill_metadata);
+    const nextConfig: AppConfig = {
+      ...config,
+      skill_metadata: nextSkillMetadata,
+    };
+
+    setConfig(nextConfig);
+    setSavingNoteSkillId(getSkillMetadataKey(skill));
+
+    try {
+      await invoke("save_config", { config: nextConfig });
+      addToast(t("skills.noteSaved"), "success");
+    } catch (err) {
+      setConfig(previousConfig);
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setSavingNoteSkillId(null);
+    }
+  }, [addToast, config, t]);
 
   const toggleTagFilter = useCallback((tag: string) => {
     const next = applyTagFilterAction(
@@ -2562,6 +2619,10 @@ export function Skills() {
     () => (toolEditorSkill ? getSkillTagsForSkill(toolEditorSkill, skillMetadata) : []),
     [skillMetadata, toolEditorSkill],
   );
+  const toolEditorNote = useMemo(
+    () => (toolEditorSkill ? getSkillNoteForSkill(toolEditorSkill, skillMetadata) : ""),
+    [skillMetadata, toolEditorSkill],
+  );
   const toolEditorTagSuggestions = useMemo(() => {
     if (!toolEditorSkill) {
       return [];
@@ -2930,9 +2991,9 @@ export function Skills() {
     const translated = translation.getTranslation(translationKey);
     const isTranslatedView = translation.getView(translationKey) === "translated" && translated != null;
     const title = isTranslatedView && translated ? translated.name : item.title;
-    const description = isTranslatedView && translated
+    const description = item.note || (isTranslatedView && translated
       ? translated.description || t("skills.noDescription")
-      : item.description || t("skills.noDescription");
+      : item.description || t("skills.noDescription"));
     const isSelected = selectedBatchItemKeys.has(item.key);
     const isExpanded = expandedCardKeys.has(item.key);
     const isHighlighted = highlightKey === item.key;
@@ -3003,6 +3064,9 @@ export function Skills() {
                       />
                     ) : null;
                   })()}
+                  {item.note && (
+                    <span className="skills-note-badge">{t("skills.customNote")}</span>
+                  )}
                 </span>
                 <span className="skills-list-row-description">{description}</span>
                 {item.tags.length > 0 && (
@@ -3103,6 +3167,8 @@ export function Skills() {
                   deleteLabel={t("skills.delete")}
                   moreActionsLabel={t("skills.moreActions")}
                   onEdit={() => openSkillEditor(skill.instance_id, "tools")}
+                  noteLabel={t("skills.editNote")}
+                  onNote={() => openSkillEditor(skill.instance_id, "notes")}
                   onDelete={() => void handleDelete(skill)}
                   publishLabel={t("publish.menuLabel")}
                   onPublish={() => setPublishingSkill(skill)}
@@ -3114,7 +3180,15 @@ export function Skills() {
           {isExpanded && !isBatchManageMode && (
             <div className="skills-list-row-details">
               <div>
-                <span className="skills-detail-label">{t("skills.skillDescription")}</span>
+                {item.note && (
+                  <div className="skills-detail-note">
+                    <span className="skills-detail-label">{t("skills.customNote")}</span>
+                    <p>{item.note}</p>
+                  </div>
+                )}
+                <span className="skills-detail-label">
+                  {item.note ? t("skills.originalDescription") : t("skills.skillDescription")}
+                </span>
                 <p>{skill.description || t("skills.noDescription")}</p>
               </div>
               {item.openPath && (
@@ -3874,9 +3948,9 @@ export function Skills() {
                 const cardTitle = isTranslatedView && translated ? translated.name : item.title;
                 const description = item.kind === "group"
                   ? item.skillPackage?.package_id ?? getUnifiedItemMetaLabel(item, t)
-                  : isTranslatedView && translated
+                  : item.note || (isTranslatedView && translated
                     ? translated.description || t("skills.noDescription")
-                    : item.description || t("skills.noDescription");
+                    : item.description || t("skills.noDescription"));
                 const previewChips = item.previewChips.map((chip) => `#${chip}`);
                 const fileProgress = item.kind === "skill" && item.skill
                   ? skillTranslationProgress[item.skill.instance_id]
@@ -4000,6 +4074,9 @@ export function Skills() {
                           }}>
                             {cardTitle}
                           </div>
+                          {item.note && (
+                            <span className="skills-note-badge">{t("skills.customNote")}</span>
+                          )}
                           {item.scopeLabel && (
                             <span style={{
                               display: "inline-flex",
@@ -4231,6 +4308,8 @@ export function Skills() {
                             deleteLabel={t("skills.delete")}
                             moreActionsLabel={t("skills.moreActions")}
                             onEdit={() => openSkillEditor(item.skill!.instance_id, "tools")}
+                            noteLabel={t("skills.editNote")}
+                            onNote={() => openSkillEditor(item.skill!.instance_id, "notes")}
                             onDelete={() => void handleDelete(item.skill!)}
                             publishLabel={t("publish.menuLabel")}
                             onPublish={() => setPublishingSkill(item.skill!)}
@@ -4334,6 +4413,28 @@ export function Skills() {
                       >
                         {item.kind === "skill" && item.skill && (
                           <>
+                            {item.note && (
+                              <div>
+                                <div style={{
+                                  fontSize: "11px",
+                                  fontWeight: 600,
+                                  color: "var(--muted-foreground)",
+                                  marginBottom: "4px",
+                                  textTransform: "uppercase",
+                                }}>
+                                  {t("skills.customNote")}
+                                </div>
+                                <div style={{
+                                  fontSize: "13px",
+                                  color: "var(--foreground)",
+                                  lineHeight: 1.6,
+                                  whiteSpace: "pre-wrap",
+                                  wordBreak: "break-word",
+                                }}>
+                                  {item.note}
+                                </div>
+                              </div>
+                            )}
                             <div>
                               <div style={{
                                 fontSize: "11px",
@@ -4343,7 +4444,7 @@ export function Skills() {
                                 textTransform: "uppercase",
                                 letterSpacing: "0.04em",
                               }}>
-                                {t("skills.skillDescription")}
+                                {item.note ? t("skills.originalDescription") : t("skills.skillDescription")}
                               </div>
                               <div style={{
                                 fontSize: "13px",
@@ -4476,8 +4577,8 @@ export function Skills() {
           activeTab={skillEditorTab}
           availableTabs={
             riskReports[toolEditorSkill.instance_id]
-              ? (["tools", "tags", "risk"] as SkillEditorTab[])
-              : (["tools", "tags"] as SkillEditorTab[])
+              ? (["tools", "notes", "tags", "risk"] as SkillEditorTab[])
+              : (["tools", "notes", "tags"] as SkillEditorTab[])
           }
           onTabChange={setSkillEditorTab}
           onClose={closeSkillEditor}
@@ -4508,6 +4609,9 @@ export function Skills() {
           tagSuggestions={toolEditorTagSuggestions}
           onSelectTagSuggestion={(tag) => void persistSkillTags(toolEditorSkill, [...toolEditorTags, tag])}
           savingTags={savingTagsSkillId === getSkillMetadataKey(toolEditorSkill)}
+          note={toolEditorNote}
+          onSaveNote={(note) => void persistSkillNote(toolEditorSkill, note)}
+          savingNote={savingNoteSkillId === getSkillMetadataKey(toolEditorSkill)}
           riskReport={riskReports[toolEditorSkill.instance_id] ?? null}
           t={t}
         />
@@ -4687,6 +4791,9 @@ function SkillManageDialog({
   tagSuggestions,
   onSelectTagSuggestion,
   savingTags,
+  note,
+  onSaveNote,
+  savingNote = false,
   riskReport,
   t,
 }: {
@@ -4728,11 +4835,25 @@ function SkillManageDialog({
   tagSuggestions: string[];
   onSelectTagSuggestion: (tag: string) => void;
   savingTags: boolean;
+  note?: string;
+  onSaveNote?: (note: string) => void;
+  savingNote?: boolean;
   riskReport?: SkillRiskReport | null;
   t: (key: TranslationPath) => string;
 }) {
   const canAddTag = normalizeSkillTags([tagDraft]).length > 0;
   const enabledCount = items.filter((i) => i.enabled).length;
+  const [noteDraft, setNoteDraft] = useState(note ?? "");
+  const normalizedNote = normalizeSkillNote(note);
+  const normalizedNoteDraft = normalizeSkillNote(noteDraft);
+  const noteChanged = normalizedNoteDraft !== normalizedNote;
+
+  const handleClose = () => {
+    if (noteChanged && onSaveNote && !savingNote) {
+      onSaveNote(noteDraft);
+    }
+    onClose();
+  };
 
   return (
     <div
@@ -4746,7 +4867,7 @@ function SkillManageDialog({
         zIndex: MODAL_LAYER_Z_INDEX,
         padding: "24px",
       }}
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         className="animate-modal"
@@ -4798,7 +4919,7 @@ function SkillManageDialog({
           </div>
           <button
             type="button"
-            onClick={onClose}
+              onClick={handleClose}
             aria-label={doneLabel}
             style={{
               width: "26px",
@@ -4864,7 +4985,13 @@ function SkillManageDialog({
                     transition: "background-color 0.15s, color 0.15s",
                   }}
                 >
-                  {tab === "tools" ? t("skills.manageToolsTab") : tab === "tags" ? t("skills.manageTagsTab") : t("settings.riskScanTitle")}
+                  {tab === "tools"
+                    ? t("skills.manageToolsTab")
+                    : tab === "notes"
+                      ? t("skills.manageNotesTab")
+                      : tab === "tags"
+                        ? t("skills.manageTagsTab")
+                        : t("settings.riskScanTitle")}
                 </button>
               );
             })}
@@ -5148,6 +5275,97 @@ function SkillManageDialog({
                 )}
               </div>
             </>
+          ) : activeTab === "notes" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div style={{ fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.55 }}>
+                {t("skills.noteEditorHint")}
+              </div>
+
+              <div style={{ position: "relative" }}>
+                <textarea
+                  value={noteDraft}
+                  maxLength={SKILL_NOTE_MAX_LENGTH}
+                  placeholder={t("skills.notePlaceholder")}
+                  aria-label={t("skills.customNote")}
+                  onChange={(event) => setNoteDraft(event.target.value)}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    minHeight: "180px",
+                    resize: "vertical",
+                    padding: "12px",
+                    fontSize: "13px",
+                    lineHeight: 1.6,
+                    color: "var(--foreground)",
+                    backgroundColor: "var(--background)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-md)",
+                    outline: "none",
+                  }}
+                  onFocus={(event) => {
+                    event.currentTarget.style.borderColor = "var(--ring)";
+                  }}
+                  onBlur={(event) => {
+                    event.currentTarget.style.borderColor = "var(--border)";
+                  }}
+                />
+                <span
+                  style={{
+                    position: "absolute",
+                    right: "10px",
+                    bottom: "8px",
+                    padding: "2px 5px",
+                    fontSize: "10px",
+                    color: "var(--muted-foreground)",
+                    backgroundColor: "var(--background)",
+                    borderRadius: "3px",
+                  }}
+                >
+                  {t("skills.noteCharacterCount")
+                    .replace("{count}", String(noteDraft.length))
+                    .replace("{max}", String(SKILL_NOTE_MAX_LENGTH))}
+                </span>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => setNoteDraft("")}
+                  disabled={savingNote || noteDraft.length === 0}
+                  style={{
+                    padding: "7px 12px",
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    color: "var(--muted-foreground)",
+                    backgroundColor: "transparent",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)",
+                    cursor: savingNote || noteDraft.length === 0 ? "not-allowed" : "pointer",
+                    opacity: savingNote || noteDraft.length === 0 ? 0.5 : 1,
+                  }}
+                >
+                  {t("skills.clearNote")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSaveNote?.(noteDraft)}
+                  disabled={savingNote || !noteChanged || !onSaveNote}
+                  style={{
+                    padding: "7px 14px",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    color: "var(--primary-foreground)",
+                    backgroundColor: "var(--foreground)",
+                    border: "none",
+                    borderRadius: "var(--radius-sm)",
+                    cursor: savingNote || !noteChanged || !onSaveNote ? "not-allowed" : "pointer",
+                    opacity: savingNote || !noteChanged || !onSaveNote ? 0.5 : 1,
+                  }}
+                >
+                  {savingNote ? t("skills.savingNote") : t("skills.saveNote")}
+                </button>
+              </div>
+            </div>
           ) : activeTab === "tags" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
               <div style={{ fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
@@ -5386,10 +5604,16 @@ function SkillManageDialog({
               letterSpacing: "0.02em",
             }}
           >
-            {activeTab === "tools" ? `${enabledCount}/${items.length}` : activeTab === "tags" ? `${tags.length}` : `${riskReport?.findings.length ?? 0}`}
+            {activeTab === "tools"
+              ? `${enabledCount}/${items.length}`
+              : activeTab === "notes"
+                ? `${noteDraft.length}/${SKILL_NOTE_MAX_LENGTH}`
+                : activeTab === "tags"
+                  ? `${tags.length}`
+                  : `${riskReport?.findings.length ?? 0}`}
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             style={{
               fontSize: "12px",
               fontWeight: 500,

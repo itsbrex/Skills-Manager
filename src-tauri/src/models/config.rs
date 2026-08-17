@@ -53,6 +53,9 @@ pub struct LlmProvider {
 pub struct SkillMetadata {
     #[serde(default)]
     pub tags: Vec<String>,
+    /// 用户为自己填写的说明，仅保存在本地元数据中，不修改 SKILL.md。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
     #[serde(default)]
     pub favorited_at: Option<i64>,
     /// 最近一次成功发布到 ClawHub 的记录。用于在列表上标识已发布状态，

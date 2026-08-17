@@ -4,8 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::{
-    AppConfig, ProjectBinding, SkillMetadata, SkillPublishRecord, SourceType, ToolConfig,
-    SUPPORTED_TOOLS,
+    AppConfig, ProjectBinding, SkillMetadata, SourceType, ToolConfig, SUPPORTED_TOOLS,
 };
 #[cfg(windows)]
 use crate::services::linker::LinkerService;
@@ -94,11 +93,24 @@ impl ConfigManager {
             }
 
             let tags = Self::normalize_skill_tags(&item.tags);
-            // tags、favorited_at、publish 三者全空才丢弃 entry，
-            // 避免丢失只有收藏状态或只有发布记录的条目
-            if tags.is_empty() && item.favorited_at.is_none() && item.publish.is_none() {
+            let note = item
+                .note
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            // 所有用户元数据都为空时才丢弃 entry。
+            if tags.is_empty()
+                && note.is_none()
+                && item.favorited_at.is_none()
+                && item.publish.is_none()
+            {
                 changed = true;
                 continue;
+            }
+
+            if note != item.note {
+                changed = true;
             }
 
             let normalized_id = if trimmed_id.starts_with("global:")
@@ -116,6 +128,7 @@ impl ConfigManager {
                     normalized_id,
                     SkillMetadata {
                         tags,
+                        note,
                         favorited_at: item.favorited_at,
                         publish: item.publish.clone(),
                     },
@@ -1062,6 +1075,7 @@ mod tests {
                 "global:skill-a".to_string(),
                 SkillMetadata {
                     tags: vec!["tag1".to_string()],
+                    note: None,
                     favorited_at: Some(1700000000),
                     publish: None,
                 },
@@ -1074,6 +1088,7 @@ mod tests {
                 loaded.skill_metadata.get("global:skill-a"),
                 Some(&SkillMetadata {
                     tags: vec!["tag1".to_string()],
+                    note: None,
                     favorited_at: Some(1700000000),
                     publish: None,
                 })
@@ -1090,6 +1105,7 @@ mod tests {
                 "global:skill-b".to_string(),
                 SkillMetadata {
                     tags: vec![],
+                    note: None,
                     favorited_at: Some(1700000000),
                     publish: None,
                 },
@@ -1102,6 +1118,7 @@ mod tests {
                 loaded.skill_metadata.get("global:skill-b"),
                 Some(&SkillMetadata {
                     tags: vec![],
+                    note: None,
                     favorited_at: Some(1700000000),
                     publish: None,
                 })
@@ -1118,6 +1135,7 @@ mod tests {
                 "global:skill-c".to_string(),
                 SkillMetadata {
                     tags: vec![],
+                    note: None,
                     favorited_at: None,
                     publish: None,
                 },
@@ -1127,6 +1145,34 @@ mod tests {
 
             let loaded = manager.load().expect("load config");
             assert_eq!(loaded.skill_metadata.get("global:skill-c"), None);
+        });
+    }
+
+    #[test]
+    fn save_and_load_preserves_and_trims_note_without_other_metadata() {
+        with_temp_home(|_home_dir| {
+            let manager = ConfigManager::new();
+            let mut config = manager.init_default().expect("init default config");
+            config.skill_metadata.insert(
+                "global:skill-note".to_string(),
+                SkillMetadata {
+                    tags: vec![],
+                    note: Some("  发布前检查链接\n并确认中英文文案  ".to_string()),
+                    favorited_at: None,
+                    publish: None,
+                },
+            );
+
+            manager.save(&config).expect("save config");
+
+            let loaded = manager.load().expect("load config");
+            assert_eq!(
+                loaded
+                    .skill_metadata
+                    .get("global:skill-note")
+                    .and_then(|metadata| metadata.note.as_deref()),
+                Some("发布前检查链接\n并确认中英文文案")
+            );
         });
     }
 
@@ -1149,6 +1195,7 @@ mod tests {
                 "global:skill-d".to_string(),
                 SkillMetadata {
                     tags: vec![],
+                    note: None,
                     favorited_at: None,
                     publish: Some(record.clone()),
                 },
