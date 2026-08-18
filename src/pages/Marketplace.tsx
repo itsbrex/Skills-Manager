@@ -12,7 +12,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useNavigate } from "react-router-dom";
-import { ArrowUpDown, Check, ExternalLink, Link2 } from "lucide-react";
+import { ArrowUpDown, Check, ExternalLink, Link2, ListFilter, RefreshCw } from "lucide-react";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { usePageSearch } from "@/components/PageHeaderContext";
@@ -41,10 +41,12 @@ import { TranslateIconButton } from "@/components/translation/TranslateIconButto
 import { SkillDetailModal } from "@/components/marketplace/SkillDetailModal";
 import { InstallTargetDialog } from "@/components/marketplace/InstallTargetDialog";
 import { InstallTargetPicker } from "@/components/marketplace/InstallTargetPicker";
+import { MarketplaceUpdateDialog } from "@/components/marketplace/MarketplaceUpdateDialog";
 import { highlightMatch } from "@/components/marketplace/highlightMatch";
 import { formatInstallCountLabel } from "@/pages/marketplace/formatInstallCount";
 import { buildMarketplaceMetaItems } from "@/pages/marketplace/buildMarketplaceMetaItems";
 import { sortMarketplaceSkillsByInstallStatus } from "@/pages/marketplace/sortMarketplaceSkillsByInstallStatus";
+import { getMarketplaceUpdateCandidates } from "@/pages/marketplace/marketplaceUpdates";
 import {
   getActionableTargets,
   getMarketplacePrimaryAction,
@@ -222,6 +224,7 @@ export function Marketplace() {
   const navigate = useNavigate();
   const favorites = useFavorites(undefined);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [updatesOnly, setUpdatesOnly] = useState(false);
   const [favoriteSnapshot, setFavoriteSnapshot] = useState<MarketplaceFavoriteMap>({});
   const [translatingMarketIds, setTranslatingMarketIds] = useState<Set<string>>(new Set());
   const { toasts, addToast, removeToast } = useToast();
@@ -254,6 +257,7 @@ export function Marketplace() {
   const [initialLoading, setInitialLoading] = useState(() => marketplaceSnapshot === null);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingAll, setUpdatingAll] = useState(false);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [searching, setSearching] = useState(false);
   const [descriptionHydrationTick, setDescriptionHydrationTick] = useState(0);
@@ -568,19 +572,19 @@ export function Marketplace() {
     }
   }, [addToast, loadSkills, normalizedRemoteQuery, showMarketplaceError, t]);
 
-  const updateAvailableCount = useMemo(
-    () => skills.reduce(
-      (count, skill) => count + (skill.installations ?? []).filter(
-        (installation) => installation.install_status === "update_available",
-      ).length,
-      0,
-    ),
+  const updateCandidates = useMemo(
+    () => getMarketplaceUpdateCandidates(skills),
     [skills],
   );
+  const updateAvailableSkillCount = updateCandidates.length;
   const installingGithubUrl = installingSkill === DIRECT_GITHUB_INSTALL_ID;
 
+  useEffect(() => {
+    if (updatesOnly && updateAvailableSkillCount === 0) setUpdatesOnly(false);
+  }, [updateAvailableSkillCount, updatesOnly]);
+
   const handleUpdateAll = useCallback(async () => {
-    if (updatingAll || updateAvailableCount === 0 || installingSkill) {
+    if (updatingAll || updateAvailableSkillCount === 0 || installingSkill) {
       return;
     }
 
@@ -614,6 +618,7 @@ export function Marketplace() {
         query: normalizedRemoteQuery,
         sourceIds: undefined,
       });
+      setUpdateDialogOpen(false);
     } catch (err) {
       showMarketplaceError(err, t("marketplace.networkError"));
     } finally {
@@ -625,13 +630,13 @@ export function Marketplace() {
     normalizedRemoteQuery,
     showMarketplaceError,
     t,
-    updateAvailableCount,
+    updateAvailableSkillCount,
     updatingAll,
   ]);
 
   const handleLoadMore = useCallback(async () => {
     // 标签筛选为纯前端过滤，加载更多无意义且会与新页数据错配
-    if (favoritesOnly || selectedTags.length > 0 || loadingMore || refreshing || initialLoading || !hasMore) {
+    if (favoritesOnly || updatesOnly || selectedTags.length > 0 || loadingMore || refreshing || initialLoading || !hasMore) {
       return;
     }
     setLoadingMore(true);
@@ -654,6 +659,7 @@ export function Marketplace() {
     loadingMore,
     normalizedRemoteQuery,
     refreshing,
+    updatesOnly,
   ]);
 
   const handleInstallRequest = useCallback((skill: MarketplaceSkill, event?: MouseEvent) => {
@@ -1017,7 +1023,7 @@ export function Marketplace() {
   }, []);
 
   useEffect(() => {
-    if (favoritesOnly || selectedTags.length > 0 || !hasMore || initialLoading || refreshing) {
+    if (favoritesOnly || updatesOnly || selectedTags.length > 0 || !hasMore || initialLoading || refreshing) {
       return;
     }
     const target = loadMoreRef.current;
@@ -1036,7 +1042,7 @@ export function Marketplace() {
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [favoritesOnly, handleLoadMore, hasMore, initialLoading, refreshing, selectedTags.length, skills.length]);
+  }, [favoritesOnly, handleLoadMore, hasMore, initialLoading, refreshing, selectedTags.length, skills.length, updatesOnly]);
 
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
@@ -1057,10 +1063,11 @@ export function Marketplace() {
       const filtered = list.filter((skill) => {
         const matchesTags = selectedTags.length === 0
           || selectedTags.some((tag) => skill.tags.includes(tag));
+        const matchesUpdate = !updatesOnly || skill.install_status === "update_available";
         // 收藏模式也支持搜索词过滤（本地匹配，不触发远程请求）
         const matchesQuery = !normalizedRemoteQuery
           || skillMatchesLocalQuery(skill, normalizedRemoteQuery);
-        return matchesTags && matchesQuery;
+        return matchesTags && matchesUpdate && matchesQuery;
       });
       if (sortMode === "default") {
         // 默认按收藏时间倒序（最新收藏在前）
@@ -1068,7 +1075,9 @@ export function Marketplace() {
         Object.entries(favoriteSnapshot).forEach(([id, meta]) => {
           tsMap[id] = meta.favorited_at;
         });
-        return filtered.sort((a, b) => (tsMap[b.id] ?? 0) - (tsMap[a.id] ?? 0));
+        return sortMarketplaceSkillsByInstallStatus(
+          filtered.sort((a, b) => (tsMap[b.id] ?? 0) - (tsMap[a.id] ?? 0)),
+        );
       }
       const sorted = [...filtered];
       if (sortMode === "name") {
@@ -1078,12 +1087,13 @@ export function Marketplace() {
       } else if (sortMode === "popular") {
         sorted.sort((a, b) => (b.install_count ?? 0) - (a.install_count ?? 0));
       }
-      return sorted;
+      return sortMarketplaceSkillsByInstallStatus(sorted);
     }
     const filtered = skills.filter((skill) => {
       const matchesTags = selectedTags.length === 0
         || selectedTags.some((tag) => skill.tags.includes(tag));
-      return matchesTags;
+      const matchesUpdate = !updatesOnly || skill.install_status === "update_available";
+      return matchesTags && matchesUpdate;
     });
     if (sortMode === "default") {
       return filtered;
@@ -1096,8 +1106,8 @@ export function Marketplace() {
     } else if (sortMode === "popular") {
       sorted.sort((a, b) => (b.install_count ?? 0) - (a.install_count ?? 0));
     }
-    return sorted;
-  }, [selectedTags, skills, sortMode, favoritesOnly, favoriteSnapshot, normalizedRemoteQuery]);
+    return sortMarketplaceSkillsByInstallStatus(sorted);
+  }, [selectedTags, skills, sortMode, favoritesOnly, favoriteSnapshot, normalizedRemoteQuery, updatesOnly]);
 
   useEffect(() => {
     persistSortMode(sortMode);
@@ -1152,30 +1162,59 @@ export function Marketplace() {
         title={t("marketplace.title")}
         actions={
           <>
-            {updateAvailableCount > 0 && (
-              <button
-                type="button"
-                onClick={handleUpdateAll}
-                disabled={updatingAll || refreshing || installingSkill !== null}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 12px',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  border: '1px solid var(--primary-tint-border)',
-                  color: 'var(--primary)',
-                  backgroundColor: 'var(--primary-tint)',
-                  cursor: updatingAll || refreshing || installingSkill !== null ? 'not-allowed' : 'pointer',
-                  opacity: updatingAll || refreshing || installingSkill !== null ? 0.7 : 1,
-                }}
-              >
-                {updatingAll
-                  ? t("marketplace.updatingAll")
-                  : t("marketplace.updateAll").replace("{count}", String(updateAvailableCount))}
-              </button>
+            {updateAvailableSkillCount > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setUpdatesOnly((value) => !value)}
+                  aria-pressed={updatesOnly}
+                  title={t("marketplace.updatesOnly")}
+                  style={{
+                    height: 32,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '0 10px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    border: updatesOnly ? '1px solid var(--primary-tint-border)' : '1px solid var(--border)',
+                    color: updatesOnly ? 'var(--primary)' : 'var(--muted-foreground)',
+                    backgroundColor: updatesOnly ? 'var(--primary-tint)' : 'transparent',
+                    cursor: 'pointer',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  <ListFilter size={13} />
+                  {t("marketplace.updatesOnlyCount").replace("{count}", String(updateAvailableSkillCount))}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUpdateDialogOpen(true)}
+                  disabled={updatingAll || refreshing || installingSkill !== null}
+                  style={{
+                    height: 32,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '0 11px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 650,
+                    border: '1px solid var(--primary)',
+                    color: 'var(--primary-foreground)',
+                    backgroundColor: 'var(--primary)',
+                    cursor: updatingAll || refreshing || installingSkill !== null ? 'not-allowed' : 'pointer',
+                    opacity: updatingAll || refreshing || installingSkill !== null ? 0.65 : 1,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  <RefreshCw size={13} style={{ animation: updatingAll ? 'spin 1s linear infinite' : 'none' }} />
+                  {updatingAll
+                    ? t("marketplace.updatingAll")
+                    : t("marketplace.updateAll").replace("{count}", String(updateAvailableSkillCount))}
+                </button>
+              </>
             )}
             <button
               type="button"
@@ -1580,12 +1619,14 @@ export function Marketplace() {
                   ? t("loading.default")
                   : favoritesOnly
                     ? t("skills.favoritesEmpty")
+                    : updatesOnly
+                      ? t("marketplace.noUpdates")
                     : skills.length === 0
                       ? t("marketplace.noSkills")
                       : t("marketplace.noMatch")}
               </div>
               {/* 空结果引导：有搜索词或标签筛选时，提供清除按钮 */}
-              {!searching && (normalizedRemoteQuery || selectedTags.length > 0) && (
+              {!searching && (normalizedRemoteQuery || selectedTags.length > 0 || updatesOnly) && (
                 <>
                   <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
                     {t("marketplace.noMatchHint")}
@@ -1627,13 +1668,31 @@ export function Marketplace() {
                         {t("marketplace.clearTags")}
                       </button>
                     )}
+                    {updatesOnly && (
+                      <button
+                        type="button"
+                        onClick={() => setUpdatesOnly(false)}
+                        style={{
+                          padding: '6px 12px',
+                          fontSize: 12,
+                          fontWeight: 500,
+                          color: 'var(--primary)',
+                          backgroundColor: 'var(--primary-tint)',
+                          border: '1px solid var(--primary-tint-border)',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {t("marketplace.showAllSkills")}
+                      </button>
+                    )}
                   </div>
                 </>
               )}
             </div>
           ) : (
             <>
-            {(normalizedRemoteQuery || selectedTags.length > 0) && !favoritesOnly && (
+            {(normalizedRemoteQuery || selectedTags.length > 0 || updatesOnly) && !favoritesOnly && (
               <div style={{
                 fontSize: 12,
                 color: 'var(--muted-foreground)',
@@ -1647,6 +1706,9 @@ export function Marketplace() {
                 const color = getSkillColor(skill.name);
                 const uninstallTargets = getUninstallTargets(skill);
                 const hasInstallations = uninstallTargets.length > 0;
+                const updateTargets = uninstallTargets.filter(
+                  (installation) => installation.install_status === "update_available",
+                );
                 const primaryAction = getMarketplacePrimaryAction(skill, appConfig?.projects ?? []);
                 const isUpdateAvailable = primaryAction === "update";
                 const isInstalling = installingSkill === skill.id;
@@ -1829,19 +1891,19 @@ export function Marketplace() {
                                 gap: '4px',
                                 fontSize: '10px',
                                 fontWeight: 500,
-                                color: 'var(--color-success)',
-                                backgroundColor: 'var(--color-success-bg)',
+                                color: isUpdateAvailable ? 'var(--primary)' : 'var(--color-success)',
+                                backgroundColor: isUpdateAvailable ? 'var(--primary-tint)' : 'var(--color-success-bg)',
                                 padding: '4px 8px',
                                 borderRadius: '6px',
-                                border: '1px solid var(--color-success-border)',
+                                border: `1px solid ${isUpdateAvailable ? 'var(--primary-tint-border)' : 'var(--color-success-border)'}`,
                                 flexShrink: 0,
                               }}>
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <polyline points="20 6 9 17 4 12"/>
-                                </svg>
-                                {t("marketplace.installedScopesSummary").replace(
+                                {isUpdateAvailable ? <RefreshCw size={10} /> : <Check size={10} strokeWidth={2.5} />}
+                                {t(isUpdateAvailable
+                                  ? "marketplace.updateScopesSummary"
+                                  : "marketplace.installedScopesSummary").replace(
                                   "{scopes}",
-                                  uninstallTargets.map((installation) => (
+                                  (isUpdateAvailable ? updateTargets : uninstallTargets).map((installation) => (
                                     installation.scope === "global"
                                       ? t("marketplace.targetGlobalShort")
                                       : installation.project_name ?? t("marketplace.targetProjectFallback")
@@ -1969,7 +2031,7 @@ export function Marketplace() {
             </>
           )}
 
-          {hasMore && !favoritesOnly && selectedTags.length === 0 && (
+          {hasMore && !favoritesOnly && !updatesOnly && selectedTags.length === 0 && (
             <>
               <div ref={loadMoreRef} style={{ height: '1px' }} />
               {loadingMore && (
@@ -2059,6 +2121,16 @@ export function Marketplace() {
           setInstallTargetSkill(null);
           navigate("/?manageProjects=1");
         }}
+      />
+
+      <MarketplaceUpdateDialog
+        open={updateDialogOpen}
+        candidates={updateCandidates}
+        updating={updatingAll}
+        onClose={() => {
+          if (!updatingAll) setUpdateDialogOpen(false);
+        }}
+        onConfirm={() => void handleUpdateAll()}
       />
 
       <GithubInstallDialog

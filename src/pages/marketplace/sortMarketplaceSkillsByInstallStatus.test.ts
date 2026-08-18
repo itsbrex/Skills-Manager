@@ -28,7 +28,7 @@ function createMarketplaceSkill(
   };
 }
 
-test("sortMarketplaceSkillsByInstallStatus puts installed skills first and keeps stable order within groups", () => {
+test("sortMarketplaceSkillsByInstallStatus puts updates before installed and uninstalled skills", () => {
   const original = [
     createMarketplaceSkill("alpha", "not_installed"),
     createMarketplaceSkill("beta", "installed"),
@@ -40,7 +40,7 @@ test("sortMarketplaceSkillsByInstallStatus puts installed skills first and keeps
 
   assert.deepEqual(
     sorted.map((skill) => skill.id),
-    ["beta", "delta", "alpha", "gamma"],
+    ["delta", "beta", "alpha", "gamma"],
   );
 
   assert.deepEqual(
