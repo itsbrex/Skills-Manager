@@ -107,6 +107,10 @@ mod tests {
             project_tool_skills_dir(&project(), "gemini").unwrap(),
             PathBuf::from("/work/alpha/.gemini/skills")
         );
+        assert_eq!(
+            project_tool_skills_dir(&project(), "deepseek-harness").unwrap(),
+            PathBuf::from("/work/alpha/.dsh/skills")
+        );
     }
 
     #[test]

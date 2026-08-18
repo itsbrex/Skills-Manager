@@ -59,6 +59,7 @@ impl ToolDefinition {
             "opencode" => Some(".opencode/skills"),
             "cursor" => Some(".cursor/skills"),
             "gemini" => Some(".gemini/skills"),
+            "deepseek-harness" => Some(".dsh/skills"),
             _ => None,
         }
     }
@@ -78,6 +79,13 @@ pub const SUPPORTED_TOOLS: &[ToolDefinition] = &[
         config_dir: ".codex",
         alt_config_dirs: &[],
         cli_command: "codex",
+    },
+    ToolDefinition {
+        id: "deepseek-harness",
+        name: "DeepSeek Harness",
+        config_dir: ".dsh",
+        alt_config_dirs: &[],
+        cli_command: "dsh",
     },
     ToolDefinition {
         id: "codebuddy",
@@ -293,6 +301,7 @@ mod tests {
         let ids: Vec<&str> = SUPPORTED_TOOLS.iter().map(|tool| tool.id).collect();
 
         assert!(ids.contains(&"droid"));
+        assert!(ids.contains(&"deepseek-harness"));
         assert!(ids.contains(&"augment"));
         assert!(ids.contains(&"openclaw"));
         assert!(ids.contains(&"cline"));
@@ -404,5 +413,18 @@ mod tests {
         assert_eq!(roo_code.config_dir, ".roo");
         assert_eq!(zencoder.config_dir, ".zencoder");
         assert_eq!(pi.config_dir, ".pi/agent");
+    }
+
+    #[test]
+    fn deepseek_harness_uses_expected_paths_and_cli() {
+        let harness = SUPPORTED_TOOLS
+            .iter()
+            .find(|tool| tool.id == "deepseek-harness")
+            .expect("deepseek-harness should exist in supported tools");
+
+        assert_eq!(harness.name, "DeepSeek Harness");
+        assert_eq!(harness.config_dir, ".dsh");
+        assert_eq!(harness.cli_command, "dsh");
+        assert_eq!(harness.project_skills_dir(), Some(".dsh/skills"));
     }
 }
