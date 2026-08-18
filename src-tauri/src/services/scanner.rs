@@ -67,6 +67,7 @@ impl ScannerService {
                     &scoped_skill.path,
                     &scoped_skill.id,
                     &scoped_skill.scope,
+                    Some(project_binding),
                     config,
                 );
                 scoped_skill
@@ -88,6 +89,25 @@ impl ScannerService {
                 let mut project_skills = Self::scan_project_skills(project_binding, config)?;
                 skills.append(&mut project_skills);
             }
+        }
+
+        skills.sort_by(|a, b| {
+            a.instance_id
+                .cmp(&b.instance_id)
+                .then_with(|| a.path.cmp(&b.path))
+        });
+        Self::ensure_unique_instance_ids(&skills)?;
+        Ok(skills)
+    }
+
+    /// Scan every configured project for Marketplace state. The regular scoped
+    /// scan intentionally follows the active project for the main Skills view;
+    /// Marketplace needs all bindings so multi-project installations are visible.
+    pub fn scan_all_scoped_skills(config: &AppConfig) -> Result<Vec<Skill>, String> {
+        let mut skills = Self::scan_global_skills(config)?;
+        for project_binding in &config.projects {
+            let mut project_skills = Self::scan_project_skills(project_binding, config)?;
+            skills.append(&mut project_skills);
         }
 
         skills.sort_by(|a, b| {
@@ -279,8 +299,13 @@ impl ScannerService {
         }
 
         // Check enabled status by looking for symlinks in each tool's skills directory
-        let enabled =
-            Self::check_enabled_status_for_scope(skill_path, &id, &SkillScope::Global, config);
+        let enabled = Self::check_enabled_status_for_scope(
+            skill_path,
+            &id,
+            &SkillScope::Global,
+            None,
+            config,
+        );
 
         Ok(Skill {
             id: id.clone(),
@@ -305,14 +330,36 @@ impl ScannerService {
         skill_path: &Path,
         skill_id: &str,
         scope: &SkillScope,
+        project_binding: Option<&ProjectBinding>,
         config: &AppConfig,
     ) -> HashMap<String, bool> {
         let mut enabled = HashMap::new();
 
         for (tool_id, tool_config) in config.collect_tool_configs() {
+            if !tool_config.enabled {
+                continue;
+            }
+            let tool_skills_dir = match scope {
+                SkillScope::Global => tool_config.skills_path,
+                SkillScope::Project => {
+                    let Some(project) = project_binding else {
+                        continue;
+                    };
+                    let Ok(path) = crate::services::project_tool_skills_dir(project, &tool_id)
+                    else {
+                        continue;
+                    };
+                    path
+                }
+            };
+
+            if skill_path == tool_skills_dir.join(skill_id) {
+                enabled.insert(tool_id, true);
+                continue;
+            }
             match LinkerService::check_link_for_scoped_skill(
                 skill_path,
-                &tool_config.skills_path,
+                &tool_skills_dir,
                 skill_id,
                 &tool_id,
                 scope,
@@ -888,6 +935,69 @@ description: "Description from SKILL.md"
     }
 
     #[test]
+    fn scan_all_scoped_skills_includes_non_active_projects() {
+        with_temp_home(|home| {
+            let global_skills_dir = home.join(".skills-manager").join("skills");
+            let alpha_root = home.join("code").join("alpha");
+            let beta_root = home.join("code").join("beta");
+            let alpha_skills_dir = alpha_root.join(".skills-manager").join("skills");
+            let beta_skills_dir = beta_root.join(".skills-manager").join("skills");
+
+            for skill_dir in [
+                global_skills_dir.join("global-skill"),
+                alpha_skills_dir.join("alpha-skill"),
+                beta_skills_dir.join("beta-skill"),
+            ] {
+                fs::create_dir_all(&skill_dir).expect("create skill dir");
+                let skill_name = skill_dir.file_name().unwrap().to_string_lossy();
+                fs::write(
+                    skill_dir.join("SKILL.md"),
+                    format!("---\nname: {skill_name}\n---\n"),
+                )
+                .expect("write SKILL.md");
+            }
+
+            let config: AppConfig = serde_json::from_value(json!({
+                "version": "2.1.9",
+                "skills_dir": global_skills_dir,
+                "tools": {},
+                "custom_tools": {},
+                "projects": [
+                    {
+                        "id": "alpha",
+                        "name": "Alpha",
+                        "root_path": alpha_root,
+                        "skills_dir": alpha_skills_dir
+                    },
+                    {
+                        "id": "beta",
+                        "name": "Beta",
+                        "root_path": beta_root,
+                        "skills_dir": beta_skills_dir
+                    }
+                ],
+                "active_project_id": "alpha",
+                "initialized": true
+            }))
+            .expect("deserialize config");
+
+            let skills = ScannerService::scan_all_scoped_skills(&config)
+                .expect("scan every project binding");
+            assert_eq!(
+                skills
+                    .iter()
+                    .map(|skill| skill.instance_id.as_str())
+                    .collect::<Vec<_>>(),
+                vec![
+                    "global:global-skill",
+                    "project:alpha:alpha-skill",
+                    "project:beta:beta-skill",
+                ]
+            );
+        });
+    }
+
+    #[test]
     fn scan_scoped_skills_does_not_mark_same_id_instances_both_enabled() {
         with_temp_home(|home| {
             let global_skills_dir = home.join(".skills-manager").join("skills");
@@ -900,7 +1010,7 @@ description: "Description from SKILL.md"
             .expect("write global skill");
 
             let project_root = home.join("code").join("project-alpha");
-            let project_skills_dir = project_root.join(".claude").join("skills");
+            let project_skills_dir = project_root.join(".skills-manager").join("skills");
             let project_skill_dir = project_skills_dir.join("shared-skill");
             fs::create_dir_all(&project_skill_dir).expect("create project skill dir");
             fs::write(
@@ -909,10 +1019,14 @@ description: "Description from SKILL.md"
             )
             .expect("write project skill");
 
-            let tool_skills_dir = home.join(".claude").join("skills");
-            fs::create_dir_all(&tool_skills_dir).expect("create tool skills dir");
-            std::os::unix::fs::symlink(&project_skill_dir, tool_skills_dir.join("shared-skill"))
-                .expect("link project skill");
+            let global_tool_skills_dir = home.join(".claude").join("skills");
+            let project_tool_skills_dir = project_root.join(".claude").join("skills");
+            fs::create_dir_all(&project_tool_skills_dir).expect("create project tool skills dir");
+            std::os::unix::fs::symlink(
+                &project_skill_dir,
+                project_tool_skills_dir.join("shared-skill"),
+            )
+            .expect("link project skill");
 
             let config: AppConfig = serde_json::from_value(json!({
                 "version": "2.0.1",
@@ -921,7 +1035,7 @@ description: "Description from SKILL.md"
                     "claude": {
                         "enabled": true,
                         "detected": true,
-                        "skills_path": tool_skills_dir,
+                        "skills_path": global_tool_skills_dir,
                         "config_path": home.join(".claude")
                     }
                 },
@@ -947,7 +1061,7 @@ description: "Description from SKILL.md"
                 .find(|skill| skill.instance_id == "project:project-alpha:shared-skill")
                 .expect("project instance");
 
-            assert_eq!(global.enabled.get("claude").copied(), Some(false));
+            assert_eq!(global.enabled.get("claude").copied(), None);
             assert_eq!(project.enabled.get("claude").copied(), Some(true));
         });
     }
@@ -1078,20 +1192,14 @@ description: "Description from SKILL.md"
 
             let debugging = skills_dir.join("superpowers").join("debugging");
             fs::create_dir_all(&debugging).expect("create debugging dir");
-            fs::write(
-                debugging.join("SKILL.md"),
-                "---\nname: debugging\n---\n",
-            )
-            .expect("write debugging skill");
+            fs::write(debugging.join("SKILL.md"), "---\nname: debugging\n---\n")
+                .expect("write debugging skill");
 
             // Also a top-level skill to ensure mixed scanning works
             let top_skill = skills_dir.join("my-top-skill");
             fs::create_dir_all(&top_skill).expect("create top skill dir");
-            fs::write(
-                top_skill.join("SKILL.md"),
-                "---\nname: my-top-skill\n---\n",
-            )
-            .expect("write top skill");
+            fs::write(top_skill.join("SKILL.md"), "---\nname: my-top-skill\n---\n")
+                .expect("write top skill");
 
             let mut skills =
                 ScannerService::scan_skills_with_config(&skills_dir, &config).expect("scan skills");

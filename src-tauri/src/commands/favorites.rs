@@ -107,6 +107,7 @@ mod tests {
             remote_revision: None,
             tags: vec!["t1".to_string()],
             install_status: InstallStatus::NotInstalled,
+            installations: Vec::new(),
             clawhub_slug: None,
             clawhub_owner: None,
             clawhub_version: None,

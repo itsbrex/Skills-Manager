@@ -103,6 +103,7 @@ impl DetectorService {
             config: tool_config,
             source: ToolSource::Builtin,
             icon_path: None,
+            project_skills_dir: definition.project_skills_dir().map(Into::into),
         }
     }
 
@@ -208,6 +209,7 @@ impl DetectorService {
             config: tool_config,
             source: ToolSource::Custom,
             icon_path: custom.icon_path.clone(),
+            project_skills_dir: None,
         }
     }
 }

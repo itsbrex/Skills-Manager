@@ -24,6 +24,7 @@ function createMarketplaceSkill(
     remote_revision: null,
     tags: [],
     install_status: installStatus,
+    installations: [],
   };
 }
 

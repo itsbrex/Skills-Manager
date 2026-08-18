@@ -3,8 +3,8 @@ use std::path::Path;
 
 use crate::models::{AppConfig, InstalledSkillPackage, Skill, SkillScope};
 use crate::services::{
-    is_symlink_or_junction, AppCache, ConfigManager, LinkerService, ScannerService,
-    SkillPackageService,
+    is_symlink_or_junction, skill_is_direct_tool_install, skill_tool_skills_dir, AppCache,
+    ConfigManager, LinkerService, ScannerService, SkillPackageService,
 };
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -159,6 +159,7 @@ fn apply_skill_tool_enabled(
 
     if enabled {
         let skill = load_skill_by_instance_id(config, instance_id)?;
+        let tool_skills_dir = skill_tool_skills_dir(config, &skill, tool_id)?;
         let skill_path = match skill_path {
             Some(path) => path.to_path_buf(),
             None => resolve_skill_source_path(config, &skill),
@@ -167,24 +168,35 @@ fn apply_skill_tool_enabled(
             return Err(format!("Skill not found: {}", instance_id));
         }
 
+        if skill_is_direct_tool_install(&skill, &tool_skills_dir) {
+            return Ok(());
+        }
+
         return LinkerService::enable_skill_for_tool(
             &skill_path,
-            &tool_config.skills_path,
+            &tool_skills_dir,
             &skill.id,
             tool_id,
         );
     }
 
     let skill = load_skill_by_instance_id(config, instance_id)?;
+    let tool_skills_dir = skill_tool_skills_dir(config, &skill, tool_id)?;
+    if skill_is_direct_tool_install(&skill, &tool_skills_dir) {
+        return Err(format!(
+            "Cannot disable a project Skill stored directly in the tool directory: {}",
+            skill.path.display()
+        ));
+    }
     match LinkerService::check_link_for_scoped_skill(
         &skill.path,
-        &tool_config.skills_path,
+        &tool_skills_dir,
         &skill.id,
         tool_id,
         &skill.scope,
     ) {
         crate::services::LinkStatus::Valid => {
-            LinkerService::disable_skill_for_tool(&tool_config.skills_path, &skill.id, tool_id)
+            LinkerService::disable_skill_for_tool(&tool_skills_dir, &skill.id, tool_id)
         }
         crate::services::LinkStatus::Missing => Ok(()),
         _ => Err(format!(
@@ -201,20 +213,24 @@ fn delete_skill_from_disk(config: &AppConfig, instance_id: &str) -> Result<(), S
         return Err(format!("Skill not found: {}", instance_id));
     }
 
-    for (tool_id, tool_config) in config.collect_tool_configs() {
+    for (tool_id, _tool_config) in config.collect_tool_configs() {
+        let tool_skills_dir = match skill_tool_skills_dir(config, &skill, &tool_id) {
+            Ok(path) => path,
+            Err(_) => continue,
+        };
+        if skill_is_direct_tool_install(&skill, &tool_skills_dir) {
+            continue;
+        }
         match LinkerService::check_link_for_scoped_skill(
             &skill.path,
-            &tool_config.skills_path,
+            &tool_skills_dir,
             &skill.id,
             &tool_id,
             &skill.scope,
         ) {
             crate::services::LinkStatus::Valid => {
-                let _ = LinkerService::disable_skill_for_tool(
-                    &tool_config.skills_path,
-                    &skill.id,
-                    &tool_id,
-                );
+                let _ =
+                    LinkerService::disable_skill_for_tool(&tool_skills_dir, &skill.id, &tool_id);
             }
             crate::services::LinkStatus::Missing => {}
             _ => {}
@@ -473,7 +489,9 @@ mod tests {
     use std::collections::HashMap;
     use std::path::PathBuf;
 
-    use crate::models::{InstalledSkillPackage, SkillScope, SkillSource, ToolConfig};
+    use crate::models::{
+        InstalledSkillPackage, ProjectBinding, SkillScope, SkillSource, ToolConfig,
+    };
     use crate::test_support::with_temp_home;
     use std::fs;
 
@@ -646,6 +664,49 @@ mod tests {
             assert!(link_path.exists() || link_path.symlink_metadata().is_ok());
             let target = fs::read_link(&link_path).expect("read created symlink");
             assert_eq!(target, nested_skill_dir);
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn project_skill_enable_and_delete_use_the_tools_project_directory() {
+        with_temp_home(|home| {
+            let project_root = home.join("code").join("alpha");
+            let project_skills_dir = project_root.join(".skills-manager").join("skills");
+            let project_skill_dir = project_skills_dir.join("demo");
+            let project_tool_dir = project_root.join(".claude").join("skills");
+            fs::create_dir_all(&project_skill_dir).expect("create project Skill");
+            fs::write(project_skill_dir.join("SKILL.md"), "# Demo\n").expect("write Skill");
+
+            let mut config = AppConfig::default();
+            config.skills_dir = home.join(".skills-manager").join("skills");
+            config.tools = HashMap::from([(
+                "claude-code".to_string(),
+                ToolConfig {
+                    enabled: true,
+                    detected: true,
+                    skills_path: home.join(".claude").join("skills"),
+                    config_path: home.join(".claude"),
+                },
+            )]);
+            config.projects = vec![ProjectBinding {
+                id: "alpha".to_string(),
+                name: "Alpha".to_string(),
+                root_path: Some(project_root),
+                skills_dir: project_skills_dir,
+            }];
+            config.active_project_id = Some("alpha".to_string());
+
+            apply_skill_tool_enabled(&config, "project:alpha:demo", "claude-code", true, None)
+                .expect("enable project Skill");
+            assert_eq!(
+                fs::read_link(project_tool_dir.join("demo")).expect("read project link"),
+                project_skill_dir
+            );
+
+            delete_skill_from_disk(&config, "project:alpha:demo").expect("delete project Skill");
+            assert!(!project_skill_dir.exists());
+            assert!(project_tool_dir.join("demo").symlink_metadata().is_err());
         });
     }
 

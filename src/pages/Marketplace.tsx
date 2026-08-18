@@ -21,12 +21,16 @@ import { ToastContainer, useToast } from "@/components/ui/toast";
 import { InstallCountBadge } from "@/components/marketplace/InstallCountBadge";
 import {
   InstallResult,
+  AppConfig,
   MarketplaceFavoriteMap,
   MarketplaceFavoriteMeta,
+  MarketplaceInstallation,
+  MarketplaceInstallSelection,
   MarketplaceSkill,
   MarketplaceSkillsResponse,
   MarketplaceSyncResult,
-  Skill,
+  ProjectBinding,
+  Tool,
 } from "@/types";
 import { useTranslation } from "@/i18n";
 import { useSkillTranslation, makeTranslationKey } from "@/hooks/useSkillTranslation";
@@ -35,10 +39,19 @@ import { useClickOutside } from "@/hooks/useClickOutside";
 import { FavoriteIconButton } from "@/components/favorites/FavoriteIconButton";
 import { TranslateIconButton } from "@/components/translation/TranslateIconButton";
 import { SkillDetailModal } from "@/components/marketplace/SkillDetailModal";
+import { InstallTargetDialog } from "@/components/marketplace/InstallTargetDialog";
+import { InstallTargetPicker } from "@/components/marketplace/InstallTargetPicker";
 import { highlightMatch } from "@/components/marketplace/highlightMatch";
 import { formatInstallCountLabel } from "@/pages/marketplace/formatInstallCount";
 import { buildMarketplaceMetaItems } from "@/pages/marketplace/buildMarketplaceMetaItems";
 import { sortMarketplaceSkillsByInstallStatus } from "@/pages/marketplace/sortMarketplaceSkillsByInstallStatus";
+import {
+  getActionableTargets,
+  getMarketplacePrimaryAction,
+  getTargetsFromSelection,
+  hasInvalidProjectTarget,
+  getUninstallTargets,
+} from "@/pages/marketplace/installTargets";
 import { getMarketplaceMetaChipStyle } from "@/components/marketplace/marketplaceMetaChipStyle";
 import { MODAL_LAYER_Z_INDEX, MODAL_OVERLAY_COLOR } from "@/constants/modal";
 
@@ -77,11 +90,13 @@ function skillMatchesLocalQuery(skill: MarketplaceSkill, query: string): boolean
 // 让再次进入市场页时能立即渲染，避免每次都显示全屏 loader。
 // 同时持久化到 localStorage，应用重启后也能快速恢复。
 interface MarketplaceSnapshot {
+  schemaVersion: 3;
+  activeProjectId: string | null;
   skills: MarketplaceSkill[];
   hasMore: boolean;
   fetchedAt: number;
 }
-const MARKETPLACE_SNAPSHOT_STORAGE_KEY = "marketplace.snapshot";
+const MARKETPLACE_SNAPSHOT_STORAGE_KEY = "marketplace.snapshot.v2";
 const MARKETPLACE_SNAPSHOT_TTL_MS = 24 * 60 * 60 * 1000; // 24 小时
 
 function loadSnapshotFromStorage(): MarketplaceSnapshot | null {
@@ -89,7 +104,7 @@ function loadSnapshotFromStorage(): MarketplaceSnapshot | null {
     const raw = window.localStorage.getItem(MARKETPLACE_SNAPSHOT_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as MarketplaceSnapshot;
-    if (!parsed || !Array.isArray(parsed.skills)) return null;
+    if (!parsed || parsed.schemaVersion !== 3 || !Array.isArray(parsed.skills)) return null;
     if (Date.now() - parsed.fetchedAt > MARKETPLACE_SNAPSHOT_TTL_MS) return null;
     return parsed;
   } catch {
@@ -194,6 +209,7 @@ function snapshotToMarketplaceSkill(id: string, meta: MarketplaceFavoriteMeta): 
     remote_revision: null,
     tags: meta.tags,
     install_status: "not_installed",
+    installations: [],
     clawhub_slug: meta.clawhub_slug ?? null,
     clawhub_owner: meta.clawhub_owner ?? null,
     clawhub_version: meta.clawhub_version ?? null,
@@ -222,8 +238,15 @@ export function Marketplace() {
   // so the Marketplace page no longer renders its own search input.
   const { query: searchQuery, setQuery: setSearchQuery } = usePageSearch(t("marketplace.searchPlaceholder"));
   const [githubInstallUrl, setGithubInstallUrl] = useState("");
+  const [githubInstallSelection, setGithubInstallSelection] = useState<MarketplaceInstallSelection>({
+    global: true,
+    projects: [],
+  });
+  const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+  const [tools, setTools] = useState<Tool[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<MarketplaceSkill | null>(null);
+  const [installTargetSkill, setInstallTargetSkill] = useState<MarketplaceSkill | null>(null);
   const [installingSkill, setInstallingSkill] = useState<string | null>(null);
   const [uninstallConfirmSkill, setUninstallConfirmSkill] = useState<MarketplaceSkill | null>(null);
   const [uninstallingSkillId, setUninstallingSkillId] = useState<string | null>(null);
@@ -250,6 +273,45 @@ export function Marketplace() {
     () => deferredSearchQuery.trim(),
     [deferredSearchQuery],
   );
+  const activeProject = useMemo(() => {
+    const projectId = appConfig?.active_project_id;
+    if (!projectId) return null;
+    return appConfig.projects?.find((project) => project.id === projectId) ?? null;
+  }, [appConfig]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      invoke<AppConfig>("get_config"),
+      invoke<Tool[]>("detect_tools"),
+    ]).then(([config, detectedTools]) => {
+      if (cancelled) return;
+      setTools(detectedTools);
+      const validActiveProjectId = config.projects?.some(
+        (project) => project.id === config.active_project_id,
+      )
+        ? config.active_project_id ?? null
+        : null;
+      const normalizedConfig = { ...config, active_project_id: validActiveProjectId };
+      setAppConfig(normalizedConfig);
+
+      if (marketplaceSnapshot?.activeProjectId !== validActiveProjectId) {
+        marketplaceSnapshot = null;
+        setSkills([]);
+        setHasMore(false);
+        try {
+          window.localStorage.removeItem(MARKETPLACE_SNAPSHOT_STORAGE_KEY);
+        } catch {
+          // ignore storage errors
+        }
+      }
+    }).catch(() => {
+      if (!cancelled) setAppConfig(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const showMarketplaceError = useCallback((err: unknown, fallbackMessage: string) => {
     const rawMessage = err instanceof Error ? err.message : String(err);
@@ -292,6 +354,12 @@ export function Marketplace() {
       primeDescriptionCache(result.skills);
       const incoming = result.skills.map(withCachedDescription);
 
+      if (!append || page === 1) {
+        setSelectedSkill((current) => (
+          current ? incoming.find((skill) => skill.id === current.id) ?? current : current
+        ));
+      }
+
       setSkills((prev) => {
         if (!append || page === 1) {
           return sortMarketplaceSkillsByInstallStatus(incoming);
@@ -311,23 +379,27 @@ export function Marketplace() {
       // 下次进入市场页可立即渲染这份缓存，跳过全屏 loader。
       if (page === 1 && !append && !normalizedQuery && (!sourceIds || sourceIds.length === 0)) {
         marketplaceSnapshot = {
+          schemaVersion: 3,
+          activeProjectId: activeProject?.id ?? null,
           skills: sortMarketplaceSkillsByInstallStatus(incoming),
           hasMore: result.has_more,
           fetchedAt: Date.now(),
         };
         persistSnapshotToStorage(marketplaceSnapshot);
       }
+      return incoming;
     } catch (err) {
       if (isStaleRequest()) {
         return;
       }
       showMarketplaceError(err, t("marketplace.networkError"));
+      return undefined;
     } finally {
       if (page === 1 && !isStaleRequest()) {
         setInitialLoading(false);
       }
     }
-  }, [showMarketplaceError, t]);
+  }, [activeProject?.id, showMarketplaceError, t]);
 
   useEffect(() => {
     // 仅看收藏时跳过远程加载，使用本地快照
@@ -497,7 +569,12 @@ export function Marketplace() {
   }, [addToast, loadSkills, normalizedRemoteQuery, showMarketplaceError, t]);
 
   const updateAvailableCount = useMemo(
-    () => skills.filter((skill) => skill.install_status === "update_available").length,
+    () => skills.reduce(
+      (count, skill) => count + (skill.installations ?? []).filter(
+        (installation) => installation.install_status === "update_available",
+      ).length,
+      0,
+    ),
     [skills],
   );
   const installingGithubUrl = installingSkill === DIRECT_GITHUB_INSTALL_ID;
@@ -523,10 +600,10 @@ export function Marketplace() {
       }
       if (syncResult.failed.length > 0) {
         addToast(
-          t("marketplace.syncPartialFailed").replace(
+          `${t("marketplace.syncPartialFailed").replace(
             "{count}",
             String(syncResult.failed.length),
-          ),
+          )}: ${syncResult.failed[0]}`,
           "error",
         );
       }
@@ -579,86 +656,128 @@ export function Marketplace() {
     refreshing,
   ]);
 
-  const handleInstall = useCallback(async (skill: MarketplaceSkill, event?: MouseEvent) => {
+  const handleInstallRequest = useCallback((skill: MarketplaceSkill, event?: MouseEvent) => {
     event?.stopPropagation();
-    if (skill.install_status === "installed") return;
+    if (installingSkill || updatingAll || refreshing) return;
+    setInstallTargetSkill(skill);
+  }, [installingSkill, refreshing, updatingAll]);
 
-    const isUpdateAction = skill.install_status === "update_available";
+  const handleInstall = useCallback(async (
+    skill: MarketplaceSkill,
+    selection: MarketplaceInstallSelection,
+  ) => {
+    if (installingSkill || updatingAll || refreshing) return;
+    const targets = getActionableTargets(skill, selection);
+    if (targets.length === 0) return;
+
+    const targetLabel = (target: (typeof targets)[number]) => {
+      if (target.scope === "global") return t("marketplace.targetGlobal");
+      return appConfig?.projects?.find((project) => project.id === target.project_id)?.name
+        ?? target.project_id
+        ?? t("marketplace.targetProjectFallback");
+    };
+
     setInstallingSkill(skill.id);
+    const successfulTargets: string[] = [];
+    const failedTargets: string[] = [];
     try {
-      const result = await invoke<InstallResult>("install_marketplace_skill", { skillId: skill.id });
-      if (result.success) {
-        setSelectedSkill((current) => (
-          current && current.id === skill.id
-            ? { ...current, install_status: "installed" }
-            : current
-        ));
-        await loadSkills({
+      for (const target of targets) {
+        try {
+          const result = await invoke<InstallResult>("install_marketplace_skill", {
+            skillId: skill.id,
+            target,
+          });
+          if (result.success) {
+            successfulTargets.push(targetLabel(target));
+          } else {
+            failedTargets.push(targetLabel(target));
+          }
+        } catch (error) {
+          console.error("[marketplace] target install failed", error);
+          failedTargets.push(targetLabel(target));
+        }
+      }
+
+      if (successfulTargets.length > 0) {
+        const refreshedSkills = await loadSkills({
           forceRefresh: true,
           page: 1,
           query: normalizedRemoteQuery,
           sourceIds: undefined,
         });
-        const successMessage = t(isUpdateAction ? "marketplace.updateSuccess" : "marketplace.installSuccess").replace(
-          "{name}",
-          skill.name,
-        );
-        if (isUpdateAction) {
-          addToast(successMessage, "success");
-        } else {
-          addToast(successMessage, "success", false, {
-            label: t("marketplace.viewAction"),
-            onClick: () => navigate(`/?highlight=${encodeURIComponent(skill.id)}`),
-          });
+        const refreshedSkill = refreshedSkills?.find((item) => item.id === skill.id);
+        if (refreshedSkill) {
+          setSelectedSkill((current) => current?.id === skill.id ? refreshedSkill : current);
+          if (failedTargets.length > 0) setInstallTargetSkill(refreshedSkill);
         }
-      } else {
+        if (failedTargets.length === 0) setInstallTargetSkill(null);
+      }
+
+      if (failedTargets.length === 0) {
         addToast(
-          t(isUpdateAction ? "marketplace.updateFailed" : "marketplace.installFailed"),
+          t("marketplace.installTargetsSuccess")
+            .replace("{name}", skill.name)
+            .replace("{targets}", successfulTargets.join(", ")),
+          "success",
+        );
+      } else if (successfulTargets.length > 0) {
+        addToast(
+          t("marketplace.installTargetsPartial")
+            .replace("{name}", skill.name)
+            .replace("{success}", successfulTargets.join(", "))
+            .replace("{failed}", failedTargets.join(", ")),
           "error",
         );
+      } else {
+        addToast(t("marketplace.installTargetsFailed").replace("{name}", skill.name), "error");
       }
-    } catch (err) {
-      showMarketplaceError(
-        err,
-        t(isUpdateAction ? "marketplace.updateFailed" : "marketplace.installFailed"),
-      );
     } finally {
       setInstallingSkill(null);
     }
-  }, [addToast, loadSkills, navigate, normalizedRemoteQuery, showMarketplaceError, t]);
+  }, [
+    addToast,
+    appConfig?.projects,
+    installingSkill,
+    loadSkills,
+    normalizedRemoteQuery,
+    refreshing,
+    t,
+    updatingAll,
+  ]);
 
-  const handleUninstallConfirm = useCallback(async (skill: MarketplaceSkill) => {
+  const handleUninstallConfirm = useCallback(async (
+    skill: MarketplaceSkill,
+    installation: MarketplaceInstallation,
+  ) => {
     if (uninstallingSkillId) return;
-    setUninstallingSkillId(skill.id);
+    setUninstallingSkillId(installation.instance_id);
     try {
-      const localSkills = await invoke<Skill[]>("list_skills");
-      const targets = localSkills.filter(
-        (s) => s.source === "marketplace"
-          && s.marketplace_meta?.marketplace_skill_id === skill.id,
-      );
-      if (targets.length === 0) {
-        addToast(t("marketplace.uninstallFailed"), "error");
-        return;
-      }
-      for (const target of targets) {
-        await invoke("delete_skill", { instanceId: target.instance_id });
-      }
+      await invoke("delete_skill", { instanceId: installation.instance_id });
+      const successKey = installation.scope === "project"
+        ? "marketplace.projectUninstallSuccess"
+        : "marketplace.uninstallSuccess";
       addToast(
-        t("marketplace.uninstallSuccess").replace("{name}", skill.name),
+        t(successKey)
+          .replace("{name}", skill.name)
+          .replace(
+            "{project}",
+            installation.project_name ?? installation.project_id ?? t("marketplace.targetProjectFallback"),
+          ),
         "success",
       );
-      setSelectedSkill((current) => (
-        current && current.id === skill.id
-          ? { ...current, install_status: "not_installed" }
-          : current
-      ));
       setUninstallConfirmSkill(null);
-      await loadSkills({
+      const refreshedSkills = await loadSkills({
         forceRefresh: true,
         page: 1,
         query: normalizedRemoteQuery,
         sourceIds: undefined,
       });
+      const refreshedSkill = refreshedSkills?.find((item) => item.id === skill.id);
+      if (refreshedSkill) {
+        setSelectedSkill((current) => current?.id === skill.id ? refreshedSkill : current);
+      } else {
+        setSelectedSkill((current) => current?.id === skill.id ? null : current);
+      }
     } catch (err) {
       showMarketplaceError(err, t("marketplace.uninstallFailed"));
     } finally {
@@ -672,44 +791,96 @@ export function Marketplace() {
       addToast(t("marketplace.githubInstallRequired"), "error");
       return;
     }
+    const targets = getTargetsFromSelection(githubInstallSelection);
+    if (targets.length === 0) {
+      addToast(t("marketplace.installTargetRequired"), "error");
+      return;
+    }
+    if (hasInvalidProjectTarget(githubInstallSelection)) {
+      addToast(t("marketplace.projectToolTargetsRequired"), "error");
+      return;
+    }
     if (installingSkill || updatingAll || refreshing) {
       return;
     }
 
     setInstallingSkill(DIRECT_GITHUB_INSTALL_ID);
+    const successfulTargets: string[] = [];
+    const failedTargets: string[] = [];
+    const failedTargetValues: typeof targets = [];
+    const targetLabel = (target: (typeof targets)[number]) => {
+      if (target.scope === "global") return t("marketplace.targetGlobal");
+      return appConfig?.projects?.find((project) => project.id === target.project_id)?.name
+        ?? target.project_id
+        ?? t("marketplace.targetProjectFallback");
+    };
     try {
-      const result = await invoke<InstallResult>("install_marketplace_skill_by_ref", {
-        reference: {
-          name: "",
-          repo_url: directUrl,
-        },
-      });
-      if (result.success) {
-        addToast(t("marketplace.githubInstallSuccess"), "success");
-        setGithubInstallUrl("");
-        setGithubInstallDialogOpen(false);
+      for (const target of targets) {
+        try {
+          const result = await invoke<InstallResult>("install_marketplace_skill_by_ref", {
+            reference: {
+              name: "",
+              repo_url: directUrl,
+            },
+            target,
+          });
+          if (result.success) {
+            successfulTargets.push(targetLabel(target));
+          } else {
+            failedTargets.push(targetLabel(target));
+            failedTargetValues.push(target);
+          }
+        } catch (error) {
+          console.error("[marketplace] GitHub target install failed", error);
+          failedTargets.push(targetLabel(target));
+          failedTargetValues.push(target);
+        }
+      }
+
+      if (successfulTargets.length > 0) {
         await loadSkills({
           forceRefresh: true,
           page: 1,
           query: normalizedRemoteQuery,
           sourceIds: undefined,
         });
+      }
+
+      if (failedTargets.length === 0) {
+        addToast(
+          t("marketplace.githubInstallTargetsSuccess")
+            .replace("{targets}", successfulTargets.join(", ")),
+          "success",
+        );
+        setGithubInstallUrl("");
+        setGithubInstallSelection({ global: true, projects: [] });
+        setGithubInstallDialogOpen(false);
+      } else if (successfulTargets.length > 0) {
+        setGithubInstallSelection({
+          global: failedTargetValues.some((target) => target.scope === "global"),
+          projects: failedTargetValues.filter((target) => target.scope === "project"),
+        });
+        addToast(
+          t("marketplace.githubInstallTargetsPartial")
+            .replace("{success}", successfulTargets.join(", "))
+            .replace("{failed}", failedTargets.join(", ")),
+          "error",
+        );
       } else {
         addToast(t("marketplace.githubInstallFailed"), "error");
       }
-    } catch (err) {
-      showMarketplaceError(err, t("marketplace.githubInstallFailed"));
     } finally {
       setInstallingSkill(null);
     }
   }, [
     addToast,
+    appConfig?.projects,
+    githubInstallSelection,
     githubInstallUrl,
     installingSkill,
     loadSkills,
     normalizedRemoteQuery,
     refreshing,
-    showMarketplaceError,
     t,
     updatingAll,
   ]);
@@ -1008,7 +1179,10 @@ export function Marketplace() {
             )}
             <button
               type="button"
-              onClick={() => setGithubInstallDialogOpen(true)}
+              onClick={() => {
+                setGithubInstallSelection({ global: true, projects: [] });
+                setGithubInstallDialogOpen(true);
+              }}
               disabled={installingSkill !== null || updatingAll}
               title={t("marketplace.githubInstallOpen")}
               aria-label={t("marketplace.githubInstallOpen")}
@@ -1471,10 +1645,14 @@ export function Marketplace() {
             <div className="marketplace-grid">
               {filteredSkills.map((skill) => {
                 const color = getSkillColor(skill.name);
-                const isInstalled = skill.install_status === "installed";
-                const isUpdateAvailable = skill.install_status === "update_available";
+                const uninstallTargets = getUninstallTargets(skill);
+                const hasInstallations = uninstallTargets.length > 0;
+                const primaryAction = getMarketplacePrimaryAction(skill, appConfig?.projects ?? []);
+                const isUpdateAvailable = primaryAction === "update";
                 const isInstalling = installingSkill === skill.id;
-                const isUninstalling = uninstallingSkillId === skill.id;
+                const isUninstalling = uninstallTargets.some(
+                  (installation) => installation.instance_id === uninstallingSkillId,
+                );
                 const actionBusy = isInstalling || updatingAll || isUninstalling;
                 // clawhub skill 的 owner 需打开详情弹窗后从详情端点解析，
                 // 列表阶段无 owner 无法构造正确链接，因此不在卡片上显示链接入口。
@@ -1643,8 +1821,8 @@ export function Marketplace() {
                           alignItems: 'flex-end',
                           flexShrink: 0,
                         }}>
-                          {isInstalled ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px', flexWrap: 'wrap' }}>
+                            {hasInstallations && (
                               <span style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
@@ -1661,8 +1839,17 @@ export function Marketplace() {
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                   <polyline points="20 6 9 17 4 12"/>
                                 </svg>
-                                {t("marketplace.installed")}
+                                {t("marketplace.installedScopesSummary").replace(
+                                  "{scopes}",
+                                  uninstallTargets.map((installation) => (
+                                    installation.scope === "global"
+                                      ? t("marketplace.targetGlobalShort")
+                                      : installation.project_name ?? t("marketplace.targetProjectFallback")
+                                  )).join(" / "),
+                                )}
                               </span>
+                            )}
+                            {hasInstallations && (
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -1691,11 +1878,11 @@ export function Marketplace() {
                                   ? t("marketplace.uninstalling")
                                   : t("marketplace.uninstall")}
                               </button>
-                            </div>
-                          ) : (
+                            )}
+                            {primaryAction !== "installed" && (
                             <button
                               type="button"
-                              onClick={(e) => handleInstall(skill, e)}
+                              onClick={(e) => handleInstallRequest(skill, e)}
                               disabled={actionBusy}
                               style={{
                                 display: 'flex',
@@ -1717,7 +1904,8 @@ export function Marketplace() {
                                 ? t(isUpdateAvailable ? "marketplace.updating" : "marketplace.installing")
                                 : t(isUpdateAvailable ? "marketplace.update" : "marketplace.install")}
                             </button>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -1844,7 +2032,8 @@ export function Marketplace() {
         <SkillDetailModal
           skill={selectedSkill}
           onClose={() => setSelectedSkill(null)}
-          onInstall={handleInstall}
+          onInstall={handleInstallRequest}
+          installAction={getMarketplacePrimaryAction(selectedSkill, appConfig?.projects ?? [])}
           installing={updatingAll || installingSkill === selectedSkill.id}
           isFavorite={favorites.isMarketplaceFavorite(selectedSkill.id)}
           onToggleFavorite={(skill) => void handleToggleFavorite(skill)}
@@ -1856,22 +2045,47 @@ export function Marketplace() {
         />
       )}
 
+      <InstallTargetDialog
+        skill={installTargetSkill}
+        projects={appConfig?.projects ?? []}
+        activeProjectId={appConfig?.active_project_id}
+        projectTools={tools}
+        installing={installTargetSkill !== null && installingSkill === installTargetSkill.id}
+        onClose={() => {
+          if (!installingSkill) setInstallTargetSkill(null);
+        }}
+        onSubmit={(skill, target) => void handleInstall(skill, target)}
+        onManageProjects={() => {
+          setInstallTargetSkill(null);
+          navigate("/?manageProjects=1");
+        }}
+      />
+
       <GithubInstallDialog
         open={githubInstallDialogOpen}
         installing={installingGithubUrl}
         value={githubInstallUrl}
+        selection={githubInstallSelection}
+        projects={appConfig?.projects ?? []}
+        activeProjectId={appConfig?.active_project_id}
+        projectTools={tools}
         onChange={setGithubInstallUrl}
+        onSelectionChange={setGithubInstallSelection}
         onClose={() => setGithubInstallDialogOpen(false)}
         onSubmit={() => void handleGithubInstall()}
+        onManageProjects={() => {
+          setGithubInstallDialogOpen(false);
+          navigate("/?manageProjects=1");
+        }}
       />
 
       <UninstallConfirmDialog
         skill={uninstallConfirmSkill}
         uninstalling={uninstallingSkillId !== null}
         onCancel={() => setUninstallConfirmSkill(null)}
-        onConfirm={() => {
+        onConfirm={(installation) => {
           if (uninstallConfirmSkill) {
-            void handleUninstallConfirm(uninstallConfirmSkill);
+            void handleUninstallConfirm(uninstallConfirmSkill, installation);
           }
         }}
       />
@@ -1888,9 +2102,15 @@ function UninstallConfirmDialog({
   skill: MarketplaceSkill | null;
   uninstalling: boolean;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (installation: MarketplaceInstallation) => void;
 }) {
   const { t } = useTranslation();
+  const targets = skill ? getUninstallTargets(skill) : [];
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedInstanceId(targets.length === 1 ? targets[0].instance_id : null);
+  }, [skill?.id, targets.length]);
 
   useEffect(() => {
     if (!skill) return;
@@ -1904,6 +2124,17 @@ function UninstallConfirmDialog({
   }, [skill, uninstalling, onCancel]);
 
   if (!skill) return null;
+  const selectedInstallation = targets.find(
+    (installation) => installation.instance_id === selectedInstanceId,
+  ) ?? null;
+  const scopeLabel = selectedInstallation
+    ? (selectedInstallation.scope === "global"
+      ? t("marketplace.targetGlobal")
+      : t("marketplace.targetProject").replace(
+        "{name}",
+        selectedInstallation.project_name ?? t("marketplace.targetProjectFallback"),
+      ))
+    : null;
 
   return (
     <div
@@ -1972,9 +2203,47 @@ function UninstallConfirmDialog({
               color: "var(--muted-foreground)",
             }}
           >
-            {t("marketplace.uninstallConfirmDesc").replace("{name}", skill.name)}
+            {(targets.length === 1
+              ? t("marketplace.uninstallSingleScopeDesc")
+                  .replace("{name}", skill.name)
+                  .replace("{scope}", scopeLabel ?? "")
+              : t("marketplace.uninstallMultipleDesc").replace("{name}", skill.name))}
           </p>
         </div>
+
+        {targets.length > 1 && (
+          <div role="radiogroup" aria-label={t("marketplace.uninstallTargetTitle")} style={{ display: "grid", gap: "8px" }}>
+            {targets.map((installation) => {
+              const label = installation.scope === "global"
+                ? t("marketplace.targetGlobal")
+                : t("marketplace.targetProject").replace(
+                  "{name}",
+                  installation.project_name ?? t("marketplace.targetProjectFallback"),
+                );
+              const selected = installation.instance_id === selectedInstanceId;
+              return (
+                <button
+                  key={installation.instance_id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  disabled={uninstalling}
+                  onClick={() => setSelectedInstanceId(installation.instance_id)}
+                  style={{ minHeight: "42px", padding: "8px 12px", textAlign: "left", border: `1px solid ${selected ? "var(--color-error)" : "var(--border)"}`, borderRadius: "8px", backgroundColor: selected ? "var(--color-error-bg)" : "var(--secondary)", color: "var(--foreground)", cursor: uninstalling ? "wait" : "pointer" }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 650 }}>{label}</span>
+                    <span style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>
+                      {t(installation.install_status === "update_available"
+                        ? "marketplace.targetStatusUpdateAvailable"
+                        : "marketplace.targetStatusInstalled")}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
           <button
@@ -1997,8 +2266,10 @@ function UninstallConfirmDialog({
           </button>
           <button
             type="button"
-            onClick={onConfirm}
-            disabled={uninstalling}
+            onClick={() => {
+              if (selectedInstallation) onConfirm(selectedInstallation);
+            }}
+            disabled={uninstalling || !selectedInstallation}
             style={{
               padding: "9px 16px",
               borderRadius: "10px",
@@ -2007,8 +2278,8 @@ function UninstallConfirmDialog({
               color: "white",
               fontSize: "13px",
               fontWeight: 700,
-              cursor: uninstalling ? "wait" : "pointer",
-              opacity: uninstalling ? 0.7 : 1,
+              cursor: uninstalling ? "wait" : selectedInstallation ? "pointer" : "not-allowed",
+              opacity: uninstalling || !selectedInstallation ? 0.7 : 1,
             }}
           >
             {uninstalling ? t("marketplace.uninstalling") : t("marketplace.uninstall")}
@@ -2023,19 +2294,34 @@ function GithubInstallDialog({
   open,
   installing,
   value,
+  selection,
+  projects,
+  activeProjectId,
+  projectTools,
   onChange,
+  onSelectionChange,
   onClose,
   onSubmit,
+  onManageProjects,
 }: {
   open: boolean;
   installing: boolean;
   value: string;
+  selection: MarketplaceInstallSelection;
+  projects: ProjectBinding[];
+  activeProjectId?: string | null;
+  projectTools: Tool[];
   onChange: (value: string) => void;
+  onSelectionChange: (selection: MarketplaceInstallSelection) => void;
   onClose: () => void;
   onSubmit: () => void;
+  onManageProjects: () => void;
 }) {
   const { t } = useTranslation();
   const [inputFocused, setInputFocused] = useState(false);
+  const submitDisabled = installing
+    || getTargetsFromSelection(selection).length === 0
+    || hasInvalidProjectTarget(selection);
 
   useEffect(() => {
     if (!open) {
@@ -2076,9 +2362,11 @@ function GithubInstallDialog({
     >
       <div
         style={{
-          width: "min(560px, calc(100vw - 48px))",
+          width: "min(620px, calc(100vw - 48px))",
+          maxHeight: "calc(100vh - 48px)",
+          overflow: "auto",
           backgroundColor: "var(--background)",
-          borderRadius: "18px",
+          borderRadius: "8px",
           border: "1px solid var(--border)",
           boxShadow: "var(--shadow-xl)",
           padding: "22px",
@@ -2128,6 +2416,16 @@ function GithubInstallDialog({
             {t("marketplace.githubInstallDesc")}
           </p>
         </div>
+
+        <InstallTargetPicker
+          projects={projects}
+          activeProjectId={activeProjectId}
+          tools={projectTools}
+          selection={selection}
+          disabled={installing}
+          onChange={onSelectionChange}
+          onManageProjects={onManageProjects}
+        />
 
         <input
           autoFocus
@@ -2197,7 +2495,7 @@ function GithubInstallDialog({
               color: "var(--foreground)",
               fontSize: "13px",
               fontWeight: 600,
-              cursor: installing ? "wait" : "pointer",
+              cursor: installing ? "not-allowed" : "pointer",
               opacity: installing ? 0.7 : 1,
               transition: "background-color 0.15s ease, opacity 0.15s ease",
             }}
@@ -2215,7 +2513,7 @@ function GithubInstallDialog({
           <button
             type="button"
             onClick={onSubmit}
-            disabled={installing}
+            disabled={submitDisabled}
             style={{
               padding: "9px 16px",
               borderRadius: "10px",
@@ -2224,8 +2522,8 @@ function GithubInstallDialog({
               color: "var(--primary-foreground)",
               fontSize: "13px",
               fontWeight: 700,
-              cursor: installing ? "wait" : "pointer",
-              opacity: installing ? 0.7 : 1,
+              cursor: submitDisabled ? "not-allowed" : "pointer",
+              opacity: submitDisabled ? 0.7 : 1,
               transition: "opacity 0.15s ease, transform 0.12s ease",
             }}
             onMouseEnter={(e) => {

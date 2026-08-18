@@ -7,6 +7,7 @@ pub mod file_ops;
 pub mod linker;
 pub mod llm;
 pub mod marketplace;
+pub mod project_skills;
 pub mod publish;
 pub mod risk;
 pub mod scanner;
@@ -27,6 +28,10 @@ pub use file_ops::{
 };
 pub use linker::{is_symlink_or_junction, LinkReport, LinkStatus, LinkerService};
 pub use marketplace::{MarketplaceCache, MarketplaceService};
+pub use project_skills::{
+    managed_project_skills_dir, project_tool_skills_dir, skill_is_direct_tool_install,
+    skill_tool_skills_dir,
+};
 pub use risk::{scan_all_skills, scan_skill, scanner_version, clear_cache as clear_risk_cache, invalidate_skill as invalidate_risk_cache};
 pub use scanner::ScannerService;
 pub use skill_packages::SkillPackageService;

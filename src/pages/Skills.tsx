@@ -120,8 +120,8 @@ import {
   type SkillsHeaderActionId,
 } from "./skills/headerActionLayout";
 import {
-  buildProjectBindingFromSkillsDir,
-  hasProjectSkillsDirConflict,
+  buildProjectBindingFromRootPath,
+  hasProjectRootConflict,
   resolveActiveProjectId,
   resolveNextActiveProjectIdAfterAddition,
   resolveNextProjectBindingsAfterRemoval,
@@ -1748,12 +1748,25 @@ export function Skills() {
   const forceExpandFilteredGroups = hasActiveSkillFilters;
 
   useEffect(() => {
+    if (searchParams.get("manageProjects") !== "1" || !config || initialLoading) return;
+    setShowProjectBindingsDialog(true);
+    setSearchParams(
+      (prev) => {
+        prev.delete("manageProjects");
+        return prev;
+      },
+      { replace: true },
+    );
+  }, [config, initialLoading, searchParams, setSearchParams]);
+
+  useEffect(() => {
     const highlight = searchParams.get("highlight");
     if (!highlight || initialLoading) return;
 
-    const matched = sortedUnifiedItems.find(
-      (item) => item.skill?.marketplace_meta?.marketplace_skill_id === highlight,
-    );
+    const matched = sortedUnifiedItems.find((item) => item.skill?.instance_id === highlight)
+      ?? sortedUnifiedItems.find(
+        (item) => item.skill?.marketplace_meta?.marketplace_skill_id === highlight,
+      );
     if (!matched) return;
 
     setHighlightKey(matched.key);
@@ -2237,7 +2250,7 @@ export function Skills() {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: t("settings.selectProjectSkillsDir"),
+      title: t("settings.selectProjectRoot"),
     });
 
     if (!selected || Array.isArray(selected)) {
@@ -2245,7 +2258,7 @@ export function Skills() {
     }
 
     try {
-      setPendingProjectBinding(buildProjectBindingFromSkillsDir(selected));
+      setPendingProjectBinding(buildProjectBindingFromRootPath(selected));
     } catch (err) {
       if (err instanceof Error) {
         addToast(err.message, "error");
@@ -2277,12 +2290,12 @@ export function Skills() {
     }
 
     try {
-      const nextProject = buildProjectBindingFromSkillsDir(
-        pendingProjectBinding.skills_dir,
+      const nextProject = buildProjectBindingFromRootPath(
+        pendingProjectBinding.root_path ?? pendingProjectBinding.skills_dir,
         pendingProjectBinding.name,
       );
       const existingProjects = config.projects ?? [];
-      if (hasProjectSkillsDirConflict(existingProjects, nextProject)) {
+      if (hasProjectRootConflict(existingProjects, nextProject)) {
         addToast(t("settings.projectAlreadyAdded").replace("{name}", nextProject.name), "error");
         return;
       }

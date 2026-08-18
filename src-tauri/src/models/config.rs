@@ -178,6 +178,7 @@ struct LegacyProjectBinding {
 pub struct ProjectBinding {
     pub id: String,
     pub name: String,
+    pub root_path: Option<PathBuf>,
     pub skills_dir: PathBuf,
 }
 
@@ -185,18 +186,20 @@ impl TryFrom<LegacyProjectBinding> for ProjectBinding {
     type Error = String;
 
     fn try_from(value: LegacyProjectBinding) -> Result<Self, Self::Error> {
+        let root_path = value.root_path;
         let skills_dir = value
             .skills_dir
             .or_else(|| {
-                value
-                    .root_path
-                    .map(|root| root.join(".claude").join("skills"))
+                root_path
+                    .as_ref()
+                    .map(|root| root.join(".skills-manager").join("skills"))
             })
             .ok_or_else(|| "missing field `skills_dir`".to_string())?;
 
         Ok(Self {
             id: value.id,
             name: value.name,
+            root_path,
             skills_dir,
         })
     }
@@ -208,9 +211,10 @@ impl Serialize for ProjectBinding {
         S: serde::Serializer,
     {
         use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("ProjectBinding", 3)?;
+        let mut state = serializer.serialize_struct("ProjectBinding", 4)?;
         state.serialize_field("id", &self.id)?;
         state.serialize_field("name", &self.name)?;
+        state.serialize_field("root_path", &self.root_path)?;
         state.serialize_field("skills_dir", &self.skills_dir)?;
         state.end()
     }

@@ -15,8 +15,8 @@ pub use config::{
 };
 pub use editor::{DetectedEditor, EDITOR_DEFINITIONS};
 pub use marketplace::{
-    ClawhubSkillFilesResponse, GitHubContent, InstallResult, InstallStatus, MarketplaceSkill,
-    MarketplaceSkillsResponse, MarketplaceSource, MarketplaceSyncResult,
+    ClawhubSkillFilesResponse, GitHubContent, InstallResult, InstallStatus, MarketplaceInstallation,
+    MarketplaceSkill, MarketplaceSkillsResponse, MarketplaceSource, MarketplaceSyncResult,
     MarketplaceUpdateCheckResult, SkillFileNode, SourceType,
 };
 pub use publish::{

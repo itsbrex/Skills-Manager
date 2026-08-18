@@ -172,79 +172,158 @@ impl ConfigManager {
         last_segment
     }
 
-    fn migrate_project_bindings(config: &mut AppConfig) -> bool {
-        let projects_value = match serde_json::to_value(&config.projects) {
-            Ok(value) => value,
-            Err(_) => return false,
-        };
-        let Some(projects) = projects_value.as_array() else {
+    fn looks_like_project_root(path: &Path) -> bool {
+        [
+            ".git",
+            "package.json",
+            "Cargo.toml",
+            "pyproject.toml",
+            "go.mod",
+            ".claude",
+            ".agents",
+            ".cursor",
+            ".gemini",
+            ".opencode",
+        ]
+        .iter()
+        .any(|marker| path.join(marker).exists())
+    }
+
+    fn infer_project_root_from_skills_dir(skills_dir: &Path) -> Option<PathBuf> {
+        let file_name = skills_dir.file_name()?.to_string_lossy();
+        if file_name.eq_ignore_ascii_case("skills") {
+            let parent = skills_dir.parent()?;
+            let parent_name = parent.file_name()?.to_string_lossy();
+            if parent_name.starts_with('.') {
+                return parent.parent().map(normalize_path);
+            }
+            return Some(normalize_path(parent));
+        }
+
+        Self::looks_like_project_root(skills_dir).then(|| normalize_path(skills_dir))
+    }
+
+    fn is_marketplace_skill_dir(path: &Path) -> bool {
+        let Ok(content) = fs::read_to_string(path.join("meta.json")) else {
             return false;
         };
+        serde_json::from_str::<serde_json::Value>(&content)
+            .ok()
+            .and_then(|meta| {
+                meta.get("source")
+                    .and_then(|value| value.as_str())
+                    .map(str::to_string)
+            })
+            .as_deref()
+            == Some("marketplace")
+    }
 
+    /// A short-lived compatibility migration for bindings that accidentally used
+    /// the project root as their Skill store. Only direct, app-owned Marketplace
+    /// directories are moved; project files and local Skills are never touched.
+    fn migrate_misplaced_marketplace_skills(
+        project_root: &Path,
+        managed_skills_dir: &Path,
+    ) -> bool {
+        let Ok(entries) = fs::read_dir(project_root) else {
+            return false;
+        };
+        let candidates = entries
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.symlink_metadata()
+                    .map(|metadata| metadata.file_type().is_dir())
+                    .unwrap_or(false)
+                    && Self::is_marketplace_skill_dir(path)
+            })
+            .collect::<Vec<_>>();
+
+        if candidates.is_empty() {
+            return true;
+        }
+        if candidates.iter().any(|source| {
+            source
+                .file_name()
+                .is_some_and(|name| managed_skills_dir.join(name).exists())
+        }) {
+            return false;
+        }
+        if fs::create_dir_all(managed_skills_dir).is_err() {
+            return false;
+        }
+
+        let mut moved = Vec::new();
+        for source in candidates {
+            let Some(name) = source.file_name() else {
+                continue;
+            };
+            let target = managed_skills_dir.join(name);
+            if fs::rename(&source, &target).is_err() {
+                for (moved_source, moved_target) in moved.into_iter().rev() {
+                    let _ = fs::rename(moved_target, moved_source);
+                }
+                return false;
+            }
+            moved.push((source, target));
+        }
+        true
+    }
+
+    fn migrate_project_bindings(config: &mut AppConfig) -> bool {
         let mut changed = false;
-        let mut normalized_projects = Vec::with_capacity(projects.len());
+        let mut normalized_projects = Vec::with_capacity(config.projects.len());
 
-        for project in projects {
-            let id = project
-                .get("id")
-                .and_then(|value| value.as_str())
-                .unwrap_or_default()
-                .trim()
-                .to_string();
+        for project in &config.projects {
+            let id = project.id.trim().to_string();
             if id.is_empty() {
                 changed = true;
                 continue;
             }
 
-            let legacy_root_path = project
-                .get("root_path")
-                .and_then(|value| value.as_str())
-                .map(PathBuf::from);
-            let mut skills_dir = project
-                .get("skills_dir")
-                .and_then(|value| value.as_str())
-                .map(PathBuf::from)
-                .or_else(|| {
-                    legacy_root_path
-                        .clone()
-                        .map(|root| root.join(".claude").join("skills"))
-                });
+            let original_skills_dir = normalize_path(&project.skills_dir);
+            let mut normalized_skills_dir = original_skills_dir.clone();
+            let mut normalized_root_path = project.root_path.as_deref().map(normalize_path);
 
-            let Some(skills_dir_path) = skills_dir.take() else {
-                changed = true;
-                continue;
-            };
-            let normalized_skills_dir = normalize_path(&skills_dir_path);
+            if normalized_root_path.is_none() {
+                normalized_root_path =
+                    Self::infer_project_root_from_skills_dir(&original_skills_dir);
+            }
 
-            let stored_name = project
-                .get("name")
-                .and_then(|value| value.as_str())
-                .unwrap_or_default()
-                .trim()
-                .to_string();
+            // Repair both legacy shapes: bindings without root_path and bindings
+            // that already have root_path but still point skills_dir at that root.
+            if let Some(project_root) = normalized_root_path.as_deref() {
+                if normalized_skills_dir == project_root {
+                    let managed_skills_dir =
+                        crate::services::managed_project_skills_dir(project_root);
+                    if Self::migrate_misplaced_marketplace_skills(project_root, &managed_skills_dir)
+                    {
+                        normalized_skills_dir = managed_skills_dir;
+                    } else {
+                        // A collision or failed move is intentionally conservative: keep
+                        // the original binding so no user files are silently displaced.
+                        normalized_root_path = project.root_path.as_deref().map(normalize_path);
+                    }
+                }
+            }
+
+            let stored_name = project.name.trim().to_string();
             let normalized_name = if stored_name.is_empty() {
                 changed = true;
-                Self::normalize_project_name_from_skills_dir(&normalized_skills_dir)
+                normalized_root_path
+                    .as_deref()
+                    .map(Self::normalize_project_name_from_skills_dir)
+                    .unwrap_or_else(|| {
+                        Self::normalize_project_name_from_skills_dir(&normalized_skills_dir)
+                    })
             } else {
                 stored_name
             };
 
-            if project.get("root_path").is_some() {
-                changed = true;
-            }
-            if project
-                .get("skills_dir")
-                .and_then(|value| value.as_str())
-                .map(PathBuf::from)
-                .as_ref()
-                != Some(&normalized_skills_dir)
-            {
-                changed = true;
-            }
-
             normalized_projects.push(ProjectBinding {
                 id,
                 name: normalized_name,
+                root_path: normalized_root_path,
                 skills_dir: normalized_skills_dir,
             });
         }
@@ -853,7 +932,7 @@ mod tests {
                     .join(".claude")
                     .join("skills")
             );
-            assert_eq!(reloaded.projects[1].name, "custom-skills");
+            assert_eq!(reloaded.projects[1].name, "beta");
 
             manager.save(&reloaded).expect("save config with projects");
 
@@ -874,13 +953,16 @@ mod tests {
             );
             assert_eq!(
                 saved_value["projects"][0].get("root_path"),
-                None,
-                "saved project bindings should no longer persist legacy root_path"
+                Some(&json!(home_dir
+                    .join("code")
+                    .join("alpha")
+                    .to_string_lossy())),
+                "saved project bindings must preserve the project root"
             );
             assert_eq!(
                 saved_value["projects"][1].get("root_path"),
-                None,
-                "saved project bindings should no longer persist legacy root_path"
+                Some(&json!(home_dir.join("code").join("beta").to_string_lossy())),
+                "saved project bindings must preserve the project root"
             );
         });
     }
@@ -922,10 +1004,128 @@ mod tests {
                 home_dir
                     .join("code")
                     .join("alpha")
-                    .join(".claude")
+                    .join(".skills-manager")
                     .join("skills")
             );
+            assert_eq!(
+                loaded.projects[0].root_path.as_deref(),
+                Some(home_dir.join("code").join("alpha").as_path())
+            );
             assert_eq!(loaded.active_project_id.as_deref(), Some("project-alpha"));
+        });
+    }
+
+    #[test]
+    fn load_repairs_project_root_binding_and_moves_only_marketplace_skills() {
+        with_temp_home(|home_dir| {
+            let config_dir = home_dir.join(".skills-manager");
+            let project_root = home_dir.join("code").join("alpha");
+            let misplaced_skill = project_root.join("marketplace-skill");
+            let local_skill = project_root.join("local-skill");
+            fs::create_dir_all(&config_dir).expect("create config dir");
+            fs::create_dir_all(&misplaced_skill).expect("create misplaced marketplace skill");
+            fs::create_dir_all(&local_skill).expect("create local skill");
+            fs::write(
+                project_root.join("Cargo.toml"),
+                "[package]\nname = \"alpha\"\n",
+            )
+            .expect("write project marker");
+            fs::write(misplaced_skill.join("SKILL.md"), "# Marketplace\n")
+                .expect("write marketplace skill");
+            fs::write(
+                misplaced_skill.join("meta.json"),
+                r#"{"source":"marketplace","marketplace_id":"source::marketplace-skill"}"#,
+            )
+            .expect("write marketplace metadata");
+            fs::write(local_skill.join("SKILL.md"), "# Local\n").expect("write local skill");
+
+            let config_path = config_dir.join("config.json");
+            let config_json = json!({
+                "version": "2.1.9",
+                "skills_dir": config_dir.join("skills").to_string_lossy(),
+                "tools": {},
+                "custom_tools": {},
+                "projects": [{
+                    "id": "project-alpha",
+                    "name": "Alpha",
+                    "skills_dir": project_root.to_string_lossy()
+                }],
+                "active_project_id": "project-alpha",
+                "initialized": true
+            });
+            fs::write(
+                &config_path,
+                serde_json::to_string_pretty(&config_json).expect("serialize config"),
+            )
+            .expect("write config");
+
+            let loaded = ConfigManager::new()
+                .load()
+                .expect("load and migrate config");
+            let managed_store = project_root.join(".skills-manager").join("skills");
+
+            assert_eq!(
+                loaded.projects[0].root_path.as_deref(),
+                Some(project_root.as_path())
+            );
+            assert_eq!(loaded.projects[0].skills_dir, managed_store);
+            assert!(managed_store
+                .join("marketplace-skill")
+                .join("SKILL.md")
+                .exists());
+            assert!(!misplaced_skill.exists());
+            assert!(local_skill.join("SKILL.md").exists());
+            assert!(project_root.join("Cargo.toml").exists());
+        });
+    }
+
+    #[test]
+    fn load_repairs_binding_with_existing_root_path_when_skills_dir_is_root() {
+        with_temp_home(|home_dir| {
+            let config_dir = home_dir.join(".skills-manager");
+            let project_root = home_dir.join("code").join("beta");
+            let misplaced_skill = project_root.join("marketplace-skill");
+            fs::create_dir_all(&config_dir).expect("create config dir");
+            fs::create_dir_all(&misplaced_skill).expect("create misplaced marketplace skill");
+            fs::write(
+                misplaced_skill.join("meta.json"),
+                r#"{"source":"marketplace","marketplace_id":"source::marketplace-skill"}"#,
+            )
+            .expect("write marketplace metadata");
+
+            let config_path = config_dir.join("config.json");
+            let config_json = json!({
+                "version": "2.1.9",
+                "skills_dir": config_dir.join("skills").to_string_lossy(),
+                "tools": {},
+                "custom_tools": {},
+                "projects": [{
+                    "id": "project-beta",
+                    "name": "Beta",
+                    "root_path": project_root.to_string_lossy(),
+                    "skills_dir": project_root.to_string_lossy()
+                }],
+                "active_project_id": "project-beta",
+                "initialized": true
+            });
+            fs::write(
+                &config_path,
+                serde_json::to_string_pretty(&config_json).expect("serialize config"),
+            )
+            .expect("write config");
+
+            let loaded = ConfigManager::new()
+                .load()
+                .expect("load and migrate config");
+            let managed_store = project_root.join(".skills-manager").join("skills");
+
+            assert_eq!(
+                loaded.projects[0].root_path.as_deref(),
+                Some(project_root.as_path())
+            );
+            assert_eq!(loaded.projects[0].skills_dir, managed_store);
+            assert!(managed_store.join("marketplace-skill").exists());
+            assert!(!misplaced_skill.exists());
         });
     }
 

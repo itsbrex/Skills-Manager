@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::SkillScope;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MarketplaceSource {
     pub id: String,
@@ -46,6 +48,8 @@ pub struct MarketplaceSkill {
     pub remote_revision: Option<String>,
     pub tags: Vec<String>,
     pub install_status: InstallStatus,
+    #[serde(default)]
+    pub installations: Vec<MarketplaceInstallation>,
     // clawhub.ai 专用字段：clawhub 源的 skill 用 slug+owner+version 定位与下载
     #[serde(skip_serializing_if = "Option::is_none")]
     pub clawhub_slug: Option<String>,
@@ -53,6 +57,19 @@ pub struct MarketplaceSkill {
     pub clawhub_owner: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub clawhub_version: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MarketplaceInstallation {
+    pub instance_id: String,
+    pub scope: SkillScope,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_ids: Vec<String>,
+    pub install_status: InstallStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,12 +145,33 @@ pub struct GitHubContent {
 
 #[cfg(test)]
 mod tests {
-    use super::SourceType;
+    use super::{InstallStatus, MarketplaceSkill, SourceType};
 
     #[test]
     fn source_type_deserialize_unknown_value_to_unknown_variant() {
         let value: SourceType =
             serde_json::from_str("\"legacy_provider\"").expect("should deserialize");
         assert_eq!(value, SourceType::Unknown);
+    }
+
+    #[test]
+    fn marketplace_skill_deserializes_legacy_payload_without_installations() {
+        let skill: MarketplaceSkill = serde_json::from_value(serde_json::json!({
+            "id": "source::demo",
+            "name": "Demo",
+            "description": null,
+            "author": null,
+            "source_id": "source",
+            "source_name": "Source",
+            "repo_url": null,
+            "skill_path": null,
+            "external_url": null,
+            "tags": [],
+            "install_status": "installed"
+        }))
+        .expect("legacy marketplace cache should deserialize");
+
+        assert!(skill.installations.is_empty());
+        assert_eq!(skill.install_status, InstallStatus::Installed);
     }
 }

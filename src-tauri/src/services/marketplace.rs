@@ -29,6 +29,7 @@ const CLAWHUB_DETAIL_CACHE_MAX_ENTRIES: usize = 500;
 const CLAWHUB_ARCHIVE_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
 const CLAWHUB_ARCHIVE_CACHE_MAX_ENTRIES: usize = 8;
 const MAX_MARKETPLACE_CACHED_PAGES: usize = 200;
+const MARKETPLACE_CACHE_SCHEMA_VERSION: u32 = 3;
 const GITHUB_TREE_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
 const SKILL_DESCRIPTION_CACHE_TTL: Duration = Duration::from_secs(30 * 60);
 const PERSISTED_SKILL_DESCRIPTION_CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -99,6 +100,8 @@ struct LegacyPersistedMarketplaceState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PersistedMarketplaceState {
+    #[serde(default)]
+    schema_version: u32,
     pages: Vec<PersistedMarketplaceCacheEntry>,
 }
 
@@ -300,8 +303,13 @@ fn load_persisted_marketplace_cache_state(
         Err(_) => return HashMap::new(),
     };
     let (persisted, migrated_from_legacy): (PersistedMarketplaceState, bool) =
-        match serde_json::from_str(&content) {
-            Ok(persisted) => (persisted, false),
+        match serde_json::from_str::<PersistedMarketplaceState>(&content) {
+            Ok(persisted) => {
+                if persisted.schema_version != MARKETPLACE_CACHE_SCHEMA_VERSION {
+                    return HashMap::new();
+                }
+                (persisted, false)
+            }
             Err(_) => {
                 let legacy: LegacyPersistedMarketplaceState = match serde_json::from_str(&content) {
                     Ok(legacy) => legacy,
@@ -309,6 +317,7 @@ fn load_persisted_marketplace_cache_state(
                 };
                 (
                     PersistedMarketplaceState {
+                        schema_version: MARKETPLACE_CACHE_SCHEMA_VERSION,
                         pages: vec![PersistedMarketplaceCacheEntry {
                             page: 1,
                             query: legacy.query,
@@ -369,6 +378,7 @@ fn persist_marketplace_cache_state(
         }
     }
     let persisted = PersistedMarketplaceState {
+        schema_version: MARKETPLACE_CACHE_SCHEMA_VERSION,
         pages: sorted_marketplace_page_snapshot(pages)
             .into_iter()
             .take(MAX_MARKETPLACE_CACHED_PAGES)
@@ -725,6 +735,7 @@ fn map_clawhub_list_item_to_skill(item: ClawhubListItem) -> MarketplaceSkill {
         remote_revision: clawhub_version.clone(),
         tags,
         install_status: InstallStatus::NotInstalled,
+        installations: Vec::new(),
         clawhub_slug: Some(slug),
         clawhub_owner: None,
         clawhub_version,
@@ -776,6 +787,7 @@ fn map_clawhub_search_item_to_skill(item: ClawhubSearchItem) -> MarketplaceSkill
         // 搜索端点不返回 topics，tags 暂为空，详情端点可补全
         tags: Vec::new(),
         install_status: InstallStatus::NotInstalled,
+        installations: Vec::new(),
         clawhub_slug: Some(slug),
         clawhub_owner,
         clawhub_version,
@@ -1299,6 +1311,7 @@ impl MarketplaceService {
                 remote_revision,
                 tags: Vec::new(),
                 install_status: InstallStatus::NotInstalled,
+                installations: Vec::new(),
                 clawhub_slug: None,
                 clawhub_owner: None,
                 clawhub_version: None,
@@ -1709,6 +1722,31 @@ impl MarketplaceService {
         skill: &MarketplaceSkill,
         github_token: Option<&str>,
     ) -> Result<MarketplaceSkill, String> {
+        if skill.source_id == CLAWHUB_SOURCE_ID {
+            let slug = skill
+                .clawhub_slug
+                .as_deref()
+                .or(skill.slug.as_deref())
+                .or(skill.skill_path.as_deref())
+                .ok_or_else(|| "clawhub skill 缺少 slug，无法刷新远端状态".to_string())?;
+            let detail =
+                Self::fetch_clawhub_skill_detail(slug, skill.clawhub_owner.as_deref()).await?;
+            let owner = detail.owner.as_ref().map(|owner| owner.handle.clone());
+            let version = detail
+                .latest_version
+                .as_ref()
+                .map(|version| version.version.clone())
+                .filter(|value| !value.trim().is_empty());
+            let mut resolved = skill.clone();
+            resolved.clawhub_slug = Some(slug.to_string());
+            resolved.clawhub_owner = owner.clone();
+            resolved.clawhub_version = version.clone();
+            resolved.remote_revision = version;
+            resolved.external_url =
+                owner.map(|owner| format!("{}/{}/skills/{}", CLAWHUB_SITE_ORIGIN, owner, slug));
+            return Ok(resolved);
+        }
+
         let repo_url = skill
             .repo_url
             .as_deref()
@@ -4052,6 +4090,7 @@ description: "来自 frontmatter 的描述"
                 .expect("expired timestamp should be after unix epoch")
                 .as_secs();
             let persisted = PersistedMarketplaceState {
+                schema_version: super::MARKETPLACE_CACHE_SCHEMA_VERSION,
                 pages: vec![PersistedMarketplaceCacheEntry {
                     page: 1,
                     query: None,
@@ -4291,6 +4330,7 @@ description: "来自 frontmatter 的描述"
             remote_revision: None,
             tags: vec!["test".to_string()],
             install_status: InstallStatus::NotInstalled,
+            installations: Vec::new(),
             clawhub_slug: None,
             clawhub_owner: None,
             clawhub_version: None,

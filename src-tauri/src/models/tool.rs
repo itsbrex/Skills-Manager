@@ -19,6 +19,8 @@ pub struct Tool {
     pub source: ToolSource,
     #[serde(default)]
     pub icon_path: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_skills_dir: Option<PathBuf>,
 }
 
 impl Tool {
@@ -32,6 +34,7 @@ impl Tool {
             config,
             source: ToolSource::Builtin,
             icon_path: None,
+            project_skills_dir: None,
         }
     }
 }
@@ -43,6 +46,22 @@ pub struct ToolDefinition {
     pub config_dir: &'static str,
     pub alt_config_dirs: &'static [&'static str],
     pub cli_command: &'static str,
+}
+
+impl ToolDefinition {
+    /// Relative project directory used by tools with verified workspace Skill support.
+    /// Keep this allowlist explicit: a global `config_dir/skills` convention does not
+    /// imply that the same tool supports project-local Skills.
+    pub fn project_skills_dir(&self) -> Option<&'static str> {
+        match self.id {
+            "claude-code" => Some(".claude/skills"),
+            "codex" | "vercel-skills" => Some(".agents/skills"),
+            "opencode" => Some(".opencode/skills"),
+            "cursor" => Some(".cursor/skills"),
+            "gemini" => Some(".gemini/skills"),
+            _ => None,
+        }
+    }
 }
 
 pub const SUPPORTED_TOOLS: &[ToolDefinition] = &[

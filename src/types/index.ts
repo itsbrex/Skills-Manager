@@ -31,6 +31,7 @@ export interface Skill {
 export interface ProjectBinding {
   id: string;
   name: string;
+  root_path?: string | null;
   skills_dir: string;
 }
 
@@ -96,6 +97,7 @@ export interface Tool {
   config: ToolConfig;
   source: "builtin" | "custom";
   icon_path?: string | null;
+  project_skills_dir?: string | null;
 }
 
 export type VaultBackupConsent = "unknown" | "granted" | "denied";
@@ -391,6 +393,28 @@ export interface MarketplaceSource {
   api_key?: string | null;
 }
 
+export type MarketplaceInstallStatus = "not_installed" | "installed" | "update_available";
+
+export interface MarketplaceInstallTarget {
+  scope: SkillScope;
+  project_id?: string | null;
+  tool_ids?: string[];
+}
+
+export interface MarketplaceInstallSelection {
+  global: boolean;
+  projects: MarketplaceInstallTarget[];
+}
+
+export interface MarketplaceInstallation {
+  instance_id: string;
+  scope: SkillScope;
+  project_id?: string | null;
+  project_name?: string | null;
+  tool_ids: string[];
+  install_status: MarketplaceInstallStatus;
+}
+
 export interface MarketplaceSkill {
   id: string;
   slug?: string | null;
@@ -407,7 +431,8 @@ export interface MarketplaceSkill {
   external_url: string | null;
   remote_revision?: string | null;
   tags: string[];
-  install_status: "not_installed" | "installed" | "update_available";
+  install_status: MarketplaceInstallStatus;
+  installations: MarketplaceInstallation[];
   clawhub_slug?: string | null;
   clawhub_owner?: string | null;
   clawhub_version?: string | null;
