@@ -105,7 +105,13 @@ Or support via Ko-fi: [ko-fi.com/yeheboo](https://ko-fi.com/yeheboo)
 
 ## 📈 Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=jiweiyeah/skills-manager&type=Date)](https://star-history.com/#jiweiyeah/skills-manager&Date)
+<a href="https://www.star-history.com/?type=date&repos=jiweiyeah%2Fskills-manager">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=jiweiyeah/skills-manager&type=date&theme=dark&legend=top-left&sealed_token=maGhqrEwZ51qujlvNPr_FgACgJxDdicoHbnV6FU6K2IQBOo5Cvf_tcX2fdp8o--YQO0Bc240gFYxixCHLDyKy9lrRqTjFMY2rvm77HbLWLY6Q0ETgY89O8oCzsTKjBrL5N9e6kE6RJKp2OQVeBL-v2GRi_VR0CEI2rRKeN3eDnR1ovPjVgXqFakD6LSd" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=jiweiyeah/skills-manager&type=date&legend=top-left&sealed_token=maGhqrEwZ51qujlvNPr_FgACgJxDdicoHbnV6FU6K2IQBOo5Cvf_tcX2fdp8o--YQO0Bc240gFYxixCHLDyKy9lrRqTjFMY2rvm77HbLWLY6Q0ETgY89O8oCzsTKjBrL5N9e6kE6RJKp2OQVeBL-v2GRi_VR0CEI2rRKeN3eDnR1ovPjVgXqFakD6LSd" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=jiweiyeah/skills-manager&type=date&legend=top-left&sealed_token=maGhqrEwZ51qujlvNPr_FgACgJxDdicoHbnV6FU6K2IQBOo5Cvf_tcX2fdp8o--YQO0Bc240gFYxixCHLDyKy9lrRqTjFMY2rvm77HbLWLY6Q0ETgY89O8oCzsTKjBrL5N9e6kE6RJKp2OQVeBL-v2GRi_VR0CEI2rRKeN3eDnR1ovPjVgXqFakD6LSd" />
+ </picture>
+</a>
 
 ---
 
