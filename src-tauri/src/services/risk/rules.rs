@@ -517,18 +517,6 @@ fn filter_hardcoded_ip(evidence: &str) -> Option<f32> {
 mod tests {
     use super::*;
 
-    fn block(content: &str, file: &str) -> CodeBlock {
-        CodeBlock {
-            file: file.to_string(),
-            line: 1,
-            lang: None,
-            in_code_example: false,
-            in_comment: false,
-            in_docs_dir: false,
-            content: content.to_string(),
-        }
-    }
-
     fn bash_block(content: &str) -> CodeBlock {
         CodeBlock {
             file: "SKILL.md".to_string(),

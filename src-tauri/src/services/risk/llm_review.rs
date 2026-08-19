@@ -314,7 +314,7 @@ mod tests {
     #[test]
     fn build_prompt_truncates_multibyte_content_without_panic() {
         // 500 字节边界落在多字节字符（如 box-drawing ─）中间时不能 panic
-        let content: String = std::iter::repeat('a').take(498).chain(std::iter::repeat('─').take(10)).collect();
+        let content = "a".repeat(498) + &"─".repeat(10);
         assert!(content.len() > 500); // 确保触发截断分支
         let blocks = vec![CodeBlock {
             file: "SKILL.md".to_string(),

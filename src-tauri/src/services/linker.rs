@@ -546,10 +546,10 @@ impl LinkerService {
             .or_else(|_| {
                 // 如果跨文件系统，使用复制+删除
                 copy_dir_all(&real_source, &target)?;
-                std::fs::remove_dir_all(&real_source).or_else(|e| {
+                std::fs::remove_dir_all(&real_source).map_err(|e| {
                     // 如果删除失败，清理已复制的目标
                     let _ = std::fs::remove_dir_all(&target);
-                    Err(format!("Failed to remove source after copy: {}", e))
+                    format!("Failed to remove source after copy: {}", e)
                 })
             })
             .map_err(|e| format!("Failed to move skill: {}", e))?;

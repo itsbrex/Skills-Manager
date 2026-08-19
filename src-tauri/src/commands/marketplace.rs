@@ -1454,15 +1454,8 @@ mod tests {
     }
 
     fn config_with_active_project() -> AppConfig {
-        let mut config = AppConfig::default();
-        config.skills_dir = PathBuf::from("/configured/global/skills");
-        config.projects = vec![ProjectBinding {
-            id: "project-alpha".to_string(),
-            name: "Alpha".to_string(),
-            root_path: Some(PathBuf::from("/configured/alpha")),
-            skills_dir: PathBuf::from("/configured/alpha/.skills-manager/skills"),
-        }];
-        config.tools.insert(
+        let mut tools = HashMap::new();
+        tools.insert(
             "claude-code".to_string(),
             ToolConfig {
                 enabled: true,
@@ -1471,8 +1464,18 @@ mod tests {
                 config_path: PathBuf::from("/configured/global/.claude"),
             },
         );
-        config.active_project_id = Some("project-alpha".to_string());
-        config
+        AppConfig {
+            skills_dir: PathBuf::from("/configured/global/skills"),
+            projects: vec![ProjectBinding {
+                id: "project-alpha".to_string(),
+                name: "Alpha".to_string(),
+                root_path: Some(PathBuf::from("/configured/alpha")),
+                skills_dir: PathBuf::from("/configured/alpha/.skills-manager/skills"),
+            }],
+            tools,
+            active_project_id: Some("project-alpha".to_string()),
+            ..AppConfig::default()
+        }
     }
 
     #[test]

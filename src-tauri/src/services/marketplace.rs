@@ -2675,7 +2675,7 @@ fn join_repo_path(base: &str, name: &str) -> String {
 
 fn repo_path_name(path: &str) -> String {
     path.split('/')
-        .last()
+        .next_back()
         .filter(|s| !s.is_empty())
         .unwrap_or(path)
         .to_string()
@@ -2883,7 +2883,7 @@ fn build_github_tree<'a>(
 
         let name = path
             .split('/')
-            .last()
+            .next_back()
             .filter(|s| !s.is_empty())
             .unwrap_or(path)
             .to_string();
@@ -3144,7 +3144,7 @@ fn compute_skill_revision_from_file_nodes(files: &[SkillFileNode]) -> Option<Str
     compute_revision_from_pairs(&mut fingerprints)
 }
 
-fn compute_revision_from_pairs(pairs: &mut Vec<(String, String)>) -> Option<String> {
+fn compute_revision_from_pairs(pairs: &mut [(String, String)]) -> Option<String> {
     if pairs.is_empty() {
         return None;
     }

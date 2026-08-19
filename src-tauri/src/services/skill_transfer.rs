@@ -453,7 +453,7 @@ pub fn import_skills_from_zip(
                 .entry(instance_id)
                 // 导入的技能不继承发布记录：归档里没有这项，且新副本与
                 // 远端并无关联。已存在的 entry 会保留其原有记录。
-                .or_insert_with(SkillMetadata::default);
+                .or_default();
             // Merge tags (union, preserve case-insensitive uniqueness).
             for tag in &skill_meta.tags {
                 let lower = tag.to_lowercase();
@@ -521,10 +521,11 @@ mod tests {
     }
 
     fn make_config(skills_dir: PathBuf) -> AppConfig {
-        let mut config = AppConfig::default();
-        config.skills_dir = skills_dir;
-        config.initialized = true;
-        config
+        AppConfig {
+            skills_dir,
+            initialized: true,
+            ..AppConfig::default()
+        }
     }
 
     #[test]

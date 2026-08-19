@@ -23,17 +23,12 @@ pub struct Skill {
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum SkillScope {
+    #[default]
     Global,
     Project,
-}
-
-impl Default for SkillScope {
-    fn default() -> Self {
-        Self::Global
-    }
 }
 
 impl Skill {

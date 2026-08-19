@@ -148,7 +148,6 @@ fn parse_markdown(
                 fence_start_line = line_no;
                 fence_lang = trimmed
                     .trim_start_matches('`')
-                    .trim()
                     .split_whitespace()
                     .next()
                     .map(|s| s.to_lowercase());
@@ -214,15 +213,14 @@ fn parse_script(content: &str, file: &str, in_docs_dir: bool) -> Vec<CodeBlock> 
     let lang = file
         .rsplit('.')
         .next()
-        .map(|s| match s.to_lowercase().as_str() {
+        .and_then(|s| match s.to_lowercase().as_str() {
             "sh" | "bash" | "zsh" => Some("bash".to_string()),
             "py" => Some("python".to_string()),
             "js" => Some("javascript".to_string()),
             "ts" => Some("typescript".to_string()),
             "ps1" => Some("powershell".to_string()),
             _ => None,
-        })
-        .flatten();
+        });
 
     content
         .lines()

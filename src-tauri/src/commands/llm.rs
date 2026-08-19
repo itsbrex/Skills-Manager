@@ -61,7 +61,7 @@ pub struct MarketplaceTranslationInput {
 
 fn load_provider_or_error() -> Result<LlmProvider, LlmError> {
     let manager = ConfigManager::new();
-    let config = manager.load().map_err(|e| LlmError::NetworkError(e))?;
+    let config = manager.load().map_err(LlmError::NetworkError)?;
     config.llm_provider.ok_or(LlmError::NotConfigured)
 }
 
@@ -478,10 +478,8 @@ fn determine_concurrency(provider: &LlmProvider) -> usize {
         8 // DeepSeek 速率较宽松
     } else if url.contains("localhost") || url.contains("127.0.0.1") {
         12 // 本地 Ollama 无限制
-    } else if url.contains("api.anthropic.com") {
-        6 // Claude API 中等限制
     } else {
-        6 // 默认保守值
+        6 // Claude API and other providers use a conservative default
     }
 }
 

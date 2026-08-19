@@ -100,9 +100,6 @@ export interface Tool {
   project_skills_dir?: string | null;
 }
 
-export type VaultBackupConsent = "unknown" | "granted" | "denied";
-export type TelemetryConsent = "unknown" | "granted" | "denied";
-
 // Risk scan
 export type RiskScanMode = "off" | "basic" | "deep";
 export type RiskLevel = "safe" | "low" | "medium" | "high" | "critical";
@@ -143,9 +140,6 @@ export interface UserPreferences {
 
   // Sync behavior
   auto_sync: boolean;
-  sync_on_save: boolean;
-  cloud_sync_auto: boolean;
-  cloud_sync_interval_minutes: number;
 
   // Editor settings
   default_editor: string;
@@ -154,8 +148,6 @@ export interface UserPreferences {
   // Notifications
   show_sync_notifications: boolean;
   remove_links_when_disabling_tool: boolean;
-  vault_backup_consent: VaultBackupConsent;
-  telemetry_consent: TelemetryConsent;
   skill_usage_monitor: boolean;
   risk_scan_mode: RiskScanMode;
 
@@ -195,89 +187,6 @@ export interface AuthMeResponse {
   email?: string | null;
 }
 
-export interface CloudSyncState {
-  device_id: string;
-  last_revision: number;
-  last_synced_at?: number | null;
-  last_payload_hash?: string | null;
-}
-
-export interface CloudSyncSkill {
-  id: string;
-  instance_id?: string | null;
-  scope?: SkillScope | null;
-  project_id?: string | null;
-  project_name?: string | null;
-  name: string;
-  source: "local" | "imported" | "marketplace" | "vault";
-  version: string;
-  marketplace?: CloudSyncMarketplaceMeta | null;
-  vault?: CloudSyncVaultMeta | null;
-}
-
-export interface CloudSyncMarketplaceMeta {
-  marketplace_source_id?: string | null;
-  marketplace_skill_id?: string | null;
-  marketplace_skill_slug?: string | null;
-  repo_url?: string | null;
-  skill_path?: string | null;
-  remote_revision?: string | null;
-}
-
-export interface CloudSyncVaultMeta {
-  provider?: string | null;
-  user_id?: string | null;
-  skill_id?: string | null;
-  version?: string | null;
-  hash?: string | null;
-  size?: number | null;
-  updated_at?: number | null;
-}
-
-export interface CloudSyncToolState {
-  enabled: boolean;
-  enabled_skills: string[];
-}
-
-export interface CloudSyncCustomTool {
-  id: string;
-  name: string;
-  config_path: string;
-  skills_path: string;
-  enabled: boolean;
-}
-
-export interface CloudSyncPayload {
-  version: number;
-  updated_at: number;
-  device_id: string;
-  skills: CloudSyncSkill[];
-  tool_states: Record<string, CloudSyncToolState>;
-  custom_tools: CloudSyncCustomTool[];
-  preferences?: UserPreferences | null;
-}
-
-export interface CloudSyncSnapshot {
-  revision: number;
-  payload: CloudSyncPayload | null;
-}
-
-export interface VaultBackupResult {
-  uploaded: number;
-  skipped: number;
-  failed: string[];
-}
-
-export type CloudSyncPushResult =
-  | { status: "synced"; revision: number }
-  | { status: "skipped"; reason: string }
-  | {
-      status: "conflict";
-      revision: number;
-      payload: CloudSyncPayload;
-      local_payload: CloudSyncPayload;
-    };
-
 export interface AppConfig {
   version: string;
   skills_dir: string;
@@ -287,9 +196,7 @@ export interface AppConfig {
   marketplace_favorites?: MarketplaceFavoriteMap;
   preferences?: UserPreferences;
   marketplace_sources?: MarketplaceSource[];
-  poll_client_state?: PollClientStateConfig | null;
   auth_session?: AuthSession | null;
-  cloud_sync?: CloudSyncState | null;
   projects?: ProjectBinding[];
   active_project_id?: string | null;
   llm_provider?: LlmProvider | null;
@@ -302,11 +209,6 @@ export interface LlmProvider {
   temperature?: number | null;
   max_tokens?: number | null;
   timeout_secs?: number | null;
-}
-
-export interface PollClientStateConfig {
-  voter_id?: string | null;
-  voted_options?: Record<string, string>;
 }
 
 export interface CustomToolConfig {
@@ -496,54 +398,6 @@ export interface FeedbackRequest {
   content: string;
   source?: string | null;
   language?: string | null;
-}
-
-export interface PollOption {
-  id: string;
-  label: string;
-}
-
-export interface PollOptionResult extends PollOption {
-  votes: number;
-}
-
-export interface Poll {
-  id: string;
-  title: string;
-  locale: string;
-  defaultLocale: string;
-  isActive: boolean;
-  options: PollOption[];
-  createdAt: number;
-}
-
-export interface PollResult {
-  id: string;
-  title: string;
-  locale: string;
-  defaultLocale: string;
-  isActive: boolean;
-  options: PollOptionResult[];
-  totalVotes: number;
-  createdAt: number;
-}
-
-export interface PollVoteRequest {
-  voterId: string;
-  optionId: string;
-}
-
-export interface PollVote {
-  id: string;
-  pollId: string;
-  voterId: string;
-  optionId: string;
-  createdAt: number;
-}
-
-export interface PollClientState {
-  voterId: string | null;
-  votedOptions: Record<string, string>;
 }
 
 // Skill import/export (cross-device sync)

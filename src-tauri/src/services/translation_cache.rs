@@ -72,8 +72,7 @@ impl TranslationCache {
     pub fn put(&self, key: &CacheKey<'_>, value: &CachedTranslation) -> std::io::Result<()> {
         fs::create_dir_all(&self.root)?;
         let path = self.path_for(&key.digest());
-        let data = serde_json::to_vec_pretty(value)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let data = serde_json::to_vec_pretty(value).map_err(std::io::Error::other)?;
         fs::write(&path, data)
     }
 

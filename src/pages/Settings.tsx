@@ -16,7 +16,6 @@ import { checkUpdate } from "@/services/updater";
 import { useTranslation, Language, TranslationPath } from "@/i18n";
 import { useSkillTranslation } from "@/hooks/useSkillTranslation";
 import { useTheme } from "@/hooks/useTheme";
-import { resolveTelemetryConsent } from "@/telemetry/consent";
 import { getEditorIcon } from "@/assets/editors";
 import { FontFamilyPreset, normalizeFontFamilyPreset } from "@/lib/fontFamily";
 import wechatRewardCode from "@/assets/donation/wechat-reward-code.jpg";
@@ -184,19 +183,6 @@ export function Settings() {
     autoSaveTimeoutRef.current = window.setTimeout(async () => {
       try {
         await invoke("save_config", { config: configToSave });
-
-        // Handle telemetry consent
-        const prefs = configToSave.preferences || defaultPreferences;
-        const telemetryConsent = resolveTelemetryConsent(prefs.telemetry_consent);
-        if (telemetryConsent === "granted") {
-          void invoke("telemetry_initialize").catch((err) => {
-            console.warn("Failed to initialize telemetry after auto-save:", err);
-          });
-        } else if (telemetryConsent === "denied") {
-          void invoke("telemetry_clear_local_data").catch((err) => {
-            console.warn("Failed to clear telemetry after auto-save:", err);
-          });
-        }
 
         // Show saved status
         setSaveStatus('saved');
@@ -758,7 +744,7 @@ export function Settings() {
             />
           </SettingsCard>
 
-          {/* Account & Cloud Sync */}
+          {/* Account */}
           <SectionTitle id="settings-account">{t("settings.account")}</SectionTitle>
           <SettingsCard>
             <SettingsRow

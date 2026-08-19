@@ -176,22 +176,24 @@ mod tests {
 
     #[test]
     fn collect_active_tool_configs_only_returns_enabled_and_detected() {
-        let mut config = AppConfig::default();
-        config.tools = HashMap::from([
-            ("active".to_string(), mk_tool(true, true)),
-            ("disabled".to_string(), mk_tool(false, true)),
-            ("undetected".to_string(), mk_tool(true, false)),
-        ]);
-        config.custom_tools = HashMap::from([(
-            "custom-active".to_string(),
-            CustomToolConfig {
-                name: "Custom".to_string(),
-                config_path: PathBuf::from("/tmp/custom"),
-                skills_path: PathBuf::from("/tmp/custom/skills"),
-                enabled: true,
-                icon_path: None,
-            },
-        )]);
+        let config = AppConfig {
+            tools: HashMap::from([
+                ("active".to_string(), mk_tool(true, true)),
+                ("disabled".to_string(), mk_tool(false, true)),
+                ("undetected".to_string(), mk_tool(true, false)),
+            ]),
+            custom_tools: HashMap::from([(
+                "custom-active".to_string(),
+                CustomToolConfig {
+                    name: "Custom".to_string(),
+                    config_path: PathBuf::from("/tmp/custom"),
+                    skills_path: PathBuf::from("/tmp/custom/skills"),
+                    enabled: true,
+                    icon_path: None,
+                },
+            )]),
+            ..AppConfig::default()
+        };
 
         let mut ids: Vec<String> = collect_active_tool_configs(&config)
             .into_iter()

@@ -60,7 +60,7 @@ pub fn detect_editors() -> Vec<DetectedEditor> {
                                     "finder" => Some("/System/Library/CoreServices/Finder.app"),
                                     _ => None,
                                 };
-                                system_app.and_then(|p| extract_app_icon(p))
+                                system_app.and_then(extract_app_icon)
                             }
                             #[cfg(target_os = "windows")]
                             {

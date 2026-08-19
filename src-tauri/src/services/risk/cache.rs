@@ -148,7 +148,7 @@ fn migrate_legacy_cache_dir(new_dir: &Path) {
     if !old_dir.exists() || new_dir.exists() {
         return;
     }
-    if let Err(_) = fs::rename(&old_dir, new_dir) {
+    if fs::rename(&old_dir, new_dir).is_err() {
         // rename 失败（可能跨文件系统），回退到复制后删除
         if copy_dir_recursive(&old_dir, new_dir).is_ok() {
             let _ = fs::remove_dir_all(&old_dir);

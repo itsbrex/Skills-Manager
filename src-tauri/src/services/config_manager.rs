@@ -404,7 +404,7 @@ impl ConfigManager {
     }
 
     /// 更新 config.json 中的路径引用
-    fn update_config_paths(new_dir: &PathBuf, old_dir: &PathBuf) {
+    fn update_config_paths(new_dir: &Path, old_dir: &Path) {
         let config_path = new_dir.join("config.json");
         if let Ok(content) = fs::read_to_string(&config_path) {
             let old_path_str = old_dir.to_string_lossy();
@@ -418,7 +418,7 @@ impl ConfigManager {
 
             let mut updated_content = content.replace(&old_escaped, &new_escaped);
             // Also replace raw form in case paths are stored without JSON escaping
-            updated_content = updated_content.replace(&*old_path_str, &*new_path_str);
+            updated_content = updated_content.replace(&*old_path_str, &new_path_str);
 
             if updated_content != content {
                 let _ = fs::write(&config_path, updated_content);
@@ -428,7 +428,7 @@ impl ConfigManager {
     }
 
     /// 修复各工具目录中指向旧路径的软链接
-    fn fix_symlinks_after_migration(old_dir: &PathBuf, new_dir: &PathBuf) {
+    fn fix_symlinks_after_migration(old_dir: &Path, new_dir: &Path) {
         let home_dir = dirs::home_dir().unwrap_or_default();
 
         // 已知的工具 skills 目录
@@ -456,7 +456,7 @@ impl ConfigManager {
                             // 如果链接指向旧目录，更新为新目录
                             if target_str.contains(&*old_dir_str) {
                                 let new_target_str =
-                                    target_str.replace(&*old_dir_str, &*new_dir.to_string_lossy());
+                                    target_str.replace(&*old_dir_str, &new_dir.to_string_lossy());
                                 let new_target = PathBuf::from(new_target_str.to_string());
 
                                 // 删除旧链接（兼容 symlink 和 Junction）

@@ -28,14 +28,22 @@ pub fn with_temp_home<F: FnOnce(&Path)>(f: F) {
     std::env::set_var("HOME", &temp_dir);
     std::env::set_var("USERPROFILE", &temp_dir);
 
-    f(&temp_dir);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(&temp_dir)));
 
     if let Some(value) = old_home {
         std::env::set_var("HOME", value);
+    } else {
+        std::env::remove_var("HOME");
     }
     if let Some(value) = old_userprofile {
         std::env::set_var("USERPROFILE", value);
+    } else {
+        std::env::remove_var("USERPROFILE");
     }
 
     let _ = fs::remove_dir_all(&temp_dir);
+
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
 }

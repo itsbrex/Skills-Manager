@@ -15,8 +15,6 @@ pub struct UserPreferences {
     pub language: String,
     #[serde(default = "default_true")]
     pub auto_sync: bool,
-    #[serde(default = "default_true")]
-    pub sync_on_save: bool,
     #[serde(default = "default_editor")]
     pub default_editor: String,
     #[serde(default = "default_tab_size")]
@@ -150,7 +148,6 @@ impl Default for UserPreferences {
             font_family: default_font_family(),
             language: default_language(),
             auto_sync: true,
-            sync_on_save: true,
             default_editor: default_editor(),
             tab_size: default_tab_size(),
             show_sync_notifications: true,
@@ -440,15 +437,17 @@ mod tests {
 
     #[test]
     fn llm_provider_persists_through_serialization() {
-        let mut config = AppConfig::default();
-        config.llm_provider = Some(super::LlmProvider {
-            base_url: "https://api.openai.com/v1".to_string(),
-            api_key: "sk-test".to_string(),
-            model: "gpt-4o-mini".to_string(),
-            temperature: Some(0.3),
-            max_tokens: Some(4096),
-            timeout_secs: Some(60),
-        });
+        let config = AppConfig {
+            llm_provider: Some(super::LlmProvider {
+                base_url: "https://api.openai.com/v1".to_string(),
+                api_key: "sk-test".to_string(),
+                model: "gpt-4o-mini".to_string(),
+                temperature: Some(0.3),
+                max_tokens: Some(4096),
+                timeout_secs: Some(60),
+            }),
+            ..AppConfig::default()
+        };
 
         let json = serde_json::to_string(&config).expect("serialize config");
         let restored: AppConfig = serde_json::from_str(&json).expect("deserialize config");

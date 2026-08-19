@@ -129,7 +129,7 @@ pub async fn chat(provider: &LlmProvider, req: ChatRequest) -> Result<String, Ll
             .collect(),
         temperature: Some(provider.temperature.unwrap_or(DEFAULT_TEMPERATURE)),
         max_tokens: provider.max_tokens,
-        response_format: req.json_mode.then(|| ResponseFormat {
+        response_format: req.json_mode.then_some(ResponseFormat {
             fmt_type: "json_object",
         }),
         stream: true,

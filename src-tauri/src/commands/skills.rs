@@ -678,24 +678,26 @@ mod tests {
             fs::create_dir_all(&project_skill_dir).expect("create project Skill");
             fs::write(project_skill_dir.join("SKILL.md"), "# Demo\n").expect("write Skill");
 
-            let mut config = AppConfig::default();
-            config.skills_dir = home.join(".skills-manager").join("skills");
-            config.tools = HashMap::from([(
-                "claude-code".to_string(),
-                ToolConfig {
-                    enabled: true,
-                    detected: true,
-                    skills_path: home.join(".claude").join("skills"),
-                    config_path: home.join(".claude"),
-                },
-            )]);
-            config.projects = vec![ProjectBinding {
-                id: "alpha".to_string(),
-                name: "Alpha".to_string(),
-                root_path: Some(project_root),
-                skills_dir: project_skills_dir,
-            }];
-            config.active_project_id = Some("alpha".to_string());
+            let config = AppConfig {
+                skills_dir: home.join(".skills-manager").join("skills"),
+                tools: HashMap::from([(
+                    "claude-code".to_string(),
+                    ToolConfig {
+                        enabled: true,
+                        detected: true,
+                        skills_path: home.join(".claude").join("skills"),
+                        config_path: home.join(".claude"),
+                    },
+                )]),
+                projects: vec![ProjectBinding {
+                    id: "alpha".to_string(),
+                    name: "Alpha".to_string(),
+                    root_path: Some(project_root),
+                    skills_dir: project_skills_dir,
+                }],
+                active_project_id: Some("alpha".to_string()),
+                ..AppConfig::default()
+            };
 
             apply_skill_tool_enabled(&config, "project:alpha:demo", "claude-code", true, None)
                 .expect("enable project Skill");

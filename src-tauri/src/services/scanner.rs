@@ -493,9 +493,9 @@ impl ScannerService {
         let mut name = None;
         let mut description = None;
 
-        if content.starts_with("---") {
-            if let Some(end_idx) = content[3..].find("---") {
-                let frontmatter = &content[3..3 + end_idx];
+        if let Some(stripped) = content.strip_prefix("---") {
+            if let Some(end_idx) = stripped.find("---") {
+                let frontmatter = &stripped[..end_idx];
                 for line in frontmatter.lines() {
                     let line = line.trim();
                     if let Some(value) = line.strip_prefix("name:") {
@@ -527,7 +527,7 @@ impl ScannerService {
 
     pub fn generate_meta(id: &str) -> SkillMeta {
         SkillMeta {
-            name: id.replace('-', " ").replace('_', " "),
+            name: id.replace(['-', '_'], " "),
             description: None,
             version: "1.0".to_string(),
             source: SkillSource::Local,
@@ -859,8 +859,10 @@ description: "Description from SKILL.md"
                 .expect("write SKILL.md");
             }
 
-            let mut config = AppConfig::default();
-            config.skills_dir = global_skills_dir.clone();
+            let config = AppConfig {
+                skills_dir: global_skills_dir.clone(),
+                ..AppConfig::default()
+            };
             let config_value = json!({
                 "version": config.version,
                 "skills_dir": config.skills_dir,
