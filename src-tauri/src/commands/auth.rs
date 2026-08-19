@@ -7,10 +7,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::models::auth::{AuthProfile, AuthSession};
-use crate::services::auth::{build_auth_start_url, generate_code_verifier, pkce_challenge};
+use crate::services::auth::{build_web_auth_start_url, generate_code_verifier, pkce_challenge};
 use crate::services::ConfigManager;
 
-const DEFAULT_AUTH_API_BASE: &str = "https://skills-market-api.guardssl.info/api/v1";
+const DEFAULT_AUTH_API_BASE: &str = "https://skillsmanager.freeourdays.com/api/v1";
+const DEFAULT_WEB_AUTH_BASE: &str = "https://skillsmanager.freeourdays.com";
 
 #[derive(Debug, Clone)]
 struct PendingAuthState {
@@ -25,18 +26,19 @@ fn pending_auth_states() -> &'static Mutex<HashMap<String, PendingAuthState>> {
 }
 
 fn auth_api_base_url() -> String {
-    std::env::var("SKILLS_MARKET_API_BASE").unwrap_or_else(|_| DEFAULT_AUTH_API_BASE.to_string())
+    std::env::var("SKILLS_MANAGER_AUTH_API_BASE")
+        .unwrap_or_else(|_| DEFAULT_AUTH_API_BASE.to_string())
+}
+
+fn web_auth_base_url() -> String {
+    std::env::var("SKILLS_MANAGER_WEB_BASE_URL")
+        .unwrap_or_else(|_| DEFAULT_WEB_AUTH_BASE.to_string())
 }
 
 fn build_auth_api_url(base_url: &str, path: &str) -> Result<reqwest::Url, String> {
     let base = base_url.trim_end_matches('/');
     let url = format!("{base}{path}");
     reqwest::Url::parse(&url).map_err(|e| format!("Invalid auth url: {e}"))
-}
-
-#[derive(Debug, Deserialize)]
-struct AuthStartResponse {
-    auth_url: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -159,37 +161,25 @@ async fn start_oauth_auth(
     let code_verifier = generate_code_verifier();
     let code_challenge = pkce_challenge(&code_verifier);
     let nonce = Uuid::new_v4().simple().to_string();
-    let base_url = auth_api_base_url();
-    let url = build_auth_start_url(
-        &base_url,
+    let web_locale = match locale.as_deref().map(str::trim) {
+        Some("zh") | Some("zh-CN") => Some("zh-CN"),
+        Some("en") => Some("en"),
+        Some(_) => Some("en"),
+        None => Some("en"),
+    };
+    let url = build_web_auth_start_url(
+        &web_auth_base_url(),
         provider,
         &state,
         &code_challenge,
         &nonce,
-        locale.as_deref(),
+        web_locale,
     )?;
-
-    let client = Client::new();
-    let response = client
-        .get(url)
-        .header(ACCEPT, "application/json")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to start auth: {e}"))?;
-
-    if !response.status().is_success() {
-        return Err(format!("Auth start failed: HTTP {}", response.status()));
-    }
-
-    let payload = response
-        .json::<AuthStartResponse>()
-        .await
-        .map_err(|e| format!("Failed to parse auth start response: {e}"))?;
 
     store_pending_state(state.clone(), code_verifier, nonce);
 
     Ok(AuthStartResult {
-        auth_url: payload.auth_url,
+        auth_url: url.to_string(),
         state,
     })
 }
@@ -437,21 +427,18 @@ mod tests {
     #[test]
     fn start_github_auth_returns_state_and_stores_pending() {
         crate::test_support::with_temp_home(|_| {
-            let mut server = mockito::Server::new();
-            std::env::set_var("SKILLS_MARKET_API_BASE", format!("{}/api/v1", server.url()));
-            let _mock = server
-                .mock("GET", "/api/v1/auth/github/start")
-                .match_query(Matcher::Any)
-                .with_status(200)
-                .with_header("content-type", "application/json")
-                .with_body(r#"{"auth_url":"https://example.com/auth"}"#)
-                .create();
+            std::env::set_var("SKILLS_MANAGER_WEB_BASE_URL", "https://example.com");
 
             tauri::async_runtime::block_on(async {
                 let result = start_github_auth(Some(true), None)
                     .await
                     .expect("start auth");
-                assert_eq!(result.auth_url, "https://example.com/auth");
+                assert!(result
+                    .auth_url
+                    .starts_with("https://example.com/auth/start?"));
+                assert!(result.auth_url.contains("provider=github"));
+                assert!(result.auth_url.contains("client=desktop"));
+                assert!(result.auth_url.contains("locale=en"));
                 assert!(result.state.starts_with("debug-"));
                 assert!(has_pending_state(&result.state));
             });
@@ -462,7 +449,7 @@ mod tests {
     fn exchange_github_auth_saves_session_and_returns_profile() {
         crate::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
-            std::env::set_var("SKILLS_MARKET_API_BASE", format!("{}/api/v1", server.url()));
+            std::env::set_var("SKILLS_MANAGER_AUTH_API_BASE", format!("{}/api/v1", server.url()));
 
             let _exchange_mock = server
                 .mock("POST", "/api/v1/auth/exchange")
@@ -511,21 +498,18 @@ mod tests {
     #[test]
     fn start_google_auth_returns_state_and_stores_pending() {
         crate::test_support::with_temp_home(|_| {
-            let mut server = mockito::Server::new();
-            std::env::set_var("SKILLS_MARKET_API_BASE", format!("{}/api/v1", server.url()));
-            let _mock = server
-                .mock("GET", "/api/v1/auth/google/start")
-                .match_query(Matcher::Any)
-                .with_status(200)
-                .with_header("content-type", "application/json")
-                .with_body(r#"{"auth_url":"https://example.com/google"}"#)
-                .create();
+            std::env::set_var("SKILLS_MANAGER_WEB_BASE_URL", "https://example.com");
 
             tauri::async_runtime::block_on(async {
-                let result = start_google_auth(Some(true), None)
+                let result = start_google_auth(Some(true), Some("zh".to_string()))
                     .await
                     .expect("start google auth");
-                assert_eq!(result.auth_url, "https://example.com/google");
+                assert!(result
+                    .auth_url
+                    .starts_with("https://example.com/auth/start?"));
+                assert!(result.auth_url.contains("provider=google"));
+                assert!(result.auth_url.contains("client=desktop"));
+                assert!(result.auth_url.contains("locale=zh-CN"));
                 assert!(result.state.starts_with("debug-"));
                 assert!(has_pending_state(&result.state));
             });
@@ -536,7 +520,7 @@ mod tests {
     fn exchange_google_auth_saves_session_and_returns_profile() {
         crate::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
-            std::env::set_var("SKILLS_MARKET_API_BASE", format!("{}/api/v1", server.url()));
+            std::env::set_var("SKILLS_MANAGER_AUTH_API_BASE", format!("{}/api/v1", server.url()));
 
             let _exchange_mock = server
                 .mock("POST", "/api/v1/auth/exchange")
@@ -607,7 +591,7 @@ mod tests {
     fn logout_auth_clears_session() {
         crate::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
-            std::env::set_var("SKILLS_MARKET_API_BASE", format!("{}/api/v1", server.url()));
+            std::env::set_var("SKILLS_MANAGER_AUTH_API_BASE", format!("{}/api/v1", server.url()));
             let _mock = server
                 .mock("POST", "/api/v1/auth/logout")
                 .match_header("content-type", "application/json")
