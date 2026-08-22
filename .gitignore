@@ -23,6 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 .claude/*
+.agents/
+.ar-home/
+.playwright-cli/
 .worktrees/
 .private-features/
 .superpowers/
