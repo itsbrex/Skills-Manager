@@ -5,13 +5,13 @@
 
 ![Version](https://img.shields.io/badge/version-2.1.9-blue) ![Downloads](https://img.shields.io/github/downloads/jiweiyeah/skills-manager/total?color=brightgreen&label=downloads) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
 
-[**官网**](https://skillsmanager.freeourdays.com/zh/) · [English README](./README.md)
+[**官网**](https://skillsmanager.freeourdays.com/zh/?ref=gh) · [English README](./README.md)
 
 ## 📖 简介
 
 **Skills Manager** 是一款现代化的桌面应用程序，旨在解决 AI 助手的 Skills 配置碎片化的问题。它提供了一个中心化的枢纽，让您不再需要为不同的工具分别管理 Skills 技能。
 
-通过强大的**软链接同步机制（Symlink Synchronization）**，您只需编写一次技能，即可在 30+ 款受支持的 AI 工具（包括 Claude Code、Codex、Cursor、Gemini CLI、Windsurf、Trae 等）中即时生效，实现"一处编写，多处使用"。
+通过强大的**软链接同步机制（Symlink Synchronization）**，您只需编写一次技能，即可在 32 款受支持的 AI 工具（包括 Claude Code、Codex、Cursor、Gemini CLI、Windsurf、Trae 等）中即时生效，实现"一处编写，多处使用"。
 
 ## ✨ 核心功能
 
@@ -24,7 +24,7 @@
 - **🌍 双语界面**：完整支持中英文界面。
 - **⚡ 极致性能**：基于 **Rust** 和 **Tauri 2.0** 构建，带来轻量级、秒开的极致体验。
 - **🛡️ 跨平台支持**：完美支持 macOS、Windows 和 Linux 系统。
-- **🔌 多工具支持**：开箱即用支持 30+ 款 AI 工具（Claude Code、Codex、Cursor、Gemini CLI、Windsurf、Trae、Cline、Augment、Goose 等），并支持自定义扩展。
+- **🔌 多工具支持**：开箱即用支持 32 款 AI 工具（Claude Code、Codex、Cursor、Gemini CLI、Windsurf、Trae、Cline、Augment、Goose 等），并支持自定义扩展。
 - **🧩 自定义工具**：支持用户添加自定义工具，配置路径与图标。
 - **🎨 现代 UI**：基于 React 19、Tailwind CSS v4 和 Radix UI 打造的 Raycast 风格精美界面。
 
@@ -38,7 +38,7 @@
 
 ## 📥 下载安装
 
-可前往 **[官网下载](https://skillsmanager.freeourdays.com/zh/#download)**（会自动识别您的系统与架构），或到 **[Releases 页面](../../releases)** 自行挑选安装包。
+可前往 **[官网下载](https://skillsmanager.freeourdays.com/zh/?ref=gh#download)**（会自动识别您的系统与架构），或到 **[Releases 页面](../../releases)** 自行挑选安装包。
 
 | 操作系统 | 安装包类型 |
 |----|----------------|
@@ -46,9 +46,17 @@
 | **Windows** | `.msi` / `.exe` |
 | **Linux** | `.deb` / `.AppImage` / `.rpm` |
 
-## ⚠️ Windows 用户重要提示
+## 🪟 Windows 使用说明
 
-如果您在同步 Skills 时遇到权限问题（软链接创建失败）或检测不到工具，请尝试以 **管理员身份 (Run as Administrator)** 运行本程序。Windows 系统默认需要管理员权限才能创建软链接，除非您开启了开发者模式。
+**不需要管理员权限。** 为某个工具启用 Skill 时，Skills Manager 会按顺序尝试三种方式：
+
+1. **目录软链接（Symlink）**——在开启了开发者模式（或程序恰好以管理员身份运行）时使用。
+2. **目录联接（Junction，`mklink /J`）**——普通账户下的常规路径，不需要任何特殊权限。
+3. **可追踪副本**——如果联接也被阻止，则复制目录，并写入 `.skills-manager-source.json` 记录来源路径，使副本仍可追踪、仍能在应用内关闭。
+
+三种方式都不要求提权，普通的 Windows 账户就够用。
+
+如果是**检测不到工具**，提权同样没有帮助：需要该工具自己的配置目录确实存在于本机。各工具实际读取的路径见[工具兼容矩阵](https://skillsmanager.freeourdays.com/zh/?ref=gh#tools)，也可以作为自定义工具手动添加。
 
 ## 🚀 快速开始
 

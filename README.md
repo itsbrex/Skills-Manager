@@ -5,13 +5,13 @@
 
 ![Version](https://img.shields.io/badge/version-2.1.9-blue) ![Downloads](https://img.shields.io/github/downloads/jiweiyeah/skills-manager/total?color=brightgreen&label=downloads) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
 
-[**Website**](https://skillsmanager.freeourdays.com) · [中文说明](./README_CN.md)
+[**Website**](https://skillsmanager.freeourdays.com/?ref=gh) · [中文说明](./README_CN.md)
 
 ## 📖 Introduction
 
 **Skills Manager** is a modern desktop application designed to solve the fragmentation of AI assistant skills configurations. Instead of managing skills and prompts separately for different tools, Skills Manager provides a central hub.
 
-It uses a powerful **symlink synchronization mechanism**, allowing you to write a skill once and instantly use it across 30+ supported AI tools including Claude Code, Codex, Cursor, Gemini CLI, Windsurf, Trae, and more.
+It uses a powerful **symlink synchronization mechanism**, allowing you to write a skill once and instantly use it across 32 supported AI tools including Claude Code, Codex, Cursor, Gemini CLI, Windsurf, Trae, and more.
 
 ## ✨ Key Features
 
@@ -24,7 +24,7 @@ It uses a powerful **symlink synchronization mechanism**, allowing you to write 
 - **🌍 Bilingual UI**: Full English and Chinese interface support.
 - **⚡ High Performance**: Built with **Rust** and **Tauri 2.0** for a lightweight, blazing-fast experience.
 - **🛡️ Cross-Platform**: Native support for macOS, Windows, and Linux.
-- **🔌 Multi-Tool Support**: Out-of-the-box support for 30+ AI tools (Claude Code, Codex, Cursor, Gemini CLI, Windsurf, Trae, Cline, Augment, Goose, and many more), extensible via custom tools.
+- **🔌 Multi-Tool Support**: Out-of-the-box support for 32 AI tools (Claude Code, Codex, Cursor, Gemini CLI, Windsurf, Trae, Cline, Augment, Goose, and many more), extensible via custom tools.
 - **🧩 Custom Tools**: Add your own tools with custom paths and optional icons.
 - **🎨 Modern UI**: Beautiful Raycast-style interface built with React 19, Tailwind CSS v4, and Radix UI.
 
@@ -38,7 +38,7 @@ It uses a powerful **symlink synchronization mechanism**, allowing you to write 
 
 ## 📥 Download
 
-Get the build for your platform from the **[official website](https://skillsmanager.freeourdays.com/#download)**, which detects your OS and architecture automatically, or pick a file yourself on the **[Releases Page](../../releases)**.
+Get the build for your platform from the **[official website](https://skillsmanager.freeourdays.com/?ref=gh#download)**, which detects your OS and architecture automatically, or pick a file yourself on the **[Releases Page](../../releases)**.
 
 | OS | Installer Type |
 |----|----------------|
@@ -46,9 +46,17 @@ Get the build for your platform from the **[official website](https://skillsmana
 | **Windows** | `.msi` / `.exe` |
 | **Linux** | `.deb` / `.AppImage` / `.rpm`|
 
-## ⚠️ Windows Important Note
+## 🪟 Windows Notes
 
-If you encounter permission issues when syncing skills (symbolic link creation errors) or detection issues, please try running the application as **Administrator**. This is often required on Windows to create symbolic links unless Developer Mode is enabled.
+**You do not need Administrator rights.** When a skill is enabled for a tool, Skills Manager tries three strategies in order:
+
+1. **Directory symlink** — used when Developer Mode is enabled (or when the app happens to run elevated).
+2. **Directory junction** (`mklink /J`) — the normal path on a standard account. It needs no special permission.
+3. **Tracked copy** — if junctions are blocked as well, the folder is copied and its source path is recorded in `.skills-manager-source.json`, so the copy stays traceable and can still be disabled from the app.
+
+A standard, non-elevated Windows account is enough for all three.
+
+If a tool is **not detected**, elevation will not help either: the tool's own config directory has to exist on this machine. Check the [tool compatibility matrix](https://skillsmanager.freeourdays.com/?ref=gh#tools) for the exact path each tool reads, or add it manually as a custom tool.
 
 ## 🚀 Getting Started
 
