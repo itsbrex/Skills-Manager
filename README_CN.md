@@ -64,6 +64,24 @@
 2. **设置**：首次启动时，应用会引导您选择或创建技能存储目录。
 3. **同步**：应用会自动检测已安装的 AI 工具（如 Claude Code）并建立skills链接。
 
+## ⌨️ 命令行工具 (`skm`)
+
+每个版本都附带一个命令行工具，面向终端优先的工作流：SSH/无头服务器、dotfiles 初始化脚本、快速状态检查。CLI 与桌面应用读写同一份配置和 symlink,可以混用。
+
+从 [Releases 页面](../../releases) 下载 `skm-<target>.tar.gz`(Windows 为 `.zip`),解压后把二进制放入 `PATH` 即可。
+
+```bash
+skm init                          # 免 GUI 初始化(写配置、检测工具)
+skm adopt [--dry-run] [--yes]     # 把工具目录里已有的技能收编进 hub 并替换为链接
+skm list [--tool <id>] [--json]   # 列出技能及各工具链接状态
+skm enable <skill> --for <tool>   # 创建 symlink(如 skm enable ab-testing --for claude)
+skm disable <skill> --for <tool>  # 移除 symlink
+skm doctor [--json]               # 检测已装工具 + 报告同步问题
+skm fix --yes                     # 自动修复 doctor 发现的问题
+```
+
+`<skill>` 和 `<tool>` 都支持唯一前缀匹配(`claude` 匹配 `claude-code`)。运行 `skm <command> --help` 查看详细用法。桌面 App 是可选的:`skm init` + `skm adopt` 即可构成纯终端工作流(适用于无头服务器)。
+
 ## ❗ Linux 常见问题 (Troubleshooting)
 
 如果您在 Linux（特别是虚拟机环境，如 VMware/VirtualBox）运行 `.AppImage` 时遇到**白屏**问题，通常是 WebKitGTK 硬件加速导致的。

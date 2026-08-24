@@ -64,6 +64,24 @@ If a tool is **not detected**, elevation will not help either: the tool's own co
 2. **Setup**: On first launch, the app will guide you to select your skills storage directory.
 3. **Sync**: The app automatically detects installed AI tools (like Claude Code) and links your skills.
 
+## ⌨️ CLI (`skm`)
+
+A companion command-line tool ships with every release for terminal-first workflows: SSH/headless machines, dotfiles setup scripts, and quick status checks. It reads and writes the same config and symlinks as the desktop app, so they can be used interchangeably.
+
+Download `skm-<target>.tar.gz` (`.zip` on Windows) from the [Releases Page](../../releases), extract it, and put the binary on your `PATH`.
+
+```bash
+skm init                          # first-run setup without the GUI (writes config, detects tools)
+skm adopt [--dry-run] [--yes]     # move skills already in tool dirs into the hub and relink them
+skm list [--tool <id>] [--json]   # list skills and their per-tool link status
+skm enable <skill> --for <tool>   # create the symlink (e.g. skm enable ab-testing --for claude)
+skm disable <skill> --for <tool>  # remove the symlink
+skm doctor [--json]               # detect installed tools + report sync issues
+skm fix --yes                     # repair sync issues found by doctor
+```
+
+Both `<skill>` and `<tool>` accept a unique prefix (`claude` matches `claude-code`). Run `skm <command> --help` for details. The GUI is optional: `skm init` + `skm adopt` give a fully terminal-only workflow (e.g. on headless servers).
+
 ## ❗ Linux Troubleshooting
 
 If you encounter a **blank white screen** when launching the `.AppImage` on Linux (especially in virtual machines like VMware/VirtualBox), it is likely a WebKitGTK hardware acceleration issue.
