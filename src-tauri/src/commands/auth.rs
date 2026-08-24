@@ -6,10 +6,10 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::models::auth::{AuthProfile, AuthSession};
-use crate::models::AppConfig;
-use crate::services::auth::{build_web_auth_start_url, generate_code_verifier, pkce_challenge};
-use crate::services::ConfigManager;
+use sm_core::models::auth::{AuthProfile, AuthSession};
+use sm_core::models::AppConfig;
+use sm_core::services::auth::{build_web_auth_start_url, generate_code_verifier, pkce_challenge};
+use sm_core::services::ConfigManager;
 
 const DEFAULT_AUTH_API_BASE: &str = "https://skillsmanager.freeourdays.com/api/v1";
 const DEFAULT_WEB_AUTH_BASE: &str = "https://skillsmanager.freeourdays.com";
@@ -436,7 +436,7 @@ mod tests {
 
     #[test]
     fn auth_session_persists_to_config() {
-        crate::test_support::with_temp_home(|_| {
+        sm_core::test_support::with_temp_home(|_| {
             let session = AuthSession {
                 provider: "github".to_string(),
                 access_token: Some("a".to_string()),
@@ -457,7 +457,7 @@ mod tests {
 
     #[test]
     fn start_github_auth_returns_state_and_stores_pending() {
-        crate::test_support::with_temp_home(|_| {
+        sm_core::test_support::with_temp_home(|_| {
             std::env::set_var("SKILLS_MANAGER_WEB_BASE_URL", "https://example.com");
 
             tauri::async_runtime::block_on(async {
@@ -478,7 +478,7 @@ mod tests {
 
     #[test]
     fn exchange_github_auth_saves_session_and_returns_profile() {
-        crate::test_support::with_temp_home(|_| {
+        sm_core::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
             std::env::set_var("SKILLS_MANAGER_AUTH_API_BASE", format!("{}/api/v1", server.url()));
 
@@ -528,7 +528,7 @@ mod tests {
 
     #[test]
     fn start_google_auth_returns_state_and_stores_pending() {
-        crate::test_support::with_temp_home(|_| {
+        sm_core::test_support::with_temp_home(|_| {
             std::env::set_var("SKILLS_MANAGER_WEB_BASE_URL", "https://example.com");
 
             tauri::async_runtime::block_on(async {
@@ -549,7 +549,7 @@ mod tests {
 
     #[test]
     fn exchange_google_auth_saves_session_and_returns_profile() {
-        crate::test_support::with_temp_home(|_| {
+        sm_core::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
             std::env::set_var("SKILLS_MANAGER_AUTH_API_BASE", format!("{}/api/v1", server.url()));
 
@@ -599,7 +599,7 @@ mod tests {
 
     #[test]
     fn auth_tokens_persist_to_config() {
-        crate::test_support::with_temp_home(|_| {
+        sm_core::test_support::with_temp_home(|_| {
             let session = AuthSession {
                 provider: "github".to_string(),
                 access_token: Some("at".to_string()),
@@ -620,7 +620,7 @@ mod tests {
 
     #[test]
     fn logout_auth_clears_session() {
-        crate::test_support::with_temp_home(|_| {
+        sm_core::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
             std::env::set_var("SKILLS_MANAGER_AUTH_API_BASE", format!("{}/api/v1", server.url()));
             let _mock = server
@@ -653,7 +653,7 @@ mod tests {
 
     #[test]
     fn get_auth_profile_returns_none_when_missing_session() {
-        crate::test_support::with_temp_home(|_| {
+        sm_core::test_support::with_temp_home(|_| {
             tauri::async_runtime::block_on(async {
                 let profile = get_auth_profile().await.expect("get profile");
                 assert!(profile.is_none());
@@ -675,7 +675,7 @@ mod tests {
 
     #[test]
     fn get_auth_profile_clears_session_when_refresh_is_rejected() {
-        crate::test_support::with_temp_home(|_| {
+        sm_core::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
             std::env::set_var(
                 "SKILLS_MANAGER_AUTH_API_BASE",
@@ -709,7 +709,7 @@ mod tests {
 
     #[test]
     fn get_auth_profile_keeps_session_when_refresh_fails_with_server_error() {
-        crate::test_support::with_temp_home(|_| {
+        sm_core::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
             std::env::set_var(
                 "SKILLS_MANAGER_AUTH_API_BASE",
@@ -744,7 +744,7 @@ mod tests {
 
     #[test]
     fn get_auth_profile_clears_session_when_renewed_token_is_rejected() {
-        crate::test_support::with_temp_home(|_| {
+        sm_core::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
             std::env::set_var(
                 "SKILLS_MANAGER_AUTH_API_BASE",
@@ -785,7 +785,7 @@ mod tests {
 
     #[test]
     fn logout_auth_clears_session_when_server_reports_unauthorized() {
-        crate::test_support::with_temp_home(|_| {
+        sm_core::test_support::with_temp_home(|_| {
             let mut server = mockito::Server::new();
             std::env::set_var(
                 "SKILLS_MANAGER_AUTH_API_BASE",

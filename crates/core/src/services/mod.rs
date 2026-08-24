@@ -11,8 +11,10 @@ pub mod project_skills;
 pub mod publish;
 pub mod risk;
 pub mod scanner;
+pub mod skills_ops;
 pub mod skill_packages;
 pub mod skill_transfer;
+pub mod sync_report;
 pub mod translation;
 pub mod translation_cache;
 pub mod updater;
@@ -35,3 +37,8 @@ pub use project_skills::{
 pub use risk::{scan_all_skills, scan_skill, scanner_version, clear_cache as clear_risk_cache, invalidate_skill as invalidate_risk_cache};
 pub use scanner::ScannerService;
 pub use skill_packages::SkillPackageService;
+pub use skills_ops::{apply_skill_tool_enabled, load_skill_by_instance_id, resolve_skill_source_path};
+pub use sync_report::{
+    check_sync_status, collect_active_tool_configs, fix_sync_issues, resolve_sync_status,
+    should_report_sync_issue, SyncReport,
+};

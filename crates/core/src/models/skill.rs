@@ -65,7 +65,7 @@ impl Skill {
 }
 
 impl Skill {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn new(id: String, name: String, path: PathBuf) -> Self {
         Self {
             instance_id: Skill::global_instance_id(&id),

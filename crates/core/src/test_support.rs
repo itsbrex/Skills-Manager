@@ -1,13 +1,8 @@
-#[cfg(test)]
 use std::fs;
-#[cfg(test)]
 use std::path::Path;
-#[cfg(test)]
 use std::sync::{Mutex, OnceLock};
-#[cfg(test)]
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[cfg(test)]
 pub fn with_temp_home<F: FnOnce(&Path)>(f: F) {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     let _guard = LOCK

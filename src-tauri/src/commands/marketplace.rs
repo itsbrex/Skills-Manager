@@ -6,16 +6,16 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::models::{
+use sm_core::models::{
     AppConfig, ClawhubSkillFilesResponse, InstallResult, InstallStatus, MarketplaceInstallation,
     MarketplaceSkill, MarketplaceSkillsResponse, MarketplaceSource, MarketplaceSyncResult,
     MarketplaceUpdateCheckResult, Skill, SkillFileNode, SkillScope, SkillSource,
 };
-use crate::services::marketplace::{
+use sm_core::services::marketplace::{
     derive_github_repo_and_skill_path, CLAWHUB_SOURCE_ID, DIRECT_GITHUB_SOURCE_ID,
     DIRECT_GITHUB_SOURCE_NAME,
 };
-use crate::services::{
+use sm_core::services::{
     project_tool_skills_dir, AppCache, ConfigManager, LinkerService, MarketplaceCache,
     MarketplaceService, ScannerService,
 };
@@ -218,8 +218,8 @@ fn activate_project_installation(
             &tool_target.tool_id,
             &SkillScope::Project,
         ) {
-            crate::services::LinkStatus::Valid => continue,
-            crate::services::LinkStatus::Missing => {}
+            sm_core::services::LinkStatus::Valid => continue,
+            sm_core::services::LinkStatus::Missing => {}
             status => {
                 rollback_activations(activated);
                 return Err(format!(
@@ -251,7 +251,7 @@ fn activate_project_installation(
             skill_id,
             &tool_target.tool_id,
             &SkillScope::Project,
-        ) != crate::services::LinkStatus::Valid
+        ) != sm_core::services::LinkStatus::Valid
         {
             continue;
         }
@@ -1363,15 +1363,15 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{Duration, SystemTime};
 
-    use crate::models::{
+    use sm_core::models::{
         AppConfig, InstallResult, InstallStatus, MarketplaceMeta, MarketplaceSkill,
         MarketplaceSkillsResponse, MarketplaceSource, ProjectBinding, Skill, SkillFileNode,
         SkillScope, SkillSource, SourceType, ToolConfig,
     };
-    use crate::services::marketplace::{
+    use sm_core::services::marketplace::{
         CLAWHUB_SOURCE_ID, DIRECT_GITHUB_SOURCE_ID, DIRECT_GITHUB_SOURCE_NAME,
     };
-    use crate::test_support::with_temp_home;
+    use sm_core::test_support::with_temp_home;
 
     use super::{
         activate_project_installation, aggregate_install_status,
@@ -1406,7 +1406,7 @@ mod tests {
         Skill {
             id: format!("local-{id}"),
             instance_id: Skill::global_instance_id(&format!("local-{id}")),
-            scope: crate::models::SkillScope::Global,
+            scope: sm_core::models::SkillScope::Global,
             project_id: None,
             project_name: None,
             name: name.to_string(),
@@ -1759,7 +1759,7 @@ mod tests {
         let config = config_with_active_project();
         let mut remote = make_listing_skill("src_skills::alpha", InstallStatus::UpdateAvailable);
         remote.installations = vec![
-            crate::models::MarketplaceInstallation {
+            sm_core::models::MarketplaceInstallation {
                 instance_id: "global:alpha".to_string(),
                 scope: SkillScope::Global,
                 project_id: None,
@@ -1767,7 +1767,7 @@ mod tests {
                 tool_ids: Vec::new(),
                 install_status: InstallStatus::UpdateAvailable,
             },
-            crate::models::MarketplaceInstallation {
+            sm_core::models::MarketplaceInstallation {
                 instance_id: "project:project-alpha:alpha".to_string(),
                 scope: SkillScope::Project,
                 project_id: Some("project-alpha".to_string()),
@@ -2053,7 +2053,7 @@ mod tests {
             Skill {
                 id: "local-only".to_string(),
                 instance_id: Skill::global_instance_id("local-only"),
-                scope: crate::models::SkillScope::Global,
+                scope: sm_core::models::SkillScope::Global,
                 project_id: None,
                 project_name: None,
                 name: "Local".to_string(),

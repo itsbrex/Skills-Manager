@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use rusqlite::Connection;
 use tauri::{AppHandle, Emitter};
 
-use crate::services::config_manager::ConfigManager;
+use sm_core::services::config_manager::ConfigManager;
 
 const USAGE_DB_FILE: &str = "usage.db";
 const PENDING_DIR: &str = "usage-pending";
@@ -1730,7 +1730,7 @@ pub fn start_usage_watcher(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::with_temp_home;
+    use sm_core::test_support::with_temp_home;
     use std::fs;
     use std::path::Path;
 

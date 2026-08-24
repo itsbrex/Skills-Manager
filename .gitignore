@@ -43,3 +43,7 @@ landing/
 
 # SEO research docs (private, lives on landing branch)
 research/
+
+# Cargo build output. Since the workspace root moved here, cargo writes to
+# ./target for every member (crates/core, src-tauri).
+/target/

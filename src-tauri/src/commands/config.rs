@@ -1,5 +1,5 @@
-use crate::models::AppConfig;
-use crate::services::ConfigManager;
+use sm_core::models::AppConfig;
+use sm_core::services::ConfigManager;
 
 #[tauri::command]
 pub fn get_config() -> Result<AppConfig, String> {

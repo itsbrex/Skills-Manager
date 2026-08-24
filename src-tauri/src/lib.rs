@@ -1,8 +1,4 @@
 mod commands;
-mod models;
-mod services;
-#[cfg(test)]
-mod test_support;
 
 use commands::{
     batch_set_skill_tools, check_marketplace_updates_if_stale,
@@ -29,7 +25,7 @@ use commands::{
     translate_text_content, uninstall_usage_hook, update_custom_tool, update_tool_paths,
     verify_clawhub_token, write_file,
 };
-use services::{AppCache, MarketplaceCache};
+use sm_core::services::{AppCache, MarketplaceCache};
 use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 

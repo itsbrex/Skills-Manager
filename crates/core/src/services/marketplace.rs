@@ -33,11 +33,11 @@ const MARKETPLACE_CACHE_SCHEMA_VERSION: u32 = 3;
 const GITHUB_TREE_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
 const SKILL_DESCRIPTION_CACHE_TTL: Duration = Duration::from_secs(30 * 60);
 const PERSISTED_SKILL_DESCRIPTION_CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
-pub(crate) const DIRECT_GITHUB_SOURCE_ID: &str = "github_direct";
-pub(crate) const DIRECT_GITHUB_SOURCE_NAME: &str = "GitHub";
+pub const DIRECT_GITHUB_SOURCE_ID: &str = "github_direct";
+pub const DIRECT_GITHUB_SOURCE_NAME: &str = "GitHub";
 // clawhub 默认源常量（在 commands 层用于判断分发）
-pub(crate) const CLAWHUB_SOURCE_ID: &str = "src_clawhub";
-pub(crate) const CLAWHUB_SOURCE_NAME: &str = "ClawHub";
+pub const CLAWHUB_SOURCE_ID: &str = "src_clawhub";
+pub const CLAWHUB_SOURCE_NAME: &str = "ClawHub";
 
 #[derive(Debug, Clone, Deserialize)]
 struct GitHubTreeEntry {
@@ -489,7 +489,7 @@ struct ClawhubSearchResponse {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ClawhubDetailResponse {
+pub struct ClawhubDetailResponse {
     skill: ClawhubDetailSkill,
     #[serde(rename = "latestVersion")]
     latest_version: Option<ClawhubVersionInfo>,
@@ -855,7 +855,7 @@ fn filter_marketplace_skills_by_query(
 }
 
 impl MarketplaceService {
-    pub(crate) fn filter_marketplace_skills_by_query(
+    pub fn filter_marketplace_skills_by_query(
         skills: Vec<MarketplaceSkill>,
         query: Option<&str>,
     ) -> Vec<MarketplaceSkill> {
@@ -2916,7 +2916,7 @@ fn with_github_auth(
     }
 }
 
-pub(crate) fn derive_github_repo_and_skill_path(
+pub fn derive_github_repo_and_skill_path(
     install_url: Option<&str>,
     slug: &str,
 ) -> (Option<String>, Option<String>) {

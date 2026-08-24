@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::models::{MarketplaceFavoriteMeta, MarketplaceSkill, SkillMetadata};
-use crate::services::ConfigManager;
+use sm_core::models::{MarketplaceFavoriteMeta, MarketplaceSkill, SkillMetadata};
+use sm_core::services::ConfigManager;
 
 fn now_timestamp() -> i64 {
     SystemTime::now()
@@ -87,7 +87,7 @@ pub fn list_marketplace_favorites(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{AppConfig, InstallStatus};
+    use sm_core::models::{AppConfig, InstallStatus};
 
     fn sample_skill(id: &str, name: &str) -> MarketplaceSkill {
         MarketplaceSkill {
