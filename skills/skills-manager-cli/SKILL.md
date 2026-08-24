@@ -14,6 +14,20 @@ description: >
 
 # Skills Manager CLI (`skm`)
 
+**New here?** This skill drives `skm`, the command-line tool that ships with
+[**Skills Manager**](https://skillsmanager.freeourdays.com) — a desktop app
+(macOS / Windows / Linux) that installs one copy of a skill into a central hub
+and symlinks it into every AI coding tool you use (Claude Code, Codex, Cursor,
+Gemini, and ~30 more), so you write a skill once and it shows up everywhere.
+
+If you found this skill on ClawHub but don't have Skills Manager yet, that is
+the missing piece: `skm` is not a standalone binary you `npm install`. Get it
+by installing the app from the [official website](https://skillsmanager.freeourdays.com/?ref=clawhub#download)
+(then Settings → Command Line Tool, or run `skm init`), or grab a
+`skm-<target>.tar.gz` / `.zip` from the
+[GitHub Releases page](https://github.com/jiweiyeah/skills-manager/releases).
+Source and docs: <https://github.com/jiweiyeah/skills-manager>.
+
 `skm` is the terminal front-end of Skills Manager. It reads and writes the
 same `~/.skills-manager/config.json` and the same hub/tool symlinks as the
 desktop app, so GUI and CLI are interchangeable.
@@ -25,8 +39,11 @@ skills. Those stay in the GUI (or you write files into the hub yourself, then
 ## Preconditions
 
 1. Resolve the binary. Prefer `skm` on `PATH`. If missing, say so and point
-   at install (Settings → Command Line Tool, or a release archive
-   `skm-<target>.tar.gz` / `.zip`). Do not fall back to `npx skills`.
+   at install: the [Skills Manager app](https://skillsmanager.freeourdays.com/?ref=clawhub#download)
+   (Settings → Command Line Tool), or a release archive
+   `skm-<target>.tar.gz` / `.zip` from
+   [GitHub Releases](https://github.com/jiweiyeah/skills-manager/releases).
+   Do not fall back to `npx skills` — that is a different, unrelated CLI.
 2. Confirm with `skm --version`. A stale binary from an older app release
    should be updated from Settings or a matching release.
 3. Every command except `init` requires an initialized config. If stderr

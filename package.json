@@ -1,7 +1,7 @@
 {
   "name": "Skills Manager",
   "private": true,
-  "version": "2.1.10",
+  "version": "2.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "bundle:cli": "node scripts/bundle-cli.mjs",
+    "publish:skill": "node scripts/publish-skill.mjs",
     "test": "node --test"
   },
   "dependencies": {

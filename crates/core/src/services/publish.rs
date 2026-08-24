@@ -277,10 +277,22 @@ pub async fn verify_token(token: &str) -> Result<ClawhubIdentity, String> {
     })
 }
 
+/// `/versions` 的响应体。线上返回的是 `items`，早期/其他形态用过 `versions`，
+/// 两种都接受。这里**不能**用 `#[serde(default)]` 把缺失字段吞成空列表：
+/// 那会让"结构不认识"伪装成"没发布过"，进而把建议版本退回 1.0.0，
+/// 用户照着发就会撞上服务端的"版本已存在"。两个键都缺时 `items` 为 None，
+/// 由调用方判为查询失败。
 #[derive(Debug, Deserialize)]
 struct VersionsResponse {
-    #[serde(default)]
-    versions: Vec<VersionItem>,
+    items: Option<Vec<VersionItem>>,
+    versions: Option<Vec<VersionItem>>,
+}
+
+impl VersionsResponse {
+    /// 取实际存在的那个列表；两个键都缺时返回 None（= 查询结果不可信）。
+    fn entries(self) -> Option<Vec<VersionItem>> {
+        self.items.or(self.versions)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -329,14 +341,20 @@ async fn fetch_latest_version(slug: &str, owner: Option<&str>) -> VersionLookup 
         Err(_) => return VersionLookup::Failed,
     };
 
-    parsed
-        .versions
+    // 认不出响应结构时结果不可信，必须是 Failed —— 若当成"没版本"，
+    // 调用方会按未发布处理并建议 1.0.0，重复发布一个已存在的技能。
+    let entries = match parsed.entries() {
+        Some(entries) => entries,
+        None => return VersionLookup::Failed,
+    };
+
+    entries
         .into_iter()
         .filter_map(|item| item.version)
         .filter_map(|value| semver::Version::parse(value.trim()).ok())
         .max()
         .map(|value| VersionLookup::Found(value.to_string()))
-        // 端点返回成功但没有任何版本，等同于未发布。
+        // 端点返回成功但版本列表为空，等同于未发布。
         .unwrap_or(VersionLookup::NotPublished)
 }
 
@@ -607,9 +625,49 @@ mod tests {
         assert_eq!(sanitize_slug("PDF2Text"), "pdf2text");
     }
 
+    /// 线上 `/versions` 返回的是 `items`。读错键会让已发布的技能看起来
+    /// 没发布过，建议版本退回 1.0.0，用户照着发就撞"版本已存在"。
     #[test]
-    fn bump_patch_increments_last_component() {
-        assert_eq!(bump_patch("1.0.0").as_deref(), Some("1.0.1"));
+    fn versions_response_reads_the_live_items_shape() {
+        let body = serde_json::json!({
+            "items": [
+                {"version": "2.1.10", "createdAt": 1787589291509i64, "changelog": "x"}
+            ],
+            "nextCursor": null
+        });
+        let parsed: VersionsResponse = serde_json::from_value(body).expect("parse");
+        let entries = parsed.entries().expect("entries");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].version.as_deref(), Some("2.1.10"));
+    }
+
+    /// 兼容早期/其他形态的 `versions` 键。
+    #[test]
+    fn versions_response_still_accepts_the_versions_key() {
+        let body = serde_json::json!({"versions": [{"version": "1.0.0"}]});
+        let parsed: VersionsResponse = serde_json::from_value(body).expect("parse");
+        assert_eq!(parsed.entries().expect("entries").len(), 1);
+    }
+
+    /// 两个键都缺时必须是 None（调用方判为查询失败），而不是空列表 ——
+    /// 后者会被误读成"从未发布"。
+    #[test]
+    fn versions_response_reports_unknown_shape_as_none() {
+        let body = serde_json::json!({"data": "unexpected"});
+        let parsed: VersionsResponse = serde_json::from_value(body).expect("parse");
+        assert!(parsed.entries().is_none());
+    }
+
+    /// 结构认识但列表为空，是真正的"未发布"。
+    #[test]
+    fn versions_response_distinguishes_empty_list_from_missing_key() {
+        let body = serde_json::json!({"items": [], "nextCursor": null});
+        let parsed: VersionsResponse = serde_json::from_value(body).expect("parse");
+        assert_eq!(parsed.entries().expect("entries").len(), 0);
+    }
+
+    #[test]
+    fn bump_patch_increments_last_component() {        assert_eq!(bump_patch("1.0.0").as_deref(), Some("1.0.1"));
         assert_eq!(bump_patch("2.3.9").as_deref(), Some("2.3.10"));
         assert_eq!(bump_patch("not-semver"), None);
     }

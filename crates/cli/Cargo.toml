@@ -1,6 +1,6 @@
 [package]
 name = "skm"
-version = "2.1.10"
+version = "2.2.0"
 description = "Skills Manager CLI - manage AI assistant skills from the terminal"
 edition = "2021"
 

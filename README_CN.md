@@ -3,7 +3,7 @@
 > **一款用于管理 AI 编程助手技能（Skills）的统一桌面应用。**
 > 无缝组织、同步和共享 **Claude Code、Codex、Opencode** 及其他 AI 工具的技能。
 
-![Version](https://img.shields.io/badge/version-2.1.10-blue) ![Downloads](https://img.shields.io/github/downloads/jiweiyeah/skills-manager/total?color=brightgreen&label=downloads) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
+![Version](https://img.shields.io/badge/version-2.2.0-blue) ![Downloads](https://img.shields.io/github/downloads/jiweiyeah/skills-manager/total?color=brightgreen&label=downloads) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
 
 [**官网**](https://skillsmanager.freeourdays.com/zh/?ref=gh) · [English README](./README.md)
 
@@ -83,6 +83,8 @@ skm fix --yes                     # 自动修复 doctor 发现的问题
 `<skill>` 和 `<tool>` 都支持唯一前缀匹配(`claude` 匹配 `claude-code`)。运行 `skm <command> --help` 查看详细用法。桌面 App 是可选的:`skm init` + `skm adopt` 即可构成纯终端工作流(适用于无头服务器)。
 
 安装 CLI(设置 → 命令行工具,或 `skm init`)时,会把配套 skill [`skills-manager-cli`](./skills/skills-manager-cli) 写入 hub,并为当前已检测到的工具启用,这样其他 agent 不必猜参数。里面写了 `--json` 契约、dry-run 与 apply 的区别,以及 `skm` 明确不做的事。
+
+每次版本升级时,这个配套 skill 会自动发布到 [ClawHub](https://clawhub.ai/jiweiyeah/skills/skills-manager-cli),这样从市场拉取技能(而非从 App)的 agent 也总能拿到与当前 `skm` 匹配的说明。发布任务执行 `npm run publish:skill`;它会先查询 ClawHub,仅当本地版本严格高于远端时才上传,所以重复运行是空操作。用 `npm run publish:skill -- --dry-run` 可只校验文件清单和版本闸门而不上传。
 
 ## ❗ Linux 常见问题 (Troubleshooting)
 

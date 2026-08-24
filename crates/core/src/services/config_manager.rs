@@ -1041,7 +1041,7 @@ mod tests {
 
             let config_path = config_dir.join("config.json");
             let config_json = json!({
-                "version": "2.1.10",
+                "version": "2.2.0",
                 "skills_dir": config_dir.join("skills").to_string_lossy(),
                 "tools": {},
                 "custom_tools": {},
@@ -1095,7 +1095,7 @@ mod tests {
 
             let config_path = config_dir.join("config.json");
             let config_json = json!({
-                "version": "2.1.10",
+                "version": "2.2.0",
                 "skills_dir": config_dir.join("skills").to_string_lossy(),
                 "tools": {},
                 "custom_tools": {},

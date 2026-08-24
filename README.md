@@ -3,7 +3,7 @@
 > **A unified desktop application for managing AI coding assistant skills.**
 > Seamlessly organize, sync, and share skills for **Claude Code, Codex, Opencode** and other AI tools.
 
-![Version](https://img.shields.io/badge/version-2.1.10-blue) ![Downloads](https://img.shields.io/github/downloads/jiweiyeah/skills-manager/total?color=brightgreen&label=downloads) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
+![Version](https://img.shields.io/badge/version-2.2.0-blue) ![Downloads](https://img.shields.io/github/downloads/jiweiyeah/skills-manager/total?color=brightgreen&label=downloads) ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey) ![Tech](https://img.shields.io/badge/built%20with-Tauri%202.0%20%2B%20React%2019-orange)
 
 [**Website**](https://skillsmanager.freeourdays.com/?ref=gh) · [中文说明](./README_CN.md)
 
@@ -83,6 +83,8 @@ skm fix --yes                     # repair sync issues found by doctor
 Both `<skill>` and `<tool>` accept a unique prefix (`claude` matches `claude-code`). Run `skm <command> --help` for details. The GUI is optional: `skm init` + `skm adopt` give a fully terminal-only workflow (e.g. on headless servers).
 
 Installing the CLI (Settings → Command Line Tool, or `skm init`) also copies the [`skills-manager-cli`](./skills/skills-manager-cli) companion skill into the hub and enables it for every currently detected tool, so other agents can drive `skm` without guessing flags. It covers `--json` contracts, dry-run vs apply, and which commands `skm` does *not* implement.
+
+The same companion skill is published to [ClawHub](https://clawhub.ai/jiweiyeah/skills/skills-manager-cli) automatically on every version bump, so agents that pull skills from the marketplace instead of the app always get instructions matching the current `skm`. The release job runs `npm run publish:skill`; it queries ClawHub first and only uploads when the local version is strictly newer, so re-runs are no-ops. Use `npm run publish:skill -- --dry-run` to validate the file list and version gate without uploading.
 
 ## ❗ Linux Troubleshooting
 
