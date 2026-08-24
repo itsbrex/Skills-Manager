@@ -19,6 +19,10 @@ jobs:
               'skills-manager-macos-x64',
               'skills-manager-ubuntu-22.04',
               'skills-manager-windows-latest',
+              'skm-macos-aarch64',
+              'skm-macos-x64',
+              'skm-linux-x64',
+              'skm-windows-x64',
             ]);
 
             const artifacts = await github.paginate(
@@ -54,28 +58,34 @@ jobs:
             args: "--target aarch64-apple-darwin"
             rust_target: "aarch64-apple-darwin"
             artifact_name: "skills-manager-macos-aarch64"
+            # Workspace root target dir — src-tauri is a workspace member, so
+            # cargo writes bundles to ./target, not ./src-tauri/target.
             artifact_paths: |
-              src-tauri/target/aarch64-apple-darwin/release/bundle/**/*.dmg
+              target/aarch64-apple-darwin/release/bundle/**/*.dmg
+            skm_artifact_name: "skm-macos-aarch64"
           - platform: "macos-15-intel" # Intel Mac (Native x64 runner)
             args: "--target x86_64-apple-darwin"
             rust_target: "x86_64-apple-darwin"
             artifact_name: "skills-manager-macos-x64"
             artifact_paths: |
-              src-tauri/target/x86_64-apple-darwin/release/bundle/**/*.dmg
+              target/x86_64-apple-darwin/release/bundle/**/*.dmg
+            skm_artifact_name: "skm-macos-x64"
           - platform: "ubuntu-22.04"
             args: ""
             rust_target: ""
             artifact_name: "skills-manager-ubuntu-22.04"
             artifact_paths: |
-              src-tauri/target/release/bundle/**/*.AppImage
-              src-tauri/target/release/bundle/**/*.deb
+              target/release/bundle/**/*.AppImage
+              target/release/bundle/**/*.deb
+            skm_artifact_name: "skm-linux-x64"
           - platform: "windows-latest"
             args: ""
             rust_target: ""
             artifact_name: "skills-manager-windows-latest"
             artifact_paths: |
-              src-tauri/target/release/bundle/**/*.exe
-              src-tauri/target/release/bundle/**/*.msi
+              target/release/bundle/**/*.exe
+              target/release/bundle/**/*.msi
+            skm_artifact_name: "skm-windows-x64"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -98,13 +108,48 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "./src-tauri"
+          # Single workspace at the repo root (crates/core, crates/cli, src-tauri).
+          workspaces: "."
 
       - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: build skm CLI
+        run: cargo build --release -p skm ${{ matrix.args }}
+
+      - name: package skm CLI (unix)
+        if: runner.os != 'Windows'
+        run: |
+          target_dir="target/release"
+          suffix=""
+          if [ -n "${{ matrix.rust_target }}" ]; then
+            target_dir="target/${{ matrix.rust_target }}/release"
+            suffix="-${{ matrix.rust_target }}"
+          fi
+          mkdir -p "skm-package${suffix}"
+          cp "${target_dir}/skm" "skm-package${suffix}/"
+          tar -czf "skm${suffix}.tar.gz" "skm-package${suffix}"
+
+      - name: package skm CLI (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path skm-package | Out-Null
+          Copy-Item target/release/skm.exe skm-package/
+          Compress-Archive -Path skm-package -DestinationPath skm-windows-x64.zip
+
+      - name: Upload skm CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.skm_artifact_name }}
+          path: |
+            skm-*.tar.gz
+            skm-*.zip
+          retention-days: 1
+          if-no-files-found: error
 
       - name: install frontend dependencies
         run: npm ci
@@ -113,6 +158,9 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # beforeBuildCommand runs bundle:cli — fail the build rather than
+          # shipping an installer with no bundled CLI.
+          SKM_REQUIRE_CLI: "1"
         with:
           tagName: v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
           releaseName: "Skills Manager v__VERSION__"
