@@ -148,6 +148,21 @@ export function Settings() {
           true
         );
       }
+      const skill = result.cliSkill;
+      if (skill?.error) {
+        addToast(`${t("settings.cliSkillFailed")} ${skill.error}`, "error");
+      } else if (skill?.enabled_for && skill.enabled_for.length > 0) {
+        addToast(t("settings.cliSkillInstalled"), "success");
+      } else if (skill?.failed && skill.failed.length > 0) {
+        addToast(
+          `${t("settings.cliSkillFailed")} ${skill.failed
+            .map((item) => `${item.tool}: ${item.message}`)
+            .join("; ")}`,
+          "error"
+        );
+      } else if (skill?.id) {
+        addToast(t("settings.cliSkillHubOnly"), "info");
+      }
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     } finally {

@@ -1,6 +1,6 @@
 use serde_json::json;
 use sm_core::models::AppConfig;
-use sm_core::services::ConfigManager;
+use sm_core::services::{install_cli_companion_skill, CliSkillInstallReport, ConfigManager};
 
 use crate::context::{acquire_init_lock, config_path};
 
@@ -33,18 +33,8 @@ pub fn run(args: &Args) -> anyhow::Result<()> {
     // notes and project bindings. Bail out in BOTH output modes.
     if manager.is_initialized() {
         let config = manager.load().map_err(|e| anyhow::anyhow!(e))?;
-        if args.json {
-            println!(
-                "{}",
-                json!({
-                    "already_initialized": true,
-                    "skills_dir": config.skills_dir,
-                    "detected_tools": detected_tool_ids(&config),
-                })
-            );
-        } else {
-            println!("Skills Manager is already initialized. Nothing to do.");
-        }
+        let companion = install_cli_companion_skill();
+        print_init_result(args.json, true, &config, companion);
         return Ok(());
     }
 
@@ -68,37 +58,95 @@ pub fn run(args: &Args) -> anyhow::Result<()> {
     // reporting the in-memory value could describe a directory that is not
     // the one in use.
     let config = manager.load().map_err(|e| anyhow::anyhow!(e))?;
-    let detected = detected_tool_ids(&config);
+    let companion = install_cli_companion_skill();
+    print_init_result(args.json, false, &config, companion);
+    Ok(())
+}
 
-    if args.json {
+fn companion_skill_json(result: &Result<CliSkillInstallReport, String>) -> serde_json::Value {
+    match result {
+        Ok(report) => json!({
+            "id": report.id,
+            "path": report.path,
+            "enabled_for": report.enabled_for,
+            "failed": report.failed.iter().map(|item| json!({
+                "tool": item.tool,
+                "message": item.message,
+            })).collect::<Vec<_>>(),
+        }),
+        Err(message) => json!({ "error": message }),
+    }
+}
+
+fn print_init_result(
+    json_mode: bool,
+    already_initialized: bool,
+    config: &AppConfig,
+    companion: Result<CliSkillInstallReport, String>,
+) {
+    let detected = detected_tool_ids(config);
+
+    if json_mode {
         println!(
             "{}",
             json!({
-                "already_initialized": false,
+                "already_initialized": already_initialized,
                 "skills_dir": config.skills_dir,
                 "detected_tools": detected,
+                "cli_skill": companion_skill_json(&companion),
             })
         );
-        return Ok(());
+        return;
     }
 
-    println!(
-        "initialized. skills directory: {}",
-        config.skills_dir.display()
-    );
-    if detected.is_empty() {
-        println!("no AI tools detected — install one and run 'skm doctor'");
+    if already_initialized {
+        println!("Skills Manager is already initialized.");
     } else {
         println!(
-            "detected {} tool(s): {}",
-            detected.len(),
-            detected.join(", ")
+            "initialized. skills directory: {}",
+            config.skills_dir.display()
         );
+        if detected.is_empty() {
+            println!("no AI tools detected — install one and run 'skm doctor'");
+        } else {
+            println!(
+                "detected {} tool(s): {}",
+                detected.len(),
+                detected.join(", ")
+            );
+        }
     }
+
+    match &companion {
+        Ok(report) => {
+            if report.enabled_for.is_empty() {
+                println!(
+                    "companion skill '{}' installed at {}",
+                    report.id,
+                    report.path.display()
+                );
+            } else {
+                println!(
+                    "companion skill '{}' installed and enabled for: {}",
+                    report.id,
+                    report.enabled_for.join(", ")
+                );
+            }
+            for item in &report.failed {
+                println!("  skipped {}: {}", item.tool, item.message);
+            }
+        }
+        Err(message) => {
+            eprintln!("warning: companion skill not installed: {message}");
+        }
+    }
+
+    if already_initialized {
+        return;
+    }
+
     println!();
     println!("next steps:");
     println!("  skm adopt          # bring existing skills under management");
     println!("  skm list           # see what is managed");
-
-    Ok(())
 }

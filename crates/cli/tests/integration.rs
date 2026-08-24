@@ -165,6 +165,30 @@ fn init_creates_config_and_marks_initialized() {
 }
 
 #[test]
+fn companion_skill_is_written_to_hub_and_enabled_for_active_tools() {
+    with_temp_home(|home_dir| {
+        write_test_config(home_dir);
+
+        let report = sm_core::services::install_cli_companion_skill().unwrap();
+        let skill_dir = home_dir
+            .join(".skills-manager")
+            .join("skills")
+            .join(sm_core::services::CLI_SKILL_ID);
+
+        assert_eq!(report.id, sm_core::services::CLI_SKILL_ID);
+        assert!(skill_dir.join("SKILL.md").exists());
+        assert!(skill_dir.join("references").join("json.md").exists());
+        assert_eq!(report.enabled_for, vec!["test-tool".to_string()]);
+
+        let link = home_dir
+            .join(".test-tool")
+            .join("skills")
+            .join(sm_core::services::CLI_SKILL_ID);
+        assert!(link.exists() || link.symlink_metadata().is_ok());
+    });
+}
+
+#[test]
 fn adopt_moves_real_dirs_into_hub_and_relinks() {
     with_temp_home(|home_dir| {
         write_test_config(home_dir);

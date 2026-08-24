@@ -82,6 +82,8 @@ skm fix --yes                     # 自动修复 doctor 发现的问题
 
 `<skill>` 和 `<tool>` 都支持唯一前缀匹配(`claude` 匹配 `claude-code`)。运行 `skm <command> --help` 查看详细用法。桌面 App 是可选的:`skm init` + `skm adopt` 即可构成纯终端工作流(适用于无头服务器)。
 
+安装 CLI(设置 → 命令行工具,或 `skm init`)时,会把配套 skill [`skills-manager-cli`](./skills/skills-manager-cli) 写入 hub,并为当前已检测到的工具启用,这样其他 agent 不必猜参数。里面写了 `--json` 契约、dry-run 与 apply 的区别,以及 `skm` 明确不做的事。
+
 ## ❗ Linux 常见问题 (Troubleshooting)
 
 如果您在 Linux（特别是虚拟机环境，如 VMware/VirtualBox）运行 `.AppImage` 时遇到**白屏**问题，通常是 WebKitGTK 硬件加速导致的。

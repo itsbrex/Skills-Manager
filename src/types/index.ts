@@ -397,10 +397,24 @@ export interface CliInstallStatus {
   onPath: boolean;
 }
 
+export interface CliSkillEnableFailure {
+  tool: string;
+  message: string;
+}
+
+export interface CliSkillInstallReport {
+  id?: string;
+  path?: string;
+  enabled_for?: string[];
+  failed?: CliSkillEnableFailure[];
+  error?: string;
+}
+
 export interface CliInstallResult {
   installed: boolean;
   target: string;
   onPath: boolean;
+  cliSkill?: CliSkillInstallReport;
 }
 
 export type FeedbackContactType =

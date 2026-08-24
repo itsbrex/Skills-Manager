@@ -132,10 +132,24 @@ pub fn install_cli_binary(app: tauri::AppHandle) -> Result<serde_json::Value, St
     }
 
     let on_path = is_on_path(&target);
+    let cli_skill = match sm_core::services::install_cli_companion_skill() {
+        Ok(report) => serde_json::json!({
+            "id": report.id,
+            "path": report.path,
+            "enabled_for": report.enabled_for,
+            "failed": report.failed.iter().map(|item| serde_json::json!({
+                "tool": item.tool,
+                "message": item.message,
+            })).collect::<Vec<_>>(),
+        }),
+        Err(message) => serde_json::json!({ "error": message }),
+    };
+
     Ok(serde_json::json!({
         "installed": true,
         "target": target,
         "onPath": on_path,
+        "cliSkill": cli_skill,
     }))
 }
 

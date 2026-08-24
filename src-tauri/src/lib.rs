@@ -62,6 +62,11 @@ pub fn run() {
             }
             // Sync usage hook state with config on startup
             commands::sync_usage_hook_with_config();
+            // Refresh the bundled `skills-manager-cli` companion skill so an app
+            // update lands the instructions matching this binary — nothing else
+            // rewrites the hub copy on upgrade. No-op unless an earlier CLI
+            // install already put it in the hub.
+            let _ = sm_core::services::enable_cli_companion_skill_if_present();
             // Start watching for usage events and emit updates to frontend
             commands::usage::start_usage_watcher(app.handle().clone());
             // Start background risk scan for installed skills

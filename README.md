@@ -82,6 +82,8 @@ skm fix --yes                     # repair sync issues found by doctor
 
 Both `<skill>` and `<tool>` accept a unique prefix (`claude` matches `claude-code`). Run `skm <command> --help` for details. The GUI is optional: `skm init` + `skm adopt` give a fully terminal-only workflow (e.g. on headless servers).
 
+Installing the CLI (Settings → Command Line Tool, or `skm init`) also copies the [`skills-manager-cli`](./skills/skills-manager-cli) companion skill into the hub and enables it for every currently detected tool, so other agents can drive `skm` without guessing flags. It covers `--json` contracts, dry-run vs apply, and which commands `skm` does *not* implement.
+
 ## ❗ Linux Troubleshooting
 
 If you encounter a **blank white screen** when launching the `.AppImage` on Linux (especially in virtual machines like VMware/VirtualBox), it is likely a WebKitGTK hardware acceleration issue.

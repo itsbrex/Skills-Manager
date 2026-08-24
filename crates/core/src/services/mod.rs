@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod cache;
+pub mod cli_skill;
 pub mod config_manager;
 pub mod detector;
 pub mod editor_detector;
@@ -20,6 +21,11 @@ pub mod translation_cache;
 pub mod updater;
 
 pub use cache::AppCache;
+pub use cli_skill::{
+    cli_companion_skill_freshness, enable_cli_companion_skill_if_present,
+    install_cli_companion_skill, CliSkillEnableFailure, CliSkillFreshness, CliSkillInstallReport,
+    CLI_SKILL_ID,
+};
 pub use config_manager::ConfigManager;
 pub use detector::DetectorService;
 pub use editor_detector::{detect_editors, open_in_external_editor};

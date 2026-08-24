@@ -1,7 +1,8 @@
 
 use serde_json::json;
 use sm_core::services::{
-    collect_active_tool_configs, resolve_sync_status, SyncReport,
+    cli_companion_skill_freshness, collect_active_tool_configs, resolve_sync_status,
+    CliSkillFreshness, SyncReport, CLI_SKILL_ID,
 };
 
 use crate::context::load_config;
@@ -74,6 +75,12 @@ pub fn run(args: &Args) -> anyhow::Result<()> {
         }
     }
 
+    // An update swaps the binary but nothing rewrites the hub copy of the
+    // companion skill, so agents can end up reading instructions for an older
+    // `skm`. Report it here rather than silently refreshing: doctor diagnoses,
+    // fix repairs.
+    let companion = cli_companion_skill_freshness();
+
     if args.json {
         println!(
             "{}",
@@ -85,6 +92,7 @@ pub fn run(args: &Args) -> anyhow::Result<()> {
                     "detected": t.detected,
                     "enabled": t.enabled,
                 })).collect::<Vec<_>>(),
+                "companion_skill": companion.as_str(),
                 "issues_count": report.issues_count,
                 "issues": issues,
             })
@@ -118,6 +126,14 @@ pub fn run(args: &Args) -> anyhow::Result<()> {
         }
         println!();
         println!("Run 'skm fix --yes' to repair them automatically.");
+    }
+
+    if companion == CliSkillFreshness::Stale {
+        println!();
+        println!(
+            "Companion skill '{CLI_SKILL_ID}' in the hub does not match this binary\n  \
+             (likely an app or CLI update). Run 'skm init' to refresh it."
+        );
     }
 
     Ok(())
