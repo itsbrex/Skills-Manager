@@ -1,6 +1,6 @@
 [package]
 name = "sm-core"
-version = "2.1.9"
+version = "2.1.10"
 description = "Core business logic for Skills Manager (GUI-agnostic)"
 edition = "2021"
 

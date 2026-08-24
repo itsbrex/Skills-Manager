@@ -960,7 +960,7 @@ description: "Description from SKILL.md"
             }
 
             let config: AppConfig = serde_json::from_value(json!({
-                "version": "2.1.9",
+                "version": "2.1.10",
                 "skills_dir": global_skills_dir,
                 "tools": {},
                 "custom_tools": {},
