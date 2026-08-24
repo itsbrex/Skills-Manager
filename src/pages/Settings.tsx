@@ -10,6 +10,8 @@ import {
   UpdateInfo,
   LlmProvider,
   ClawhubIdentity,
+  CliInstallStatus,
+  CliInstallResult,
 } from "@/types";
 import { defaultPreferences } from "@/constants/preferences";
 import { checkUpdate } from "@/services/updater";
@@ -17,6 +19,7 @@ import { useTranslation, Language, TranslationPath } from "@/i18n";
 import { useSkillTranslation } from "@/hooks/useSkillTranslation";
 import { useTheme } from "@/hooks/useTheme";
 import { getEditorIcon } from "@/assets/editors";
+import { binaryDir } from "@/lib/binaryPath";
 import { FontFamilyPreset, normalizeFontFamilyPreset } from "@/lib/fontFamily";
 import wechatRewardCode from "@/assets/donation/wechat-reward-code.jpg";
 import alipayRewardCode from "@/assets/donation/alipay-reward-code.jpg";
@@ -45,6 +48,8 @@ export function Settings() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [resetting, setResetting] = useState(false);
   const [usageHookLoading, setUsageHookLoading] = useState(false);
+  const [cliStatus, setCliStatus] = useState<CliInstallStatus | null>(null);
+  const [cliInstalling, setCliInstalling] = useState(false);
   const { riskScanning, setRiskScanning } = usePageHeaderState();
   const { toasts, addToast, removeToast } = useToast();
 
@@ -114,6 +119,50 @@ export function Settings() {
     }
     loadEditors();
   }, []);
+
+  const refreshCliStatus = useCallback(async () => {
+    try {
+      setCliStatus(await invoke<CliInstallStatus>("get_cli_install_status"));
+    } catch {
+      // Resource missing (e.g. dev build without bundle:cli) — leave null.
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshCliStatus();
+  }, [refreshCliStatus]);
+
+  const handleInstallCli = async () => {
+    setCliInstalling(true);
+    try {
+      const result = await invoke<CliInstallResult>("install_cli_binary");
+      // A binary outside PATH is installed but unusable from a shell; say so
+      // instead of a plain success toast, and keep it on screen (persistent)
+      // since the user has to act on it.
+      if (result.onPath) {
+        addToast(t("settings.cliInstallDone"), "success");
+      } else {
+        addToast(
+          `${t("settings.cliPathWarning")} ${binaryDir(result.target) || result.target}`,
+          "info",
+          true
+        );
+      }
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setCliInstalling(false);
+      refreshCliStatus();
+    }
+  };
+
+  // One source of truth for the button's disabled state: the `disabled` prop
+  // and the cursor/opacity styling used to drift apart, so an up-to-date CLI
+  // rendered a disabled button that still looked clickable.
+  const cliInstallDisabled =
+    cliInstalling ||
+    !cliStatus?.bundled ||
+    (cliStatus.installed && cliStatus.versionMatches);
 
   // Auto-check for updates on mount
   useEffect(() => {
@@ -419,6 +468,50 @@ export function Settings() {
                 >
                   {config.skills_dir}
                 </code>
+              </div>
+            </SettingsRow>
+
+            <SettingsRow
+              label={t("settings.cliInstall")}
+              description={cliStatus?.installed && cliStatus.versionMatches
+                ? `${t("settings.cliInstallDescInstalled")} (${cliStatus.target})`
+                : t("settings.cliInstallDesc")}
+              isLast={false}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={handleInstallCli}
+                  disabled={cliInstallDisabled}
+                  style={{
+                    padding: '8px 14px',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: 'var(--foreground)',
+                    backgroundColor: 'var(--background)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    cursor: cliInstallDisabled ? 'not-allowed' : 'pointer',
+                    opacity: cliInstallDisabled ? 0.6 : 1,
+                  }}
+                >
+                  {cliInstalling
+                    ? t("settings.cliInstalling")
+                    : cliStatus?.installed
+                      ? (cliStatus.versionMatches ? t("settings.cliUpToDate") : t("settings.cliUpdate"))
+                      : t("settings.cliInstallAction")}
+                </button>
+                {cliStatus?.installed && !cliStatus.versionMatches && (
+                  <span style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                    {t("settings.cliOutdatedHint")}
+                  </span>
+                )}
+                {/* Outlives the install toast: the folder stays off PATH until the user fixes it. */}
+                {cliStatus?.installed && !cliStatus.onPath && (
+                  <span style={{ fontSize: '12px', color: 'var(--destructive)' }}>
+                    {t("settings.cliPathHint")}
+                  </span>
+                )}
               </div>
             </SettingsRow>
 

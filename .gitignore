@@ -44,6 +44,9 @@ landing/
 # SEO research docs (private, lives on landing branch)
 research/
 
+# Bundled CLI binary (staged by scripts/bundle-cli.mjs at build time)
+src-tauri/resources/
+
 # Cargo build output. Since the workspace root moved here, cargo writes to
-# ./target for every member (crates/core, src-tauri).
+# ./target for every member (crates/core, crates/cli, src-tauri).
 /target/

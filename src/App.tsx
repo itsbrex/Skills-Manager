@@ -11,6 +11,7 @@ import { FontFamilyPreset, normalizeFontFamilyPreset } from "@/lib/fontFamily";
 import { AppConfig, MarketplaceUpdateCheckResult } from "@/types";
 import { ToastContainer, useToast } from "@/components/ui/toast";
 import { CommandPalette } from "@/components/CommandPalette";
+import { CliPromoModal } from "@/components/cli/CliPromoModal";
 import { PageHeaderProvider } from "@/components/PageHeaderContext";
 
 type Theme = "light" | "dark" | "system";
@@ -172,6 +173,7 @@ function App() {
                   </Routes>
                 </Suspense>
                 <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+                <CliPromoModal />
                 <ToastContainer toasts={toasts} onRemove={removeToast} />
               </SkillTranslationProvider>
             </PageHeaderProvider>

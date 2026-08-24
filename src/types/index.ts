@@ -387,6 +387,22 @@ export interface UpdateInfo {
   release_notes?: string;
 }
 
+export interface CliInstallStatus {
+  bundled: boolean;
+  installed: boolean;
+  target: string;
+  versionMatches: boolean;
+  appVersion: string;
+  /** False when the install folder is not on PATH — `skm` would not resolve in a shell. */
+  onPath: boolean;
+}
+
+export interface CliInstallResult {
+  installed: boolean;
+  target: string;
+  onPath: boolean;
+}
+
 export type FeedbackContactType =
   | "wechat"
   | "email"
