@@ -63,15 +63,13 @@ jobs:
       - name: resolve version
         if: steps.guard.outputs.proceed == 'true'
         id: version
+        env:
+          # Interpolate through env rather than inline ${{ }} in the script, so a
+          # crafted tag name can't break out of the shell command.
+          RAW_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.event.release.tag_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            version="${{ inputs.version }}"
-          else
-            # Strip the leading "v" from the release tag (v2.2.0 -> 2.2.0).
-            version="${GITHUB_REF_NAME#v}"
-            version="${version#v}"
-          fi
-          version="${version#v}"
+          # Strip a leading "v" from the release tag (v2.2.0 -> 2.2.0).
+          version="${RAW_VERSION#v}"
           echo "value=$version" >> "$GITHUB_OUTPUT"
           echo "Bumping cask to v$version"
 
@@ -79,14 +77,17 @@ jobs:
         if: steps.guard.outputs.proceed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.value }}
         run: |
           node scripts/update-cask.mjs \
             --cask tap/Casks/skills-manager.rb \
-            --version "${{ steps.version.outputs.value }}"
+            --version "$VERSION"
 
       - name: commit and push
         if: steps.guard.outputs.proceed == 'true'
         working-directory: tap
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
         run: |
           if git diff --quiet; then
             echo "Cask already up to date; nothing to commit."
@@ -95,5 +96,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Casks/skills-manager.rb
-          git commit -m "skills-manager ${{ steps.version.outputs.value }}"
+          git commit -m "skills-manager $VERSION"
           git push
