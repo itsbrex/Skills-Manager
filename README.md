@@ -46,6 +46,17 @@ Get the build for your platform from the **[official website](https://skillsmana
 | **Windows** | `.msi` / `.exe` |
 | **Linux** | `.deb` / `.AppImage` / `.rpm`|
 
+### Homebrew (macOS)
+
+```bash
+brew tap jiweiyeah/tap
+brew install --cask jiweiyeah/tap/skills-manager
+```
+
+Use the full `jiweiyeah/tap/skills-manager` path: Homebrew's official cask repository contains an unrelated cask that happens to share the `skills-manager` token, and the official tap wins on a bare name.
+
+The app is ad-hoc signed but **not notarized by Apple**, so the cask strips the quarantine attribute on install — see the [tap README](https://github.com/jiweiyeah/homebrew-tap) for what that means and how to opt out.
+
 ## 🪟 Windows Notes
 
 **You do not need Administrator rights.** When a skill is enabled for a tool, Skills Manager tries three strategies in order:

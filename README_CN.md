@@ -46,6 +46,17 @@
 | **Windows** | `.msi` / `.exe` |
 | **Linux** | `.deb` / `.AppImage` / `.rpm` |
 
+### Homebrew（macOS）
+
+```bash
+brew tap jiweiyeah/tap
+brew install --cask jiweiyeah/tap/skills-manager
+```
+
+请使用完整路径 `jiweiyeah/tap/skills-manager`：Homebrew 官方 cask 仓库里有一个同名但**无关**的 `skills-manager`，官方源优先级更高，直接用短名会装错。
+
+本应用有 ad-hoc 签名但**未经 Apple 公证**，因此 cask 会在安装后移除隔离标记 —— 具体含义与退出方式见 [tap 仓库说明](https://github.com/jiweiyeah/homebrew-tap)。
+
 ## 🪟 Windows 使用说明
 
 **不需要管理员权限。** 为某个工具启用 Skill 时，Skills Manager 会按顺序尝试三种方式：

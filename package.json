@@ -10,6 +10,7 @@
     "tauri": "tauri",
     "bundle:cli": "node scripts/bundle-cli.mjs",
     "publish:skill": "node scripts/publish-skill.mjs",
+    "update:cask": "node scripts/update-cask.mjs",
     "test": "node --test"
   },
   "dependencies": {
