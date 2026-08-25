@@ -63,6 +63,10 @@ jobs:
             artifact_paths: |
               target/aarch64-apple-darwin/release/bundle/**/*.dmg
             skm_artifact_name: "skm-macos-aarch64"
+            # Release asset stem. Always the Rust target triple, even where
+            # rust_target is empty (native build), so users can tell the
+            # archives apart in the Assets list.
+            skm_archive: "skm-aarch64-apple-darwin"
           - platform: "macos-15-intel" # Intel Mac (Native x64 runner)
             args: "--target x86_64-apple-darwin"
             rust_target: "x86_64-apple-darwin"
@@ -70,6 +74,7 @@ jobs:
             artifact_paths: |
               target/x86_64-apple-darwin/release/bundle/**/*.dmg
             skm_artifact_name: "skm-macos-x64"
+            skm_archive: "skm-x86_64-apple-darwin"
           - platform: "ubuntu-22.04"
             args: ""
             rust_target: ""
@@ -78,6 +83,7 @@ jobs:
               target/release/bundle/**/*.AppImage
               target/release/bundle/**/*.deb
             skm_artifact_name: "skm-linux-x64"
+            skm_archive: "skm-x86_64-unknown-linux-gnu"
           - platform: "windows-latest"
             args: ""
             rust_target: ""
@@ -86,6 +92,7 @@ jobs:
               target/release/bundle/**/*.exe
               target/release/bundle/**/*.msi
             skm_artifact_name: "skm-windows-x64"
+            skm_archive: "skm-x86_64-pc-windows-msvc"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -124,22 +131,20 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           target_dir="target/release"
-          suffix=""
           if [ -n "${{ matrix.rust_target }}" ]; then
             target_dir="target/${{ matrix.rust_target }}/release"
-            suffix="-${{ matrix.rust_target }}"
           fi
-          mkdir -p "skm-package${suffix}"
-          cp "${target_dir}/skm" "skm-package${suffix}/"
-          tar -czf "skm${suffix}.tar.gz" "skm-package${suffix}"
+          mkdir -p "${{ matrix.skm_archive }}"
+          cp "${target_dir}/skm" "${{ matrix.skm_archive }}/"
+          tar -czf "${{ matrix.skm_archive }}.tar.gz" "${{ matrix.skm_archive }}"
 
       - name: package skm CLI (windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path skm-package | Out-Null
-          Copy-Item target/release/skm.exe skm-package/
-          Compress-Archive -Path skm-package -DestinationPath skm-windows-x64.zip
+          New-Item -ItemType Directory -Path "${{ matrix.skm_archive }}" | Out-Null
+          Copy-Item target/release/skm.exe "${{ matrix.skm_archive }}/"
+          Compress-Archive -Path "${{ matrix.skm_archive }}" -DestinationPath "${{ matrix.skm_archive }}.zip"
 
       - name: Upload skm CLI artifact
         uses: actions/upload-artifact@v4
@@ -155,6 +160,7 @@ jobs:
         run: npm ci
 
       - name: build tauri app
+        id: tauri
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -168,6 +174,39 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      # tauri-action only attaches the installers it builds, so the CLI archive
+      # would otherwise exist as a 1-day artifact and never reach the Releases
+      # page the READMEs point users at. Upload it onto the same draft release.
+      - name: attach skm CLI to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ steps.tauri.outputs.releaseId }}
+          ARCHIVE_STEM: ${{ matrix.skm_archive }}
+        run: |
+          set -euo pipefail
+
+          # Resolve the tag from the release tauri-action just wrote to, rather
+          # than re-deriving it from package.json — that keeps the two in sync
+          # even if the version source ever moves.
+          tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" --jq .tag_name)"
+
+          archives=()
+          for candidate in "${ARCHIVE_STEM}.tar.gz" "${ARCHIVE_STEM}.zip"; do
+            if [ -f "$candidate" ]; then
+              archives+=("$candidate")
+            fi
+          done
+          if [ ${#archives[@]} -eq 0 ]; then
+            echo "::error::No ${ARCHIVE_STEM} archive found to attach — the packaging step above did not produce one."
+            exit 1
+          fi
+
+          # --clobber so re-running the workflow for an unpublished draft
+          # replaces the asset instead of failing on the existing name.
+          gh release upload "$tag" "${archives[@]}" --clobber
+          echo "Attached ${archives[*]} to $tag"
 
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
