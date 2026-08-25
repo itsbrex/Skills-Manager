@@ -42,7 +42,7 @@ Get the build for your platform from the **[official website](https://skillsmana
 
 | OS | Installer Type |
 |----|----------------|
-| **macOS** | `.dmg` (Universal) |
+| **macOS** | `.dmg` — separate builds for Apple Silicon (`aarch64`) and Intel (`x64`) |
 | **Windows** | `.msi` / `.exe` |
 | **Linux** | `.deb` / `.AppImage` / `.rpm`|
 
@@ -52,6 +52,8 @@ Get the build for your platform from the **[official website](https://skillsmana
 brew tap jiweiyeah/tap
 brew install --cask jiweiyeah/tap/skills-manager
 ```
+
+The cask picks the right build for your CPU automatically, and `brew upgrade` keeps it current.
 
 Use the full `jiweiyeah/tap/skills-manager` path: Homebrew's official cask repository contains an unrelated cask that happens to share the `skills-manager` token, and the official tap wins on a bare name.
 

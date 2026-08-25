@@ -42,7 +42,7 @@
 
 | 操作系统 | 安装包类型 |
 |----|----------------|
-| **macOS** | `.dmg` (通用架构) |
+| **macOS** | `.dmg` —— Apple Silicon (`aarch64`) 与 Intel (`x64`) 分别提供 |
 | **Windows** | `.msi` / `.exe` |
 | **Linux** | `.deb` / `.AppImage` / `.rpm` |
 
@@ -52,6 +52,8 @@
 brew tap jiweiyeah/tap
 brew install --cask jiweiyeah/tap/skills-manager
 ```
+
+cask 会自动匹配你的 CPU 架构，之后 `brew upgrade` 即可保持最新。
 
 请使用完整路径 `jiweiyeah/tap/skills-manager`：Homebrew 官方 cask 仓库里有一个同名但**无关**的 `skills-manager`，官方源优先级更高，直接用短名会装错。
 
